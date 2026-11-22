@@ -4,6 +4,7 @@ import { onRequestPost as setupDatabasePost } from "./functions/api/setup-databa
 import { onRequestGet as schoolsGet, onRequestPost as schoolsPost, onRequestPatch as schoolsPatch } from "./functions/api/schools.js";
 import { onRequestGet as dataGet, onRequestPost as dataPost, onRequestPatch as dataPatch } from "./functions/api/data.js";
 import { onRequestPost as upgradePost } from "./functions/api/upgrade.js";
+import { onRequestPost as accessUpgradePost } from "./functions/api/access-upgrade.js";
 import {
   onRequestPostSetupAdmin,
   onRequestPostLogin,
@@ -34,6 +35,10 @@ export default {
     if (route === "/api/setup-database") {
       if (request.method !== "POST") return new Response("Method not allowed", { status: 405, headers: { Allow: "POST" } });
       return setupDatabasePost({ request, env, params: {}, data: {}, waitUntil: promise => ctx.waitUntil(promise) });
+    }
+    if (route === "/api/system/access-upgrade") {
+      if (request.method !== "POST") return new Response("Method not allowed", { status: 405, headers: { Allow: "POST" } });
+      return accessUpgradePost({ request, env });
     }
     if (route === "/api/system/upgrade") {
       if (request.method !== "POST") return new Response("Method not allowed", { status: 405, headers: { Allow: "POST" } });
