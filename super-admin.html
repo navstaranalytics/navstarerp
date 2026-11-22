@@ -138,5 +138,11 @@ const schoolBase=pages.schools;
 pages.schools=()=>schoolBase().replace(/<th>Actions<\/th>/g,'<th>Actions</th>').replace(/data-action="school-details"/g,'data-action="school-details"');
 const priorWire=wirePage;wirePage=function(){priorWire();const q=$('schoolSearch');if(q){const val=q.value;q.oninput=()=>{const current=q.value;render();const next=$('schoolSearch');if(next){next.value=current;next.focus();next.setSelectionRange(current.length,current.length)}}}};
 
+
+/* Keep the billing workspace single-rendered and expose persistent invoice payment action. */
+pages.billing=()=>billingBase();
+const standardRowsTable=rowsTable;
+rowsTable=function(items,cols,kind){if(kind!=='billing')return standardRowsTable(items,cols,kind);return '<div class="table-wrap"><table><thead><tr>'+cols.map(c=>'<th>'+c[1]+'</th>').join('')+'<th>Actions</th></tr></thead><tbody>'+(items.length?items.map(o=>'<tr>'+cols.map(c=>'<td>'+esc(o[c[0]]??'—')+'</td>').join('')+'<td><div class="row-actions"><button class="tiny" data-action="extra-edit" data-kind="billing" data-id="'+esc(o.id)+'">Edit</button><button class="tiny" data-action="invoice-paid" data-id="'+esc(o.id)+'">Mark paid</button><button class="tiny" data-action="extra-delete" data-kind="billing" data-id="'+esc(o.id)+'">Delete</button></div></td></tr>').join(''):'<tr><td colspan="'+(cols.length+1)+'" class="empty">No records yet. Use “Add record” to create the first one.</td></tr>')+'</tbody></table></div>'};
+
 render();
 </script></body></html>
