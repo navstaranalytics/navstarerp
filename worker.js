@@ -2,6 +2,7 @@ import { onRequestGet as healthGet } from "./functions/api/health.js";
 import { onRequestGet as setupStatusGet } from "./functions/api/setup-status.js";
 import { onRequestPost as setupDatabasePost } from "./functions/api/setup-database.js";
 import { onRequestGet as schoolsGet, onRequestPost as schoolsPost, onRequestPatch as schoolsPatch } from "./functions/api/schools.js";
+import { onRequestGet as dataGet, onRequestPost as dataPost, onRequestPatch as dataPatch } from "./functions/api/data.js";
 import {
   onRequestPostSetupAdmin,
   onRequestPostLogin,
@@ -32,6 +33,12 @@ export default {
     if (route === "/api/setup-database") {
       if (request.method !== "POST") return new Response("Method not allowed", { status: 405, headers: { Allow: "POST" } });
       return setupDatabasePost({ request, env, params: {}, data: {}, waitUntil: promise => ctx.waitUntil(promise) });
+    }
+    if (route.startsWith("/api/data/")) {
+      if (request.method === "GET") return dataGet({ request, env });
+      if (request.method === "POST") return dataPost({ request, env });
+      if (request.method === "PATCH") return dataPatch({ request, env });
+      return new Response("Method not allowed", { status: 405, headers: { Allow: "GET, POST, PATCH" } });
     }
     if (route === "/api/schools") {
       if (request.method === "GET") return schoolsGet({ request, env });
