@@ -110,8 +110,10 @@ export async function onRequestPostSetupAdmin({ request, env }) {
       !organisationName || organisationName.length > 140) {
     return json({ ok: false, error: "Please complete all required fields with valid details. Username must be 3–32 characters and use letters, numbers, dots, underscores or hyphens." }, 400);
   }
-  if (password.length < 12 || password.length > 128) {
-    return json({ ok: false, error: "Use a password of at least 12 characters." }, 400);
+  if (password.length < 6 || password.length > 128 ||
+      !/[A-Z]/.test(password) || !/[a-z]/.test(password) ||
+      !/[0-9]/.test(password) || !/[^A-Za-z0-9]/.test(password)) {
+    return json({ ok: false, error: "Password must be at least 6 characters and include an uppercase letter, a lowercase letter, a number and a special character." }, 400);
   }
   if (password !== confirmPassword) return json({ ok: false, error: "The passwords do not match." }, 400);
 
@@ -253,8 +255,10 @@ export async function onRequestPostChangePassword({ request, env }) {
   if (!row || !(await verifyPassword(oldPassword, row.password_hash))) {
     return json({ ok: false, error: "Your current password is incorrect." }, 401);
   }
-  if (newPassword.length < 12 || newPassword.length > 128) {
-    return json({ ok: false, error: "Use a new password of at least 12 characters." }, 400);
+  if (newPassword.length < 6 || newPassword.length > 128 ||
+      !/[A-Z]/.test(newPassword) || !/[a-z]/.test(newPassword) ||
+      !/[0-9]/.test(newPassword) || !/[^A-Za-z0-9]/.test(newPassword)) {
+    return json({ ok: false, error: "Password must be at least 6 characters and include an uppercase letter, a lowercase letter, a number and a special character." }, 400);
   }
   if (newPassword !== confirmPassword) return json({ ok: false, error: "The new passwords do not match." }, 400);
   if (newPassword === oldPassword) return json({ ok: false, error: "Choose a password different from your current one." }, 400);
