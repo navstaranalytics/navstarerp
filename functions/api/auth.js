@@ -80,13 +80,14 @@ export async function getSuperAdminSession(request, env) {
   `).bind(tokenHash).first();
   return row || null;
 }
-async function issueSession(env, request, userId) {
+async function issueSession(env, request, userId, remember = false) {
   const token = randomHex(32);
-  const expiresAt = new Date(Date.now() + SESSION_HOURS * 3600 * 1000).toISOString();
+  const maxAge = remember ? 30 * 24 * 3600 : SESSION_HOURS * 3600;
+  const expiresAt = new Date(Date.now() + maxAge * 1000).toISOString();
   await env.DB.prepare(
     "INSERT INTO auth_sessions (id, user_id, token_hash, expires_at, user_agent) VALUES (?, ?, ?, ?, ?)"
   ).bind(id(), userId, await digest(token), expiresAt, request.headers.get("User-Agent") || "").run();
-  return token;
+  return { token, maxAge };
 }
 
 export async function onRequestPostSetupAdmin({ request, env }) {
@@ -178,11 +179,12 @@ export async function onRequestPostLogin({ request, env }) {
       return json({ ok: false, error: "The username/email or password is incorrect, or the account is not active." }, 401);
     }
     await env.DB.prepare("DELETE FROM auth_login_attempts WHERE identifier = ?").bind(identifier).run();
-    const token = await issueSession(env, request, user.id);
+    const issued = await issueSession(env, request, user.id, body.remember === true);
+    const token = issued.token;
     await env.DB.prepare("UPDATE users SET last_login_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?").bind(user.id).run();
     await audit(env, user.id, "auth.login", "success");
     return json({ ok: true, message: "Signed in successfully.", redirect: "/super-admin.html" }, 200, {
-      "Set-Cookie": sessionCookie(token)
+      "Set-Cookie": sessionCookie(token, issued.maxAge)
     });
   } catch {
     return json({ ok: false, error: "Sign-in is temporarily unavailable. Please try again." }, 503);
