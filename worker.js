@@ -5,6 +5,7 @@ import { onRequestGet as schoolsGet, onRequestPost as schoolsPost, onRequestPatc
 import { onRequestGet as dataGet, onRequestPost as dataPost, onRequestPatch as dataPatch } from "./functions/api/data.js";
 import { onRequestPost as upgradePost } from "./functions/api/upgrade.js";
 import { onRequestPost as accessUpgradePost } from "./functions/api/access-upgrade.js";
+import { onRequestPost as schoolAdminPost } from "./functions/api/school-admin.js";
 import {
   onRequestPostSetupAdmin,
   onRequestPostLogin,
@@ -54,6 +55,10 @@ export default {
       if (request.method === "GET") return schoolsGet({ request, env });
       if (request.method === "POST") return schoolsPost({ request, env });
       return new Response("Method not allowed", { status: 405, headers: { Allow: "GET, POST" } });
+    }
+    if (route.startsWith("/api/schools/") && route.endsWith("/admin")) {
+      if (request.method !== "POST") return new Response("Method not allowed", { status: 405, headers: { Allow: "POST" } });
+      return schoolAdminPost({ request, env });
     }
     if (route.startsWith("/api/schools/")) {
       if (request.method === "PATCH") return schoolsPatch({ request, env });
