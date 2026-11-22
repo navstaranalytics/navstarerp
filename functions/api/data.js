@@ -21,7 +21,7 @@ const resources={
   "teacher-allocations":{table:"teacher_allocations",scope:true,fields:["staff_id","academic_year_id","term_id","grade_level_id","stream_id","learning_area_id","pathway"],required:["school_id","staff_id","academic_year_id","grade_level_id","learning_area_id"],refs:{staff_id:"staff_profiles",academic_year_id:"academic_years",term_id:"terms",grade_level_id:"grade_levels",stream_id:"streams",learning_area_id:"learning_areas"}},
   transfers:{table:"learner_transfers",scope:true,fields:["learner_id","from_enrollment_id","to_enrollment_id","reason"],required:["school_id","learner_id"],refs:{learner_id:"learners",from_enrollment_id:"learner_enrollments",to_enrollment_id:"learner_enrollments"}},
   announcements:{table:"announcements",scope:false,fields:["school_id","title","body","audience","channel","status","scheduled_at","published_at"],required:["title","body"]},
-  settings:{table:"platform_settings",scope:false,fields:["setting_value"],required:["setting_key"]},
+  settings:{table:"platform_settings",scope:false,fields:["setting_key","setting_value"],required:["setting_key","setting_value"]},
   audit:{table:"audit_logs",scope:false,readOnly:true,fields:[]}
 };
 const scopedTables=new Set(["academic_years","grade_levels","learning_areas","staff_profiles","learners","guardians"]);
@@ -39,6 +39,7 @@ async function existsInSchool(db,table,ref,schoolId){
 }
 function bodyFields(body,config){
   const values={};
+  if(config.scope&&body.school_id!==undefined)values.school_id=clean(body.school_id);
   for(const field of config.fields)if(body[field]!==undefined)values[field]=clean(body[field]);
   return values;
 }
