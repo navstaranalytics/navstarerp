@@ -6,6 +6,8 @@ import {
   onRequestPostLogin,
   onRequestGetMe,
   onRequestPostLogout,
+  onRequestPostProfile,
+  onRequestPostChangePassword,
   getSuperAdminSession
 } from "./functions/api/auth.js";
 
@@ -45,6 +47,14 @@ export default {
     if (route === "/api/auth/logout") {
       if (request.method !== "POST") return new Response("Method not allowed", { status: 405, headers: { Allow: "POST" } });
       return onRequestPostLogout({ request, env });
+    }
+    if (route === "/api/auth/profile") {
+      if (request.method !== "POST") return new Response("Method not allowed", { status: 405, headers: { Allow: "POST" } });
+      return onRequestPostProfile({ request, env });
+    }
+    if (route === "/api/auth/change-password") {
+      if (request.method !== "POST") return new Response("Method not allowed", { status: 405, headers: { Allow: "POST" } });
+      return onRequestPostChangePassword({ request, env });
     }
 
     if (route === "/" || route === "/index.html") {
