@@ -17,7 +17,7 @@ const randomHex = (length = 32) => {
 const digest = async value => hex(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value)));
 const normalize = value => String(value || "").trim().toLowerCase();
 const safeText = value => String(value || "").trim();
-const passwordPolicy = value => {
+export const passwordPolicy = value => {
   if (value.length < 6 || value.length > 128) return false;
   const types = [/[A-Z]/.test(value), /[a-z]/.test(value), /[0-9]/.test(value), /[^A-Za-z0-9]/.test(value)];
   return types.filter(Boolean).length >= 3;
@@ -31,7 +31,7 @@ const sessionCookie = (token, maxAge = SESSION_HOURS * 3600) =>
   `${COOKIE}=${encodeURIComponent(token)}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${maxAge}`;
 const clearCookie = () => sessionCookie("", 0);
 
-async function hashPassword(password) {
+export async function hashPassword(password) {
   const salt = new Uint8Array(16);
   crypto.getRandomValues(salt);
   const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(password), "PBKDF2", false, ["deriveBits"]);
