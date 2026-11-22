@@ -230,5 +230,47 @@ const oldTenantPageBilling=pages.tenant;
 pages.tenant=()=>{const html=oldTenantPageBilling(),s=schools.find(x=>x.id===activeTenantId);if(!s)return html;const p=plans.find(x=>x.name===s.plan)||{},b=schoolBilling(s),e=estimatedSchoolCharge(s);const block=panel('Subscription & billing','Plan entitlements and negotiated school billing terms','<div class="panel-pad"><div class="list-row"><b>Assigned plan</b><span>'+esc(s.plan||'Not assigned')+'</span></div><div class="list-row"><b>Pricing model</b><span>'+esc(billingModel({billingModel:b.billingModel||p.billingModel}).label)+'</span></div><div class="list-row"><b>Estimated charge</b><span><b>'+money(e.total)+' / '+esc(e.unit)+'</b></span></div><div class="list-row"><b>Payment terms</b><span>'+esc(b.paymentTerms||'Use plan default')+'</span></div><div class="list-row"><b>Next due</b><span>'+esc(b.nextDue||'Not set')+'</span></div><button class="btn" data-action="school-billing" data-id="'+esc(s.id)+'">Configure billing contract</button></div>');return html+block};
 document.body.addEventListener('click',e=>{const b=e.target.closest('[data-action="school-billing"]');if(b)configureSchoolBilling(b.dataset.id)});
 
+
+/* Super Admin account menu and secure account management. */
+let signedInUser=null;
+async function loadSignedInUser(){
+  const response=await fetch('/api/auth/me',{credentials:'same-origin'});
+  if(!response.ok){location.replace('/login.html');return}
+  const data=await response.json();signedInUser=data.user;
+  $('accountButton').textContent=(signedInUser.fullName||'SA').split(/\\s+/).slice(0,2).map(x=>x[0]||'').join('').toUpperCase()||'SA';
+  $('accountName').textContent=signedInUser.fullName||'Super Admin';
+  $('accountEmail').textContent=signedInUser.email||signedInUser.username||'Platform owner';
+}
+$('accountButton').addEventListener('click',()=> $('accountMenu').classList.toggle('open'));
+document.addEventListener('click',e=>{if(!e.target.closest('.account-wrap'))$('accountMenu').classList.remove('open')});
+$('editProfile').addEventListener('click',()=>{
+  $('accountMenu').classList.remove('open');if(!signedInUser)return;
+  openModal('My Super Admin profile','<div class="form-grid">'+field('Full name *','fullName','', 'text',signedInUser.fullName)+field('Official email *','email','', 'email',signedInUser.email)+field('Phone number *','phone','', 'tel',signedInUser.phone)+field('Position / designation *','designation','', 'text',signedInUser.designation)+field('Organisation name *','organisationName','', 'text',signedInUser.organisationName)+'</div>',async d=>{
+    const payload={fullName:d.get('fullName'),email:d.get('email'),phone:d.get('phone'),designation:d.get('designation'),organisationName:d.get('organisationName')};
+    try{const r=await fetch('/api/auth/profile',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});const data=await r.json();if(!r.ok||!data.ok){toast(data.error||'Profile could not be updated.');return}await loadSignedInUser();closeModal();toast('Profile updated successfully.')}catch{toast('Profile update failed. Please try again.')}
+  });
+});
+$('changePassword').addEventListener('click',()=>{
+  $('accountMenu').classList.remove('open');
+  openModal('Change your password','<div class="form-grid">'+field('Current password *','currentPassword','Enter current password','password')+field('New password *','newPassword','At least 6 characters','password')+field('Confirm new password *','confirmPassword','Repeat new password','password')+'</div><div class="notice">Use at least 6 characters, including an uppercase letter, a lowercase letter, a number and a special character. Other active sessions will be signed out.</div>',async d=>{
+    const payload={currentPassword:d.get('currentPassword'),newPassword:d.get('newPassword'),confirmPassword:d.get('confirmPassword')};
+    try{const r=await fetch('/api/auth/change-password',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});const data=await r.json();if(!r.ok||!data.ok){toast(data.error||'Password could not be changed.');return}closeModal();toast('Password changed successfully.')}catch{toast('Password change failed. Please try again.')}
+  });
+  ['currentPassword','newPassword','confirmPassword'].forEach(name=>{
+    const input=$('modalBody').querySelector('[name="'+name+'"]');if(!input)return;
+    input.minLength=6;input.autocomplete=name==='currentPassword'?'current-password':'new-password';
+    const wrap=document.createElement('div');wrap.style.position='relative';input.parentNode.insertBefore(wrap,input);wrap.appendChild(input);input.style.paddingRight='62px';
+    const toggle=document.createElement('button');toggle.type='button';toggle.textContent='Show';toggle.style.cssText='position:absolute;right:8px;top:50%;transform:translateY(-50%);border:0;background:transparent;color:#3678f6;font-weight:700;cursor:pointer';
+    toggle.addEventListener('click',()=>{input.type=input.type==='password'?'text':'password';toggle.textContent=input.type==='password'?'Show':'Hide'});wrap.appendChild(toggle);
+  });
+  const next=$('modalBody').querySelector('[name="newPassword"]');
+  if(next)next.pattern='(?=.*[A-Z])(?=.*[a-z])(?=.*[0-9])(?=.*[^A-Za-z0-9]).{6,128}';
+});
+$('logoutButton').addEventListener('click',async()=>{
+  $('accountMenu').classList.remove('open');
+  try{await fetch('/api/auth/logout',{method:'POST',credentials:'same-origin'})}finally{location.replace('/login.html')}
+});
+loadSignedInUser();
+
 render();
 </script></body></html>
