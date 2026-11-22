@@ -252,8 +252,9 @@ $('editProfile').addEventListener('click',()=>{
 });
 $('changePassword').addEventListener('click',()=>{
   $('accountMenu').classList.remove('open');
-  openModal('Change your password','<div class="form-grid">'+field('Current password *','currentPassword','Enter current password','password')+field('New password *','newPassword','At least 6 characters','password')+field('Confirm new password *','confirmPassword','Repeat new password','password')+'</div><div class="notice">Use at least 6 characters, including an uppercase letter, a lowercase letter, a number and a special character. Other active sessions will be signed out.</div>',async d=>{
+  openModal('Change your password','<div class="form-grid">'+field('Current password *','currentPassword','Enter current password','password')+field('New password *','newPassword','At least 6 characters','password')+field('Confirm new password *','confirmPassword','Repeat new password','password')+'</div><div id="passwordMatchStatus" class="notice" style="margin-top:0">Enter the new password twice to check that they match.</div><div class="notice">Use at least 6 characters, including an uppercase letter, a lowercase letter, a number and a special character. Other active sessions will be signed out.</div>',async d=>{
     const payload={currentPassword:d.get('currentPassword'),newPassword:d.get('newPassword'),confirmPassword:d.get('confirmPassword')};
+    if(payload.newPassword!==payload.confirmPassword){toast('The new passwords do not match.');return}
     try{const r=await fetch('/api/auth/change-password',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});const data=await r.json();if(!r.ok||!data.ok){toast(data.error||'Password could not be changed.');return}closeModal();toast('Password changed successfully.')}catch{toast('Password change failed. Please try again.')}
   });
   ['currentPassword','newPassword','confirmPassword'].forEach(name=>{
@@ -264,7 +265,11 @@ $('changePassword').addEventListener('click',()=>{
     toggle.addEventListener('click',()=>{input.type=input.type==='password'?'text':'password';toggle.textContent=input.type==='password'?'Show':'Hide'});wrap.appendChild(toggle);
   });
   const next=$('modalBody').querySelector('[name="newPassword"]');
+  const confirm=$('modalBody').querySelector('[name="confirmPassword"]');
+  const matchStatus=$('passwordMatchStatus');
   if(next)next.pattern='(?=.*[A-Z])(?=.*[a-z])(?=.*[0-9])(?=.*[^A-Za-z0-9]).{6,128}';
+  const updateMatch=()=>{if(!confirm.value){matchStatus.textContent='Enter the new password twice to check that they match.';matchStatus.style.color='';return}if(next.value===confirm.value){matchStatus.textContent='✓ New passwords match';matchStatus.style.color='#16845b'}else{matchStatus.textContent='✕ New passwords do not match';matchStatus.style.color='#c04d58'}};
+  next.addEventListener('input',updateMatch);confirm.addEventListener('input',updateMatch);
 });
 $('logoutButton').addEventListener('click',async()=>{
   $('accountMenu').classList.remove('open');
