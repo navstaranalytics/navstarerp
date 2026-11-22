@@ -4,7 +4,7 @@ const statements = ["-- NAVSTAR ERP foundational schema\n-- Target: Cloudflare D
 
 export async function onRequestPost({ request, env }) {
   if (!env.DB) return Response.json({ ok:false, error:"D1 binding DB is missing." }, { status:503 });
-  if (!env.NAVSTAR_SETUP_KEY) return Response.json({ ok:false, error:"Set the NAVSTAR_SETUP_KEY secret in Cloudflare Pages settings first." }, { status:503 });
+  if (!env.NAVSTAR_SETUP_KEY) return Response.json({ ok:false, error:"Set the NAVSTAR_SETUP_KEY secret in Cloudflare Worker settings first." }, { status:503 });
   const supplied = request.headers.get("Authorization") || "";
   if (supplied !== `Bearer ${env.NAVSTAR_SETUP_KEY}`) return Response.json({ ok:false, error:"Unauthorized." }, { status:401 });
   const results = [];

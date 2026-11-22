@@ -1,7 +1,7 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "navstarerp",
-  "main": "./dist/worker/index.js",
+  "main": "./worker.js",
   "compatibility_date": "2026-11-22",
   "assets": {
     "directory": "./public",
