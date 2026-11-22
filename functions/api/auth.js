@@ -208,3 +208,65 @@ export async function onRequestPostLogout({ request, env }) {
   }
   return json({ ok: true, message: "Signed out." }, 200, { "Set-Cookie": clearCookie() });
 }
+
+
+export async function onRequestPostProfile({ request, env }) {
+  const current = await getSuperAdminSession(request, env);
+  if (!current) return json({ ok: false, error: "Your session has expired. Please sign in again." }, 401);
+  let body;
+  try { body = await request.json(); } catch { return json({ ok: false, error: "Invalid profile details." }, 400); }
+  const fullName = safeText(body.fullName);
+  const email = normalize(body.email);
+  const phone = safeText(body.phone);
+  const designation = safeText(body.designation);
+  const organisationName = safeText(body.organisationName);
+  if (!fullName || fullName.length > 120 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ||
+      email.length > 190 || !phone || phone.length > 40 || !designation || designation.length > 100 ||
+      !organisationName || organisationName.length > 140) {
+    return json({ ok: false, error: "Complete all profile fields with valid details." }, 400);
+  }
+  try {
+    await env.DB.batch([
+      env.DB.prepare("UPDATE users SET full_name = ?, email = ?, email_normalized = ?, phone = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?")
+        .bind(fullName, email, email, phone, current.id),
+      env.DB.prepare("UPDATE super_admin_profiles SET designation = ?, organisation_name = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE user_id = ?")
+        .bind(designation, organisationName, current.id)
+    ]);
+    await audit(env, current.id, "auth.profile.updated", "success");
+    return json({ ok: true, message: "Profile updated." });
+  } catch {
+    return json({ ok: false, error: "The email may already be in use. Please check it and try again." }, 409);
+  }
+}
+
+export async function onRequestPostChangePassword({ request, env }) {
+  const current = await getSuperAdminSession(request, env);
+  if (!current) return json({ ok: false, error: "Your session has expired. Please sign in again." }, 401);
+  let body;
+  try { body = await request.json(); } catch { return json({ ok: false, error: "Invalid password request." }, 400); }
+  const oldPassword = String(body.currentPassword || "");
+  const newPassword = String(body.newPassword || "");
+  const confirmPassword = String(body.confirmPassword || "");
+  const row = await env.DB.prepare("SELECT password_hash FROM users WHERE id = ?").bind(current.id).first();
+  if (!row || !(await verifyPassword(oldPassword, row.password_hash))) {
+    return json({ ok: false, error: "Your current password is incorrect." }, 401);
+  }
+  if (newPassword.length < 12 || newPassword.length > 128) {
+    return json({ ok: false, error: "Use a new password of at least 12 characters." }, 400);
+  }
+  if (newPassword !== confirmPassword) return json({ ok: false, error: "The new passwords do not match." }, 400);
+  if (newPassword === oldPassword) return json({ ok: false, error: "Choose a password different from your current one." }, 400);
+  try {
+    const token = cookieValue(request, COOKIE);
+    const tokenHash = await digest(token);
+    const passwordHash = await hashPassword(newPassword);
+    await env.DB.batch([
+      env.DB.prepare("UPDATE users SET password_hash = ?, password_changed_at = strftime('%Y-%m-%dT%H:%M:%fZ','now'), updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?").bind(passwordHash, current.id),
+      env.DB.prepare("UPDATE auth_sessions SET revoked_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE user_id = ? AND token_hash <> ? AND revoked_at IS NULL").bind(current.id, tokenHash)
+    ]);
+    await audit(env, current.id, "auth.password.changed", "success");
+    return json({ ok: true, message: "Password changed. Other active sessions have been signed out." });
+  } catch {
+    return json({ ok: false, error: "The password could not be changed. Please try again." }, 500);
+  }
+}
