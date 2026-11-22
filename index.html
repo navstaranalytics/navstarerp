@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#101d35">
+<title>NAVSTAR ERP | School Management Platform</title>
+<style>
+:root{--navy:#101d35;--navy2:#172846;--blue:#3978f6;--teal:#20b8a5;--ink:#17243a;--muted:#718096;--line:#e7ecf3;--bg:#f4f7fb;--white:#fff}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 Inter,ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif}
+.app{min-height:100vh;display:grid;grid-template-columns:250px 1fr}.side{background:var(--navy);color:#d9e3f3;padding:24px 16px;display:flex;flex-direction:column}.brand{display:flex;align-items:center;gap:11px;padding:4px 9px 28px}.logo{width:38px;height:38px;border-radius:12px;background:linear-gradient(135deg,#4385ff,#20c7b0);display:grid;place-items:center;color:white;font-weight:900;font-size:18px}.brand strong{display:block;color:white;letter-spacing:1.8px;font-size:15px}.brand small{color:#9fb0ca;font-size:10px;letter-spacing:1.5px}.group{color:#8295b4;text-transform:uppercase;font-size:10px;letter-spacing:1.4px;padding:14px 10px 7px}.nav button{width:100%;border:0;background:none;color:#c5d1e3;padding:10px;border-radius:9px;text-align:left;display:flex;gap:11px;align-items:center;cursor:pointer;font:inherit}.nav button:hover,.nav button.active{background:#263b5c;color:white}.nav .ico{width:18px;text-align:center;color:#93b5ef}.side-foot{margin-top:auto;border-top:1px solid #2a3b57;padding:16px 9px;color:#9fb0ca;font-size:11px}.main{min-width:0}.top{height:72px;background:white;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;padding:0 30px;gap:16px}.crumb{font-weight:700;font-size:16px}.top-right{display:flex;align-items:center;gap:12px}.search{border:1px solid var(--line);border-radius:9px;padding:9px 12px;width:min(260px,35vw);background:#fafbfd}.avatar{width:34px;height:34px;border-radius:50%;background:#e5edff;color:#2e64cf;display:grid;place-items:center;font-weight:800}.content{padding:28px 30px;max-width:1500px;margin:auto}.eyebrow{color:var(--blue);font-size:11px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase}.heading{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;margin-bottom:22px}.heading h1{font-size:26px;letter-spacing:-.7px;margin:4px 0}.sub{color:var(--muted)}.btn{border:0;border-radius:9px;padding:10px 15px;background:var(--blue);color:white;font-weight:700;cursor:pointer}.btn.secondary{background:white;color:var(--ink);border:1px solid var(--line)}.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;margin-bottom:20px}.stat,.panel{background:white;border:1px solid var(--line);border-radius:14px;padding:18px}.stat-top{display:flex;justify-content:space-between;color:var(--muted);font-size:12px}.stat strong{display:block;font-size:27px;margin:12px 0 3px}.stat small{color:var(--muted)}.stat-icon{width:34px;height:34px;border-radius:10px;background:#edf3ff;color:#3978f6;display:grid;place-items:center}.layout{display:grid;grid-template-columns:1.5fr 1fr;gap:16px}.panel h2{font-size:15px;margin:0 0 4px}.panel-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}.panel-head small{color:var(--muted)}.empty{padding:34px 15px;text-align:center;border:1px dashed #d9e1ed;border-radius:11px;color:var(--muted)}.empty b{display:block;color:var(--ink);margin:8px}.quick{display:grid;grid-template-columns:1fr 1fr;gap:10px}.quick button{padding:14px;border:1px solid var(--line);background:#fff;border-radius:10px;text-align:left;cursor:pointer;color:var(--ink);font-weight:700}.quick button span{display:block;color:var(--muted);font-weight:400;font-size:11px;margin-top:4px}.notice{margin-top:16px;padding:13px 15px;border-radius:10px;background:#eef6ff;color:#35547e;font-size:12px}.mobile{display:none}
+@media(max-width:950px){.app{grid-template-columns:210px 1fr}.stats{grid-template-columns:repeat(2,1fr)}.layout{grid-template-columns:1fr}.content{padding:22px}}
+@media(max-width:650px){.app{display:block}.side{display:none}.top{padding:0 16px;height:62px}.mobile{display:block}.content{padding:18px 14px}.heading{align-items:flex-start;flex-direction:column}.stats{gap:9px}.stat{padding:13px}.stat strong{font-size:22px}.search{display:none}}
+</style>
+</head>
+<body>
+<div class="app">
+<aside class="side">
+ <div class="brand"><div class="logo">N</div><div><strong>NAVSTAR</strong><small>ANALYTICS & ERP</small></div></div>
+ <nav class="nav">
+  <div class="group">Workspace</div>
+  <button class="active" data-page="Overview"><span class="ico">◫</span>Overview</button>
+  <button data-page="School Directory"><span class="ico">▦</span>School Directory</button>
+  <button data-page="Learners"><span class="ico">♙</span>Learners</button>
+  <button data-page="Staff"><span class="ico">♧</span>Staff & HR</button>
+  <div class="group">Academics</div>
+  <button data-page="CBC Academics"><span class="ico">▤</span>Learning Areas & Grades</button>
+  <button data-page="Senior School"><span class="ico">⌘</span>Senior School Pathways</button>
+  <button data-page="Examinations"><span class="ico">✓</span>Examinations</button>
+  <button data-page="AI Analytics"><span class="ico">✧</span>AI Performance Analytics</button>
+  <div class="group">Operations</div>
+  <button data-page="Finance"><span class="ico">◈</span>Finance & Fees</button>
+  <button data-page="Reports"><span class="ico">▥</span>Reports</button>
+  <button data-page="Users & Access"><span class="ico">♧</span>Users & Access</button>
+  <button data-page="Settings"><span class="ico">⚙</span>Platform Settings</button>
+ </nav>
+ <div class="side-foot">Multi-school management platform<br>Kenya · CBC-ready architecture</div>
+</aside>
+<main class="main">
+ <header class="top"><div class="crumb"><span class="mobile">☰ &nbsp;</span>NAVSTAR <span style="color:#9aa8ba;font-weight:400">/</span> <span id="crumb">Overview</span></div><div class="top-right"><input class="search" placeholder="Search this workspace…"><div class="avatar">NA</div></div></header>
+ <section class="content" id="view">
+  <div class="heading"><div><div class="eyebrow">Platform command centre</div><h1>Good afternoon.</h1><div class="sub">Your central workspace for managing schools, learning and operations.</div></div><button class="btn" id="addSchool">＋ Register a school</button></div>
+  <div class="stats">
+   <div class="stat"><div class="stat-top">Registered schools <span class="stat-icon">▦</span></div><strong>—</strong><small>Connect your school directory</small></div>
+   <div class="stat"><div class="stat-top">Active learners <span class="stat-icon">♙</span></div><strong>—</strong><small>Live enrolment data</small></div>
+   <div class="stat"><div class="stat-top">Teaching staff <span class="stat-icon">♧</span></div><strong>—</strong><small>Across your schools</small></div>
+   <div class="stat"><div class="stat-top">Platform status <span class="stat-icon">✧</span></div><strong style="font-size:19px">Setup</strong><small>Awaiting secure backend connection</small></div>
+  </div>
+  <div class="layout">
+   <div class="panel"><div class="panel-head"><div><h2>School network</h2><small>Your multi-tenant school directory</small></div><button class="btn secondary" data-go="School Directory">View directory</button></div><div class="empty">▦<b>No schools connected yet</b>Register your first school to begin setting up the network.</div></div>
+   <div class="panel"><div class="panel-head"><div><h2>Quick actions</h2><small>Common platform tasks</small></div></div><div class="quick"><button data-go="School Directory">＋ Add a school<span>Onboard a new institution</span></button><button data-go="Learners">♙ Learner records<span>Manage enrolment</span></button><button data-go="CBC Academics">▤ Set up academics<span>Grades and learning areas</span></button><button data-go="Users & Access">♧ Invite a user<span>Roles and permissions</span></button></div></div>
+  </div>
+  <div class="notice"><b>Platform foundation:</b> This is the initial frontend shell. Authentication, tenant-isolated database, permissions, file storage and live school data will be connected in the next development stages. No demo figures are presented as real records.</div>
+ </section>
+</main>
+</div>
+<script>
+const view=document.getElementById('view'),crumb=document.getElementById('crumb');
+const pages={
+'School Directory':['School network','Register, review and manage schools connected to NAVSTAR.','School onboarding, subscription status, tenant workspace and school configuration will be built here.'],
+'Learners':['Learner management','A central, secure record for every learner in each school.','Enrolment, admission numbers, guardians, grade, stream, learner imports and learner history.'],
+'Staff':['Staff & HR','Manage school teams and their responsibilities.','Staff profiles, teacher assignments, HR records, leave and payroll workflows.'],
+'CBC Academics':['Learning Areas & Grades','Configure the Kenyan CBC structure for each school.','PP1–PP2, Grades 1–9 and configurable senior school learning areas, grade structures and assessment settings.'],
+'Senior School':['Senior School pathways','Assign learning areas according to each learner’s selected pathway.','STEM, Arts and Sports Science, and Social Sciences. Learners will only be assigned learning areas belonging to their selected pathway.'],
+'Examinations':['Examinations & assessment','Plan assessments, capture marks and generate report cards.','CATs, projects, practicals, midterm, end-term, mocks, grading rules and verified PDF reports.'],
+'AI Analytics':['AI performance analytics','Turn assessment evidence into useful academic insight.','Import result PDFs, spreadsheets and published examination results; validate records and analyse performance.'],
+'Finance':['Finance & fees','Manage school billing and financial operations.','Fee structures, invoices, receipts, M-Pesa, bank reconciliation, budgets and financial reports.'],
+'Reports':['Reports & insights','Access operational and academic reporting.','School-level and platform-level reports with controlled exports.'],
+'Users & Access':['Users & access control','Manage who can access each school and platform function.','Super Admin, school leadership, teachers, parents, learners and role-based permissions.'],
+'Settings':['Platform settings','Configure NAVSTAR and individual school workspaces.','Branding, academic years, terms, integrations, security, audit history and platform preferences.']
+};
+function openPage(name){crumb.textContent=name;document.querySelectorAll('.nav button').forEach(b=>b.classList.toggle('active',b.dataset.page===name));if(name==='Overview'){location.reload();return}const p=pages[name]||[name,'',''];view.innerHTML='<div class="heading"><div><div class="eyebrow">NAVSTAR workspace</div><h1>'+p[0]+'</h1><div class="sub">'+p[1]+'</div></div><button class="btn secondary" onclick="openPage(\'Overview\')">← Overview</button></div><div class="panel"><h2>Module workspace</h2><p class="sub">'+p[2]+'</p><div class="empty" style="margin-top:18px">This module is being developed as part of the NAVSTAR ERP build.<b>Next: connect secure data, workflows and permissions.</b></div></div>'}
+document.querySelectorAll('[data-page]').forEach(b=>b.addEventListener('click',()=>openPage(b.dataset.page)));
+document.querySelectorAll('[data-go]').forEach(b=>b.addEventListener('click',()=>openPage(b.dataset.go)));
+document.getElementById('addSchool').addEventListener('click',()=>openPage('School Directory'));
+</script>
+</body>
+</html>
