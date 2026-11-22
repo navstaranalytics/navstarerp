@@ -71,7 +71,7 @@ export async function getSuperAdminSession(request, env) {
   const tokenHash = await digest(token);
   const row = await env.DB.prepare(`
     SELECT u.id, u.full_name, u.username, u.email, u.phone, u.status,
-           p.designation, p.organisation_name, p.country, p.timezone, p.currency,
+           p.designation, p.organisation_name, p.profile_photo_url, p.country, p.timezone, p.currency,
            s.id AS session_id, s.expires_at
     FROM auth_sessions s
     JOIN users u ON u.id = s.user_id
@@ -205,7 +205,7 @@ export async function onRequestGetMe({ request, env }) {
   if (!user) return json({ ok: false, authenticated: false }, 401);
   return json({ ok: true, authenticated: true, user: {
     id: user.id, fullName: user.full_name, username: user.username, email: user.email,
-    phone: user.phone, designation: user.designation, organisationName: user.organisation_name,
+    phone: user.phone, designation: user.designation, organisationName: user.organisation_name, profilePhotoUrl: user.profile_photo_url,
     country: user.country, timezone: user.timezone, currency: user.currency
   } });
 }
@@ -231,6 +231,8 @@ export async function onRequestPostProfile({ request, env }) {
   const phone = safeText(body.phone);
   const designation = safeText(body.designation);
   const organisationName = safeText(body.organisationName);
+  const profilePhotoUrl = safeText(body.profilePhotoUrl);
+  if (profilePhotoUrl && (!/^https:\/\//i.test(profilePhotoUrl) || profilePhotoUrl.length > 2048)) return json({ ok: false, error: 'Profile photo must be a valid HTTPS image URL.' }, 400);
   if (!fullName || fullName.length > 120 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ||
       email.length > 190 || !phone || phone.length > 40 || !designation || designation.length > 100 ||
       !organisationName || organisationName.length > 140) {
@@ -240,8 +242,8 @@ export async function onRequestPostProfile({ request, env }) {
     await env.DB.batch([
       env.DB.prepare("UPDATE users SET full_name = ?, email = ?, email_normalized = ?, phone = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?")
         .bind(fullName, email, email, phone, current.id),
-      env.DB.prepare("UPDATE super_admin_profiles SET designation = ?, organisation_name = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE user_id = ?")
-        .bind(designation, organisationName, current.id)
+      env.DB.prepare("UPDATE super_admin_profiles SET designation = ?, organisation_name = ?, profile_photo_url = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE user_id = ?")
+        .bind(designation, organisationName, profilePhotoUrl || null, current.id)
     ]);
     await audit(env, current.id, "auth.profile.updated", "success");
     return json({ ok: true, message: "Profile updated." });
