@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#101d35">
+<title>NAVSTAR | Super Admin</title>
+<style>
+:root{--navy:#101d35;--navy2:#1a2c49;--blue:#3978f6;--teal:#18aa9a;--ink:#17243a;--muted:#718096;--line:#e6ebf2;--bg:#f4f7fb;--white:#fff;--green:#16845b;--red:#c04d58;--amber:#a66b12}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 Inter,system-ui,-apple-system,Segoe UI,sans-serif}.shell{min-height:100vh;display:grid;grid-template-columns:250px 1fr}.side{background:var(--navy);color:#d9e3f3;padding:23px 16px;display:flex;flex-direction:column}.brand{display:flex;gap:11px;align-items:center;padding:5px 8px 27px}.logo{width:39px;height:39px;border-radius:12px;background:linear-gradient(135deg,#4385ff,#20c7b0);display:grid;place-items:center;color:white;font-weight:900;font-size:18px}.brand strong{display:block;color:white;letter-spacing:1.8px}.brand small{color:#9fb0ca;font-size:10px;letter-spacing:1.5px}.nav-label{color:#8295b4;text-transform:uppercase;font-size:10px;letter-spacing:1.5px;padding:13px 10px 7px}.nav a{display:block;text-decoration:none;color:#c5d1e3;padding:10px;border-radius:9px;margin:2px 0}.nav a.active,.nav a:hover{background:#263b5c;color:white}.nav a span{display:inline-block;width:25px;color:#92b7f5}.side-foot{margin-top:auto;border-top:1px solid #2a3b57;padding:16px 8px;color:#9fb0ca;font-size:11px}.main{min-width:0}.top{height:70px;background:white;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;padding:0 30px}.crumb{font-weight:750}.topright{display:flex;gap:13px;align-items:center;color:var(--muted);font-size:12px}.avatar{width:34px;height:34px;border-radius:50%;background:#e6eeff;color:#2e64cf;display:grid;place-items:center;font-weight:800}.content{padding:28px 30px;max-width:1500px;margin:auto}.eyebrow{font-size:10px;color:var(--blue);font-weight:800;letter-spacing:1.6px;text-transform:uppercase}.heading{display:flex;justify-content:space-between;align-items:flex-end;gap:18px;margin-bottom:22px}.heading h1{font-size:26px;letter-spacing:-.7px;margin:4px 0}.muted{color:var(--muted)}.btn{border:0;border-radius:9px;padding:10px 15px;background:var(--blue);color:white;font-weight:700;cursor:pointer}.btn:hover{filter:brightness(.96)}.btn.outline{background:#fff;color:var(--ink);border:1px solid var(--line)}.btn.danger{background:#fff0f0;color:var(--red);border:1px solid #f5d4d7}.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:18px}.stat,.panel{background:white;border:1px solid var(--line);border-radius:13px;padding:17px}.stat-label{font-size:12px;color:var(--muted);display:flex;justify-content:space-between}.stat strong{display:block;font-size:27px;margin:8px 0 0}.stat small{font-size:11px;color:var(--muted)}.stat-icon{background:#edf3ff;color:#3978f6;width:31px;height:31px;border-radius:9px;display:grid;place-items:center}.panel{padding:0;overflow:hidden}.panel-head{padding:17px 18px;display:flex;align-items:center;justify-content:space-between;gap:12px;border-bottom:1px solid var(--line)}.panel-head h2{font-size:15px;margin:0}.tools{padding:14px 18px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}.field,select{border:1px solid var(--line);border-radius:8px;padding:10px 11px;background:#fff;color:var(--ink);font:inherit}.field{min-width:210px}.table-wrap{overflow:auto}table{border-collapse:collapse;width:100%;min-width:760px}th,td{text-align:left;padding:12px 16px;border-top:1px solid #eef1f5;white-space:nowrap}th{font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#8491a4;background:#fbfcfe}td{font-size:12px}.school{font-weight:750;color:var(--ink)}.subline{font-size:10px;color:var(--muted)}.pill{display:inline-block;padding:4px 8px;border-radius:30px;font-size:10px;font-weight:750}.active{background:#e7f7ef;color:var(--green)}.pending{background:#fff4df;color:var(--amber)}.suspended{background:#ffeded;color:var(--red)}.trial{background:#edf3ff;color:#3769c8}.actions{display:flex;gap:6px}.tiny{border:1px solid var(--line);background:#fff;border-radius:7px;padding:6px 9px;cursor:pointer;font-size:11px}.tiny:hover{border-color:#9bb8f5}.empty{padding:36px;text-align:center;color:var(--muted)}.footer-note{font-size:11px;color:var(--muted);padding:13px 17px;border-top:1px solid var(--line)}.modal-backdrop{position:fixed;inset:0;background:#0d1a2d88;display:none;align-items:center;justify-content:center;padding:18px;z-index:10}.modal-backdrop.open{display:flex}.modal{background:white;border-radius:16px;width:min(620px,100%);max-height:92vh;overflow:auto;box-shadow:0 24px 80px #07162d55}.modal-head{padding:19px 22px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center}.modal-head h2{margin:0;font-size:17px}.modal-body{padding:20px 22px}.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:13px}.form-field label{display:block;font-size:11px;font-weight:700;margin-bottom:5px}.form-field input,.form-field select{width:100%}.form-field.full{grid-column:1/-1}.modal-foot{display:flex;justify-content:flex-end;gap:9px;padding:15px 22px;border-top:1px solid var(--line)}.toast{position:fixed;right:22px;bottom:22px;background:#142744;color:white;padding:12px 16px;border-radius:10px;box-shadow:0 8px 30px #0d1a2d33;display:none;z-index:20}.toast.show{display:block}.disclaimer{margin-top:15px;padding:12px 14px;border-radius:9px;background:#eef5ff;color:#3e5c82;font-size:11px}
+@media(max-width:900px){.shell{grid-template-columns:205px 1fr}.stats{grid-template-columns:repeat(2,1fr)}.content{padding:22px 18px}}
+@media(max-width:650px){.shell{display:block}.side{display:none}.top{height:60px;padding:0 15px}.content{padding:18px 13px}.heading{align-items:flex-start;flex-direction:column}.stats{gap:8px}.stat{padding:12px}.stat strong{font-size:22px}.form-grid{grid-template-columns:1fr}.form-field.full{grid-column:auto}.topright .who{display:none}}
+</style>
+</head>
+<body>
+<div class="shell">
+<aside class="side">
+ <div class="brand"><div class="logo">N</div><div><strong>NAVSTAR</strong><small>ANALYTICS & ERP</small></div></div>
+ <nav class="nav"><div class="nav-label">Platform control</div>
+  <a href="index.html"><span>◫</span>Platform overview</a>
+  <a class="active" href="super-admin.html"><span>▦</span>School directory</a>
+  <a href="#subscriptions" data-local="subscriptions"><span>◈</span>Subscriptions</a>
+  <a href="#administrators" data-local="administrators"><span>♙</span>Platform administrators</a>
+  <div class="nav-label">Configuration</div>
+  <a href="#curriculum" data-local="curriculum"><span>▤</span>Curriculum templates</a>
+  <a href="#audit" data-local="audit"><span>◷</span>Audit & activity</a>
+  <a href="#settings" data-local="settings"><span>⚙</span>Platform settings</a>
+ </nav>
+ <div class="side-foot">SUPER ADMIN CONSOLE<br>Central school network management</div>
+</aside>
+<main class="main">
+ <header class="top"><div class="crumb">NAVSTAR <span class="muted">/</span> Super Admin <span class="muted">/</span> School Directory</div><div class="topright"><span class="who">Platform administrator</span><div class="avatar">SA</div></div></header>
+ <section class="content">
+  <div class="heading"><div><div class="eyebrow">Central platform administration</div><h1>School directory</h1><div class="muted">Onboard schools and manage their platform access from one place.</div></div><button class="btn" id="openAdd">＋ Register school</button></div>
+  <div class="stats">
+   <div class="stat"><div class="stat-label">Total registered schools <span class="stat-icon">▦</span></div><strong id="totalCount">0</strong><small>All records in this browser</small></div>
+   <div class="stat"><div class="stat-label">Active schools <span class="stat-icon">✓</span></div><strong id="activeCount">0</strong><small>Marked active</small></div>
+   <div class="stat"><div class="stat-label">Pending review <span class="stat-icon">◷</span></div><strong id="pendingCount">0</strong><small>Awaiting approval</small></div>
+   <div class="stat"><div class="stat-label">Suspended <span class="stat-icon">⊘</span></div><strong id="suspendedCount">0</strong><small>Access paused</small></div>
+  </div>
+  <section class="panel">
+   <div class="panel-head"><div><h2>Registered institutions</h2><div class="muted" style="font-size:11px">Create and maintain school profiles</div></div><button class="btn outline" id="exportCsv">Export CSV</button></div>
+   <div class="tools"><input id="search" class="field" placeholder="Search school, code, county…"><select id="statusFilter"><option value="all">All statuses</option><option>Active</option><option>Pending</option><option>Suspended</option></select><select id="levelFilter"><option value="all">All school levels</option><option>Pre-primary</option><option>Primary</option><option>Junior School</option><option>Senior School</option><option>Mixed</option></select></div>
+   <div class="table-wrap"><table><thead><tr><th>School / institution</th><th>County</th><th>School level</th><th>Plan</th><th>Status</th><th>Registered</th><th>Actions</th></tr></thead><tbody id="schoolRows"></tbody></table><div class="empty" id="emptyState">No schools registered yet. Select “Register school” to onboard the first institution.</div></div>
+   <div class="footer-note">School records shown here are local prototype data. Production records will be stored in a secured tenant-aware database.</div>
+  </section>
+  <div class="disclaimer"><b>Development notice:</b> This is a working frontend prototype. Records are saved in this browser only. It is not yet secure multi-user administration; real authentication, database persistence, tenant isolation, audit logging and server-side authorization must be implemented before handling real school or learner information.</div>
+ </section>
+</main>
+</div>
+<div class="modal-backdrop" id="modal">
+ <form class="modal" id="schoolForm">
+  <div class="modal-head"><h2>Register a school</h2><button type="button" class="tiny" id="closeModal">✕</button></div>
+  <div class="modal-body"><div class="form-grid">
+   <div class="form-field full"><label for="schoolName">Official school name *</label><input class="field" id="schoolName" required maxlength="120" placeholder="e.g. Navstar Academy"></div>
+   <div class="form-field"><label for="schoolCode">School / institution code</label><input class="field" id="schoolCode" maxlength="40" placeholder="Optional"></div>
+   <div class="form-field"><label for="county">County *</label><select id="county" required><option value="">Select county</option></select></div>
+   <div class="form-field"><label for="level">School level *</label><select id="level" required><option value="">Select level</option><option>Pre-primary</option><option>Primary</option><option>Junior School</option><option>Senior School</option><option>Mixed</option></select></div>
+   <div class="form-field"><label for="plan">Platform plan</label><select id="plan"><option>Starter</option><option>Professional</option><option>Enterprise</option><option>Trial</option></select></div>
+   <div class="form-field"><label for="contactName">Contact person</label><input class="field" id="contactName" maxlength="100" placeholder="Headteacher / principal"></div>
+   <div class="form-field"><label for="email">Official email</label><input class="field" id="email" type="email" maxlength="120" placeholder="school@example.com"></div>
+   <div class="form-field"><label for="phone">Phone number</label><input class="field" id="phone" maxlength="30" placeholder="+254…"></div>
+   <div class="form-field"><label for="status">Initial status</label><select id="status"><option>Pending</option><option>Active</option></select></div>
+  </div></div>
+  <div class="modal-foot"><button type="button" class="btn outline" id="cancelModal">Cancel</button><button type="submit" class="btn">Save school record</button></div>
+ </form>
+</div>
+<div class="toast" id="toast" role="status"></div>
+<script>
+const KEY='navstar_superadmin_schools_v1';
+const counties=['Baringo','Bomet','Bungoma','Busia','Elgeyo-Marakwet','Embu','Garissa','Homa Bay','Isiolo','Kajiado','Kakamega','Kericho','Kiambu','Kilifi','Kirinyaga','Kisii','Kisumu','Kitui','Kwale','Laikipia','Lamu','Machakos','Makueni','Mandera','Marsabit','Meru','Migori','Mombasa','Murang’a','Nairobi','Nakuru','Nandi','Narok','Nyamira','Nyandarua','Nyeri','Samburu','Siaya','Taita-Taveta','Tana River','Tharaka-Nithi','Trans Nzoia','Turkana','Uasin Gishu','Vihiga','Wajir','West Pokot'];
+const $=id=>document.getElementById(id);
+let schools=load();
+function load(){try{return JSON.parse(localStorage.getItem(KEY)||'[]')}catch{return []}}
+function persist(){localStorage.setItem(KEY,JSON.stringify(schools))}
+function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function toast(msg){$('toast').textContent=msg;$('toast').classList.add('show');setTimeout(()=>$('toast').classList.remove('show'),2600)}
+function statusClass(s){return s==='Active'?'active':s==='Suspended'?'suspended':'pending'}
+function render(){
+ const q=$('search').value.toLowerCase(),sf=$('statusFilter').value,lf=$('levelFilter').value;
+ const visible=schools.filter(s=>(!q||[s.name,s.code,s.county,s.email].join(' ').toLowerCase().includes(q))&&(sf==='all'||s.status===sf)&&(lf==='all'||s.level===lf));
+ $('totalCount').textContent=schools.length;$('activeCount').textContent=schools.filter(s=>s.status==='Active').length;$('pendingCount').textContent=schools.filter(s=>s.status==='Pending').length;$('suspendedCount').textContent=schools.filter(s=>s.status==='Suspended').length;
+ $('schoolRows').innerHTML=visible.map(s=>'<tr><td><div class="school">'+esc(s.name)+'</div><div class="subline">'+esc(s.code||'No institution code')+' · '+esc(s.contact||'No contact added')+'</div></td><td>'+esc(s.county)+'</td><td>'+esc(s.level)+'</td><td>'+esc(s.plan)+'</td><td><span class="pill '+statusClass(s.status)+'">'+esc(s.status)+'</span></td><td>'+esc(s.date)+'</td><td><div class="actions"><button class="tiny" data-action="status" data-id="'+esc(s.id)+'">'+(s.status==='Active'?'Suspend':s.status==='Suspended'?'Reactivate':'Approve')+'</button><button class="tiny" data-action="view" data-id="'+esc(s.id)+'">Details</button></div></td></tr>').join('');
+ $('emptyState').style.display=visible.length?'none':'block';
+}
+function openModal(){$('modal').classList.add('open');$('schoolName').focus()}
+function closeModal(){$('modal').classList.remove('open')}
+counties.forEach(c=>{const o=document.createElement('option');o.value=c;o.textContent=c;$('county').appendChild(o)});
+$('openAdd').onclick=openModal;$('closeModal').onclick=closeModal;$('cancelModal').onclick=closeModal;
+$('modal').addEventListener('click',e=>{if(e.target===$('modal'))closeModal()});
+$('schoolForm').addEventListener('submit',e=>{
+ e.preventDefault();const name=$('schoolName').value.trim(),code=$('schoolCode').value.trim();
+ if(schools.some(s=>code&&s.code.toLowerCase()===code.toLowerCase())){toast('That institution code is already in this local directory.');return}
+ const record={id:crypto.randomUUID?crypto.randomUUID():String(Date.now()),name,code,county:$('county').value,level:$('level').value,plan:$('plan').value,contact:$('contactName').value.trim(),email:$('email').value.trim(),phone:$('phone').value.trim(),status:$('status').value,date:new Date().toLocaleDateString('en-KE')};
+ schools.unshift(record);persist();render();e.target.reset();closeModal();toast('School record added in this browser.');
+});
+$('schoolRows').addEventListener('click',e=>{
+ const b=e.target.closest('button[data-action]');if(!b)return;const s=schools.find(x=>x.id===b.dataset.id);if(!s)return;
+ if(b.dataset.action==='status'){s.status=s.status==='Active'?'Suspended': 'Active';persist();render();toast(s.name+' status updated locally.')}
+ if(b.dataset.action==='view'){alert('SCHOOL PROFILE\n\nName: '+s.name+'\nCode: '+(s.code||'—')+'\nCounty: '+s.county+'\nLevel: '+s.level+'\nPlan: '+s.plan+'\nStatus: '+s.status+'\nContact: '+(s.contact||'—')+'\nEmail: '+(s.email||'—')+'\nPhone: '+(s.phone||'—'))}
+});
+['search','statusFilter','levelFilter'].forEach(id=>$(id).addEventListener(id==='search'?'input':'change',render));
+$('exportCsv').onclick=()=>{
+ if(!schools.length){toast('There are no school records to export yet.');return}
+ const cols=['name','code','county','level','plan','contact','email','phone','status','date'];
+ const csv=[cols.join(','),...schools.map(s=>cols.map(k=>'"'+String(s[k]??'').replace(/"/g,'""')+'"').join(','))].join('\r\n');
+ const url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));const a=document.createElement('a');a.href=url;a.download='navstar-school-directory.csv';a.click();URL.revokeObjectURL(url);toast('CSV export prepared.');
+};
+document.querySelectorAll('[data-local]').forEach(a=>a.addEventListener('click',e=>{e.preventDefault();toast(a.textContent.trim()+' will be added in a later build stage.')}));render();
+</script>
+</body></html>
