@@ -1,3 +1,5 @@
+import { getSuperAdminSession } from "./auth.js";
+
 const json=(data,status=200)=>Response.json(data,{status,headers:{"Cache-Control":"no-store"}});
 const clean=v=>String(v??"").trim();
 const normStatus=v=>({Active:"active",Pending:"pending",Suspended:"suspended",Archived:"archived",active:"active",pending:"pending",suspended:"suspended",archived:"archived"}[v]||"pending");
@@ -17,7 +19,6 @@ function mapSchool(row){
 }
 async function requireAdmin(request,env){
   if(!env.DB)return {error:json({ok:false,error:"Database connection is unavailable."},503)};
-  const {getSuperAdminSession}=await import("./auth.js");
   const user=await getSuperAdminSession(request,env);
   return user?{user}:{error:json({ok:false,error:"Your Super Admin session has expired. Please sign in again."},401)};
 }
