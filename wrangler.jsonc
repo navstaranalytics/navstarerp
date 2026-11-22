@@ -3,6 +3,13 @@
   "name": "navstarerp",
   "main": "./worker.js",
   "compatibility_date": "2026-11-22",
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "navstar-erp-db",
+      "database_id": "7eead9ab-83ca-4867-96b1-183612dbf9e0"
+    }
+  ],
   "assets": {
     "directory": "./public",
     "binding": "ASSETS"
