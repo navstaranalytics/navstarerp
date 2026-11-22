@@ -17,6 +17,11 @@ const randomHex = (length = 32) => {
 const digest = async value => hex(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value)));
 const normalize = value => String(value || "").trim().toLowerCase();
 const safeText = value => String(value || "").trim();
+const passwordPolicy = value => {
+  if (value.length < 6 || value.length > 128) return false;
+  const types = [/[A-Z]/.test(value), /[a-z]/.test(value), /[0-9]/.test(value), /[^A-Za-z0-9]/.test(value)];
+  return types.filter(Boolean).length >= 3;
+};
 const cookieValue = (request, name) => {
   const header = request.headers.get("Cookie") || "";
   const item = header.split(";").map(x => x.trim()).find(x => x.startsWith(name + "="));
@@ -110,10 +115,8 @@ export async function onRequestPostSetupAdmin({ request, env }) {
       !organisationName || organisationName.length > 140) {
     return json({ ok: false, error: "Please complete all required fields with valid details. Username must be 3–32 characters and use letters, numbers, dots, underscores or hyphens." }, 400);
   }
-  if (password.length < 6 || password.length > 128 ||
-      !/[A-Z]/.test(password) || !/[a-z]/.test(password) ||
-      !/[0-9]/.test(password) || !/[^A-Za-z0-9]/.test(password)) {
-    return json({ ok: false, error: "Password must be at least 6 characters and include an uppercase letter, a lowercase letter, a number and a special character." }, 400);
+  if (!passwordPolicy(password)) {
+    return json({ ok: false, error: "Password must be at least 6 characters and contain at least 3 of these 4 types: uppercase, lowercase, number and special character." }, 400);
   }
   if (password !== confirmPassword) return json({ ok: false, error: "The passwords do not match." }, 400);
 
@@ -134,11 +137,15 @@ export async function onRequestPostSetupAdmin({ request, env }) {
     await env.DB.batch(statements);
     return json({ ok: true, setupRequired: false, message: "Your NAVSTAR Super Admin account has been created. Please sign in using your username or email and password." }, 201);
   } catch (error) {
-    const message = String(error?.message || "");
+    const message = String(error?.message || "Unknown database error");
+    console.error("NAVSTAR initial Super Admin setup failed:", message);
     if (/super_admin_initialized|UNIQUE constraint/i.test(message)) {
       return json({ ok: false, setupRequired: false, error: "Initial setup has already been claimed or these details are already in use. Please sign in." }, 409);
     }
-    return json({ ok: false, error: "The account could not be created. Check the details and try again." }, 500);
+    if (/FOREIGN KEY constraint/i.test(message)) {
+      return json({ ok: false, error: "The Super Admin role is missing from the database seed data. Please run the database repair step, then retry." }, 500);
+    }
+    return json({ ok: false, error: "Account creation failed at the database stage: " + message.slice(0, 240) }, 500);
   }
 }
 
@@ -255,10 +262,8 @@ export async function onRequestPostChangePassword({ request, env }) {
   if (!row || !(await verifyPassword(oldPassword, row.password_hash))) {
     return json({ ok: false, error: "Your current password is incorrect." }, 401);
   }
-  if (newPassword.length < 6 || newPassword.length > 128 ||
-      !/[A-Z]/.test(newPassword) || !/[a-z]/.test(newPassword) ||
-      !/[0-9]/.test(newPassword) || !/[^A-Za-z0-9]/.test(newPassword)) {
-    return json({ ok: false, error: "Password must be at least 6 characters and include an uppercase letter, a lowercase letter, a number and a special character." }, 400);
+  if (!passwordPolicy(newPassword)) {
+    return json({ ok: false, error: "Password must be at least 6 characters and contain at least 3 of these 4 types: uppercase, lowercase, number and special character." }, 400);
   }
   if (newPassword !== confirmPassword) return json({ ok: false, error: "The new passwords do not match." }, 400);
   if (newPassword === oldPassword) return json({ ok: false, error: "Choose a password different from your current one." }, 400);
