@@ -6,7 +6,7 @@ import { onRequestGet as dataGet, onRequestPost as dataPost, onRequestPatch as d
 import { onRequestPost as upgradePost } from "./functions/api/upgrade.js";
 import { onRequestPost as accessUpgradePost } from "./functions/api/access-upgrade.js";
 import { onRequestPost as schoolAdminPost } from "./functions/api/school-admin.js";
-import { onRequestGet as brandingGet, onRequestPost as brandingPost } from "./functions/api/branding.js";
+import { onRequestGet as brandingGet, onRequestPost as brandingPost, onRequestGetLogo as brandingLogoGet, onRequestPostLogo as brandingLogoPost } from "./functions/api/branding.js";
 import { onRequestPost as accountLookupPost } from "./functions/api/account-lookup.js";
 import {
   onRequestPostSetupAdmin,
@@ -70,7 +70,7 @@ export default {
       if (request.method !== "POST") return new Response("Method not allowed", { status: 405, headers: { Allow: "POST" } });
       return onRequestPostSetupAdmin({ request, env });
     }
-    if (route === "/api/branding") {
+    if (route === "/api/branding/logo") {\n      if (request.method === "GET") return brandingLogoGet({ request, env });\n      if (request.method === "POST") return brandingLogoPost({ request, env });\n      return new Response("Method not allowed", { status: 405, headers: { Allow: "GET, POST" } });\n    }\n    if (route === "/api/branding") {
       if (request.method === "GET") return brandingGet({ request, env });
       if (request.method === "POST") return brandingPost({ request, env });
       return new Response("Method not allowed", { status: 405, headers: { Allow: "GET, POST" } });
