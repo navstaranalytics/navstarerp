@@ -323,8 +323,8 @@ $('accountButton').addEventListener('click',()=> $('accountMenu').classList.togg
 document.addEventListener('click',e=>{if(!e.target.closest('.account-wrap'))$('accountMenu').classList.remove('open')});
 $('editProfile').addEventListener('click',()=>{
   $('accountMenu').classList.remove('open');if(!signedInUser)return;
-  openModal('My Super Admin profile','<div class="form-grid">'+field('Full name *','fullName','', 'text',signedInUser.fullName)+field('Official email *','email','', 'email',signedInUser.email)+field('Phone number *','phone','', 'tel',signedInUser.phone)+field('Position / designation *','designation','', 'text',signedInUser.designation)+field('Organisation name *','organisationName','', 'text',signedInUser.organisationName)+'</div>',async d=>{
-    const payload={fullName:d.get('fullName'),email:d.get('email'),phone:d.get('phone'),designation:d.get('designation'),organisationName:d.get('organisationName')};
+  openModal('My Super Admin profile','<div class="form-grid">'+field('Full name *','fullName','', 'text',signedInUser.fullName)+field('Official email *','email','', 'email',signedInUser.email)+field('Phone number *','phone','', 'tel',signedInUser.phone)+field('Position / designation *','designation','', 'text',signedInUser.designation)+field('Organisation name *','organisationName','', 'text',signedInUser.organisationName)+field('Profile picture URL (HTTPS)','profilePhotoUrl','https://your-domain.com/photo.jpg','url',signedInUser.profilePhotoUrl||'')+'</div>',async d=>{
+    const payload={fullName:d.get('fullName'),email:d.get('email'),phone:d.get('phone'),designation:d.get('designation'),organisationName:d.get('organisationName'),profilePhotoUrl:d.get('profilePhotoUrl')};
     try{const r=await fetch('/api/auth/profile',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});const data=await r.json();if(!r.ok||!data.ok){toast(data.error||'Profile could not be updated.');return}await loadSignedInUser();closeModal();toast('Profile updated successfully.')}catch{toast('Profile update failed. Please try again.')}
   });
 });
