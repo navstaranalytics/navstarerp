@@ -1,59 +1,35 @@
-# NAVSTAR ERP — D1 database setup
+# NAVSTAR ERP — Cloudflare D1 database setup
 
-Target Cloudflare Pages project: `navstarerp`  
+Target Worker: `navstarerp`  
 D1 database: `navstar-erp-db`  
-Pages Function binding: `DB`
+Worker binding name: `DB`
 
-## Before running
+## Before running the installer
 
-1. Confirm the Pages project's Production D1 binding is named exactly `DB` and points to `navstar-erp-db`.
-2. Open Cloudflare Dashboard → Workers & Pages → D1 SQL database → `navstar-erp-db` → Console.
-3. Open `migrations/0001_initial_schema.sql` in this repository.
-4. Copy the complete SQL file into the D1 Console and execute it once.
-5. Confirm it completes without an error.
+1. Open Cloudflare Dashboard → Workers & Pages → `navstarerp` → Settings → Bindings.
+2. Add a D1 database binding named exactly `DB` and select `navstar-erp-db`.
+3. Confirm the Worker secret `NAVSTAR_SETUP_KEY` exists. Do not share its value or commit it to GitHub.
+4. Deploy the current `main` branch.
 
-The SQL uses `IF NOT EXISTS` and `INSERT OR IGNORE` so it can be safely re-run if the first execution completes only partially. Do not run it against a database containing unrelated production data without reviewing the schema first.
+## Install the schema
 
-## Verify the schema
+Open the deployed Worker URL followed by `/setup-database.html`. Enter the existing setup key privately in the page and run the installer once. The installer executes the idempotent schema statements against the D1 binding.
 
-Run:
+Do not paste SQL into the D1 console for this setup flow. Do not send the setup key to anyone.
 
-```sql
-SELECT name
-FROM sqlite_master
-WHERE type = 'table'
-ORDER BY name;
-```
+## Verify
 
-Then run:
-
-```sql
-SELECT version, description, applied_at
-FROM schema_migrations;
-```
-
-You should see the NAVSTAR tables and migration `0001_initial_schema`.
-
-## Verify the Pages binding
-
-After the code in `functions/api/health.js` is deployed, open:
-
-`https://navstaranalytics.github.io/navstarerp/api/health`
-
-Note: GitHub Pages does not execute Cloudflare Pages Functions. The API URL must be on the actual Cloudflare Pages `.pages.dev` hostname or a custom domain routed through Cloudflare Pages. If the current public site is still GitHub Pages, use the Cloudflare Pages project domain for API testing.
-
-Expected successful response:
+Open `/api/health`. Expected response:
 
 ```json
 {"ok":true,"service":"NAVSTAR ERP API","database":"connected"}
 ```
 
+Then open `/api/setup-status`. It should return `ok: true` after the schema is installed.
+
 ## Important security notes
 
-- This migration creates the database structure only. It does not create a Super Admin login.
-- Never store plaintext passwords. Password hashing and session creation must be implemented in server-side Pages Functions.
-- Never put database credentials, API tokens, or password hashes in browser JavaScript.
-- The first Super Admin bootstrap endpoint must be one-time only and protected against repeated public account creation.
+- This migration creates the database structure and starter roles only. It does not create a Super Admin login.
+- Never store plaintext passwords. Password hashing and session creation must be implemented in server-side handlers.
 - Every school-owned API query must enforce the authenticated user's school membership and permissions on the server.
-- Use a separate D1 database for Preview/staging; do not point public Preview builds at production school data.
-- The schema is a foundation. Application-level validation, tenant isolation, backups, and security testing are required before real school data is entered.
+- The current school directory and dashboards are interface prototypes. Do not enter real student, staff, parent, financial, or confidential school data until server-side authentication, tenant isolation, audit logging, secure file storage, and backups are implemented and tested.
