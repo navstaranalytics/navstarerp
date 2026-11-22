@@ -15,7 +15,7 @@ export async function onRequestPost({request,env}){
   const user=await env.DB.prepare(`SELECT u.id,u.full_name,u.email,u.username,u.status,r.role_name,s.name AS school_name
     FROM users u JOIN user_role_assignments a ON a.user_id=u.id
     JOIN roles r ON r.id=a.role_id LEFT JOIN schools s ON s.id=a.school_id
-    WHERE u.username_normalized=? OR u.email_normalized=? ORDER BY CASE WHEN a.school_id IS NULL THEN 0 ELSE 1 END LIMIT 1`).bind(username,username).first();
+    WHERE a.school_id IS NULL AND r.role_key='super_admin' AND (u.username_normalized=? OR u.email_normalized=?) LIMIT 1`).bind(username,username).first();
   if(!user||user.status!=="active")return json({ok:false,error:"We couldn't verify that account. Check the username and try again."},404);
   return json({ok:true,account:{fullName:user.full_name,username:user.username,maskedEmail:maskEmail(user.email),role:user.role_name,workspace:user.school_name||"NAVSTAR Platform"}});
  }catch(error){console.error("NAVSTAR username lookup",error);return json({ok:false,error:"Account lookup is temporarily unavailable."},503)}
