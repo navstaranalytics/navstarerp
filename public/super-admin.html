@@ -324,5 +324,17 @@ $('logoutButton').addEventListener('click',async()=>{
 });
 loadSignedInUser();
 
-loadSchoolsFromDatabase().then(()=>render()).catch(error=>{schools=[];const status=$('saveState');if(status)status.textContent='Database connection unavailable';render();toast(error.message||'Could not load schools from the database.');});
+(async()=>{
+  try{
+    const upgradeResponse=await fetch('/api/system/upgrade',{method:'POST',credentials:'same-origin'});
+    const upgrade=await upgradeResponse.json();
+    if(!upgradeResponse.ok||!upgrade.ok)throw new Error(upgrade.error||'Database module upgrade failed.');
+    await loadSchoolsFromDatabase();
+    render();
+    const status=$('saveState');if(status)status.textContent='Connected · D1 database · ERP modules ready';
+  }catch(error){
+    schools=[];const status=$('saveState');if(status)status.textContent='Database connection or upgrade needs attention';
+    render();toast(error.message||'Could not connect to the central database.');
+  }
+})();
 </script></body></html>
