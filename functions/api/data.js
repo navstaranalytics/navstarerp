@@ -45,6 +45,7 @@ const resources={
   "report-cards":{table:"report_cards",scope:true,fields:["learner_id","academic_year_id","term_id","report_data_json","status","published_at"],required:["school_id","learner_id","academic_year_id"],refs:{learner_id:"learners",academic_year_id:"academic_years",term_id:"terms"}},
   discipline:{table:"learner_discipline_records",scope:true,fields:["learner_id","incident_date","category","description","action_taken"],required:["school_id","learner_id","incident_date","description"],refs:{learner_id:"learners"}},
   "platform-users":{table:"users",scope:false,readOnly:true,fields:[]},
+  analytics:{table:"schools",scope:false,readOnly:true,fields:[]},
   announcements:{table:"announcements",scope:false,fields:["school_id","title","body","audience","channel","status","scheduled_at","published_at"],required:["title","body"]},
   settings:{table:"platform_settings",scope:false,fields:["setting_key","setting_value"],required:["setting_key","setting_value"]},
   audit:{table:"audit_logs",scope:false,readOnly:true,fields:[]}
@@ -57,7 +58,7 @@ async function auth(request,env){
 }
 async function existsInSchool(db,table,ref,schoolId){
   if(!ref)return true;
-  const allowed=new Set(["subscription_plans","school_subscriptions","academic_years","grade_levels","streams","staff_profiles","users","terms","learning_areas","learners","learner_enrollments","assessments","attendance_sessions","attendance_records","fee_structures","inventory_items","library_books","transport_routes","boarding_houses"]);
+  const allowed=new Set(["subscription_plans","school_subscriptions","academic_years","grade_levels","streams","staff_profiles","users","terms","learning_areas","learners","learner_enrollments","assessments","attendance_sessions","attendance_records","attendance_sessions","fee_structures","inventory_items","library_books","transport_routes","boarding_houses","assessments"]);
   if(!allowed.has(table))return false;
   if(table==="subscription_plans"||table==="users")return !!(await db.prepare("SELECT 1 FROM "+table+" WHERE id=?").bind(ref).first());
   return !!(await db.prepare("SELECT 1 FROM "+table+" WHERE id=? AND school_id=?").bind(ref,schoolId).first());
