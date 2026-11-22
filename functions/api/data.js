@@ -97,9 +97,10 @@ export async function onRequestGet({request,env}){
         env.DB.prepare("SELECT COUNT(*) total FROM learners").first(),
         env.DB.prepare("SELECT COUNT(*) total FROM users").first(),
         env.DB.prepare("SELECT COUNT(*) total FROM invoices").first(),
-        env.DB.prepare("SELECT COALESCE(SUM(amount),0) total FROM payments WHERE status='confirmed'").first()
+        env.DB.prepare("SELECT COALESCE(SUM(amount),0) total FROM payments WHERE status='confirmed'").first(),
+        env.DB.prepare("SELECT strftime('%Y-%m',created_at) AS month, COUNT(*) AS total FROM schools WHERE created_at >= date('now','start of month','-11 months') GROUP BY strftime('%Y-%m',created_at) ORDER BY month").all()
       ]);
-      return json({ok:true,analytics:{schools:Number(q[0]?.total||0),activeSchools:Number(q[1]?.total||0),learners:Number(q[2]?.total||0),users:Number(q[3]?.total||0),invoices:Number(q[4]?.total||0),confirmedPayments:Number(q[5]?.total||0)}});
+      return json({ok:true,analytics:{schools:Number(q[0]?.total||0),activeSchools:Number(q[1]?.total||0),learners:Number(q[2]?.total||0),users:Number(q[3]?.total||0),invoices:Number(q[4]?.total||0),confirmedPayments:Number(q[5]?.total||0),schoolRegistrationsByMonth:q[6]?.results||[]}});
     }catch(error){console.error("NAVSTAR analytics read",error);return json({ok:false,error:"Could not load platform analytics."},500)}
   }
   const schoolId=url.searchParams.get("schoolId");
