@@ -10,7 +10,7 @@ const jsonNotFound = () => Response.json(
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
-    const route = url.pathname.replace(/\\/+$/, "") || "/";
+    const route = url.pathname;
 
     // Route API requests to the existing Pages Function handlers.
     // Keeping these handlers as separate modules preserves one source of truth.
