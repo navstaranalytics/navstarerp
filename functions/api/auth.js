@@ -1,6 +1,6 @@
 const COOKIE = "__Host-navstar_session";
 const SESSION_HOURS = 8;
-const PBKDF2_ITERATIONS = 310000;
+const PBKDF2_ITERATIONS = 100000;
 
 const json = (data, status = 200, extra = {}) => Response.json(data, {
   status,
@@ -41,7 +41,7 @@ async function hashPassword(password) {
 async function verifyPassword(password, stored) {
   try {
     const [scheme, rounds, saltHex, hashHex] = String(stored || "").split("$");
-    if (scheme !== "pbkdf2" || Number(rounds) < 100000 || !saltHex || !hashHex) return false;
+    if (scheme !== "pbkdf2" || !Number.isInteger(Number(rounds)) || Number(rounds) < 1 || Number(rounds) > 100000 || !saltHex || !hashHex) return false;
     const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(password), "PBKDF2", false, ["deriveBits"]);
     const bits = new Uint8Array(await crypto.subtle.deriveBits({
       name: "PBKDF2", hash: "SHA-256", salt: fromHex(saltHex), iterations: Number(rounds)
