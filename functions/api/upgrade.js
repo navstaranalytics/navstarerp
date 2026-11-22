@@ -4,6 +4,7 @@ export async function onRequestPost({request,env}){
  if(!env.DB)return Response.json({ok:false,error:"Database connection is unavailable."},{status:503});
  const user=await getSuperAdminSession(request,env);
  if(!user)return Response.json({ok:false,error:"Sign in as Super Admin before upgrading the database."},{status:401});
+ try{const applied=await env.DB.prepare("SELECT 1 FROM schema_migrations WHERE version=?").bind("0002_operational_modules").first();if(applied)return Response.json({ok:true,alreadyApplied:true,executed:0,message:"Operational ERP database modules are already installed."},{headers:{"Cache-Control":"no-store"}});}catch(error){console.error("NAVSTAR migration status check failed",error);}
  for(let i=0;i<statements.length;i++){
   try{await env.DB.prepare(statements[i]).run();}
   catch(error){console.error("NAVSTAR module migration failed",i+1,error);return Response.json({ok:false,failedStatement:i+1,error:String(error?.message||"Database migration failed").slice(0,240)},{status:500});}
