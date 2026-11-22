@@ -231,6 +231,53 @@ pages.tenant=()=>{const html=oldTenantPageBilling(),s=schools.find(x=>x.id===act
 document.body.addEventListener('click',e=>{const b=e.target.closest('[data-action="school-billing"]');if(b)configureSchoolBilling(b.dataset.id)});
 
 
+/* Central D1 school directory: browser storage is no longer the source of truth. */
+async function schoolApi(path="/api/schools",options={}){
+  const response=await fetch(path,{credentials:"same-origin",...options,headers:{"Content-Type":"application/json",...(options.headers||{})}});
+  let data={};try{data=await response.json()}catch{}
+  if(!response.ok||!data.ok)throw new Error(data.error||"The database request failed.");
+  return data;
+}
+async function loadSchoolsFromDatabase(){
+  const data=await schoolApi();
+  schools=Array.isArray(data.schools)?data.schools:[];
+  const status=$("saveState");if(status)status.textContent="Connected · School records saved in D1";
+}
+addSchool=function(){
+  openModal("Register a school tenant",'<div class="form-grid">'+field("Official school name *","name","Full registered name")+field("Institution / EMIS code","code","School code")+field("Registration number","registrationNumber","Ministry / registration reference")+selectField("County *","county",counties)+selectField("Institution category","category",["Public","Private","Community","Faith-based","International","Other"])+selectField("Ownership / sponsor","ownership",["Government","Private individual","Company / organisation","Faith-based sponsor","Community / trust","NGO / charitable organisation","Other"],"Government")+selectField("School level","level",["Pre-primary","Primary","Junior School","Senior School","Mixed","Special Needs"])+selectField("Curriculum framework","curriculum",["Kenyan CBC","Kenyan 8-4-4","International / Cambridge","Custom"])+field("Contact person","contact","Headteacher / principal")+field("Official email","email","admin@school.ac.ke","email")+field("Phone number","phone","+254…","tel")+field("Postal / physical address","address","Town, address")+selectField("Subscription plan","plan",plans.map(p=>p.name))+selectField("Initial status","status",["Pending","Active"])+'</div><div class="notice">This record will be saved to the central NAVSTAR database and shared across authorised Super Admin sessions.</div>',async d=>{
+    const name=d.get("name")?.trim(),county=d.get("county");
+    if(!name||!county){toast("School name and county are required.");return}
+    const submit=$("saveModal");if(submit){submit.disabled=true;submit.textContent="Saving…"}
+    try{
+      const result=await schoolApi("/api/schools",{method:"POST",body:JSON.stringify({name,code:d.get("code"),registrationNumber:d.get("registrationNumber"),county,category:d.get("category"),ownership:d.get("ownership"),level:d.get("level"),curriculum:d.get("curriculum"),contact:d.get("contact"),email:d.get("email"),phone:d.get("phone"),address:d.get("address"),plan:d.get("plan"),status:d.get("status"),levels:[],modules:["Core"]})});
+      schools.unshift(result.school);closeModal();render();toast("School saved successfully to the central database.");
+    }catch(error){toast(error.message||"School could not be saved.");if(submit){submit.disabled=false;submit.textContent="Save record"}}
+  });
+};
+const localSchoolDetails=schoolDetails;
+schoolDetails=function(id){
+  localSchoolDetails(id);
+  const school=schools.find(x=>x.id===id),form=$("modalForm");if(!school||!form)return;
+  form.onsubmit=async e=>{
+    e.preventDefault();const d=new FormData(form),submit=$("saveModal");
+    const payload={name:d.get("name"),code:d.get("code"),contact:d.get("contact"),email:d.get("email"),phone:d.get("phone"),address:d.get("address"),registrationNumber:d.get("registrationNumber"),county:d.get("county"),category:d.get("category"),ownership:d.get("ownership"),curriculum:d.get("curriculum"),plan:d.get("plan"),status:d.get("status"),expiry:d.get("expiry"),learnerCount:Number(d.get("learnerCount"))||0,teacherCount:Number(d.get("teacherCount"))||0,levels:d.getAll("levels"),modules:d.getAll("modules")};
+    if(!String(payload.name||"").trim()){toast("Official school name is required.");return}
+    if(submit){submit.disabled=true;submit.textContent="Saving…"}
+    try{const result=await schoolApi("/api/schools/"+encodeURIComponent(id),{method:"PATCH",body:JSON.stringify(payload)});const index=schools.findIndex(x=>x.id===id);if(index>=0)schools[index]=result.school;closeModal();render();toast("School profile saved to the central database.");}
+    catch(error){toast(error.message||"School changes could not be saved.");if(submit){submit.disabled=false;submit.textContent="Save record"}}
+  };
+};
+/* Intercept school status changes before the old browser-only prototype handler. */
+$("view").addEventListener("click",async e=>{
+  const button=e.target.closest('[data-action="school-status"]');if(!button)return;
+  e.preventDefault();e.stopImmediatePropagation();
+  const school=schools.find(x=>x.id===button.dataset.id);if(!school)return;
+  const next=school.status==="Active"?"Suspended":"Active";
+  button.disabled=true;
+  try{const result=await schoolApi("/api/schools/"+encodeURIComponent(school.id),{method:"PATCH",body:JSON.stringify({status:next})});Object.assign(school,result.school);render();toast("School status saved to the central database.");}
+  catch(error){button.disabled=false;toast(error.message||"School status could not be updated.");}
+},true);
+
 /* Super Admin account menu and secure account management. */
 let signedInUser=null;
 async function loadSignedInUser(){
@@ -277,5 +324,5 @@ $('logoutButton').addEventListener('click',async()=>{
 });
 loadSignedInUser();
 
-render();
+loadSchoolsFromDatabase().then(()=>render()).catch(error=>{schools=[];const status=$('saveState');if(status)status.textContent='Database connection unavailable';render();toast(error.message||'Could not load schools from the database.');});
 </script></body></html>
