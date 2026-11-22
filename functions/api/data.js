@@ -20,6 +20,31 @@ const resources={
   guardians:{table:"guardians",scope:true,fields:["user_id","full_name","phone","email","relationship"],required:["school_id","full_name"],refs:{user_id:"users"}},
   "teacher-allocations":{table:"teacher_allocations",scope:true,fields:["staff_id","academic_year_id","term_id","grade_level_id","stream_id","learning_area_id","pathway"],required:["school_id","staff_id","academic_year_id","grade_level_id","learning_area_id"],refs:{staff_id:"staff_profiles",academic_year_id:"academic_years",term_id:"terms",grade_level_id:"grade_levels",stream_id:"streams",learning_area_id:"learning_areas"}},
   transfers:{table:"learner_transfers",scope:true,fields:["learner_id","from_enrollment_id","to_enrollment_id","reason"],required:["school_id","learner_id"],refs:{learner_id:"learners",from_enrollment_id:"learner_enrollments",to_enrollment_id:"learner_enrollments"}},
+  assessments:{table:"assessments",scope:true,fields:["academic_year_id","term_id","grade_level_id","stream_id","learning_area_id","title","assessment_type","max_score","weight","pathway","due_date","status"],required:["school_id","academic_year_id","grade_level_id","learning_area_id","title"],refs:{academic_year_id:"academic_years",term_id:"terms",grade_level_id:"grade_levels",stream_id:"streams",learning_area_id:"learning_areas"}},
+  "assessment-results":{table:"assessment_results",scope:true,fields:["assessment_id","learner_id","score","grade","feedback","status"],required:["school_id","assessment_id","learner_id"],refs:{assessment_id:"assessments",learner_id:"learners"}},
+  "grading-schemes":{table:"grading_schemes",scope:true,fields:["curriculum","stage_code","name","description","is_active"],required:["school_id","name"]},
+  "grade-boundaries":{table:"grade_boundaries",scope:false,fields:["scheme_id","label","min_score","max_score","points","descriptor"],required:["scheme_id","label","min_score","max_score"]},
+  "attendance-sessions":{table:"attendance_sessions",scope:true,fields:["academic_year_id","term_id","grade_level_id","stream_id","attendance_date","session_name","status"],required:["school_id","academic_year_id","grade_level_id","attendance_date"],refs:{academic_year_id:"academic_years",term_id:"terms",grade_level_id:"grade_levels",stream_id:"streams"}},
+  "attendance-records":{table:"attendance_records",scope:true,fields:["session_id","learner_id","attendance_status","notes"],required:["school_id","session_id","learner_id","attendance_status"],refs:{session_id:"attendance_sessions",learner_id:"learners"}},
+  timetable:{table:"timetable_entries",scope:true,fields:["academic_year_id","term_id","grade_level_id","stream_id","learning_area_id","staff_id","weekday","start_time","end_time","room"],required:["school_id","academic_year_id","grade_level_id","learning_area_id","weekday","start_time","end_time"],refs:{academic_year_id:"academic_years",term_id:"terms",grade_level_id:"grade_levels",stream_id:"streams",learning_area_id:"learning_areas",staff_id:"staff_profiles"}},
+  "fee-structures":{table:"fee_structures",scope:true,fields:["name","grade_level_id","amount","currency","frequency","due_date","is_active"],required:["school_id","name","amount"],refs:{grade_level_id:"grade_levels"}},
+  "learner-fee-accounts":{table:"learner_fee_accounts",scope:true,fields:["learner_id","fee_structure_id","academic_year_id","amount_due","amount_paid","balance","status"],required:["school_id","learner_id","fee_structure_id"],refs:{learner_id:"learners",academic_year_id:"academic_years"}},
+  "finance-transactions":{table:"finance_transactions",scope:true,fields:["transaction_type","category","description","amount","transaction_date","payment_method","reference"],required:["school_id","transaction_type","category","amount","transaction_date"]},
+  inventory:{table:"inventory_items",scope:true,fields:["sku","name","category","unit","quantity","reorder_level","unit_cost","status"],required:["school_id","name"]},
+  "inventory-movements":{table:"inventory_movements",scope:true,fields:["item_id","movement_type","quantity","reason","reference"],required:["school_id","item_id","movement_type","quantity"],refs:{item_id:"inventory_items"}},
+  "library-books":{table:"library_books",scope:true,fields:["isbn","accession_number","title","author","publisher","category","copies_total","copies_available","status"],required:["school_id","title"]},
+  "library-loans":{table:"library_loans",scope:true,fields:["book_id","learner_id","staff_id","issued_at","due_at","returned_at","status","fine_amount"],required:["school_id","book_id","issued_at","due_at"],refs:{book_id:"library_books",learner_id:"learners",staff_id:"staff_profiles"}},
+  "transport-routes":{table:"transport_routes",scope:true,fields:["route_name","vehicle_registration","driver_name","driver_phone","capacity","pickup_points_json","status"],required:["school_id","route_name"]},
+  "transport-assignments":{table:"transport_assignments",scope:true,fields:["route_id","learner_id","pickup_point","effective_from","effective_to"],required:["school_id","route_id","learner_id"],refs:{route_id:"transport_routes",learner_id:"learners"}},
+  "boarding-houses":{table:"boarding_houses",scope:true,fields:["name","house_type","capacity","supervisor_staff_id","status"],required:["school_id","name"],refs:{supervisor_staff_id:"staff_profiles"}},
+  "boarding-allocations":{table:"boarding_allocations",scope:true,fields:["house_id","learner_id","room_number","bed_number","start_date","end_date","status"],required:["school_id","house_id","learner_id"],refs:{house_id:"boarding_houses",learner_id:"learners"}},
+  payroll:{table:"payroll_records",scope:true,fields:["staff_id","pay_period","basic_pay","allowances","deductions","net_pay","status","paid_at"],required:["school_id","staff_id","pay_period"],refs:{staff_id:"staff_profiles"}},
+  regions:{table:"platform_regions",scope:false,fields:["region_name","counties_json","is_active"],required:["region_name"]},
+  "ai-usage":{table:"ai_usage_ledger",scope:false,fields:["school_id","user_id","service","credits_used","usage_details_json"],required:["service"]},
+  integrations:{table:"integration_connections",scope:false,fields:["school_id","provider","display_name","status","config_json","last_sync_at"],required:["provider","display_name"]},
+  "report-cards":{table:"report_cards",scope:true,fields:["learner_id","academic_year_id","term_id","report_data_json","status","published_at"],required:["school_id","learner_id","academic_year_id"],refs:{learner_id:"learners",academic_year_id:"academic_years",term_id:"terms"}},
+  discipline:{table:"learner_discipline_records",scope:true,fields:["learner_id","incident_date","category","description","action_taken"],required:["school_id","learner_id","incident_date","description"],refs:{learner_id:"learners"}},
+  "platform-users":{table:"users",scope:false,readOnly:true,fields:[]},
   announcements:{table:"announcements",scope:false,fields:["school_id","title","body","audience","channel","status","scheduled_at","published_at"],required:["title","body"]},
   settings:{table:"platform_settings",scope:false,fields:["setting_key","setting_value"],required:["setting_key","setting_value"]},
   audit:{table:"audit_logs",scope:false,readOnly:true,fields:[]}
@@ -32,7 +57,7 @@ async function auth(request,env){
 }
 async function existsInSchool(db,table,ref,schoolId){
   if(!ref)return true;
-  const allowed=new Set(["subscription_plans","school_subscriptions","academic_years","grade_levels","streams","staff_profiles","users","terms","learning_areas","learners","learner_enrollments"]);
+  const allowed=new Set(["subscription_plans","school_subscriptions","academic_years","grade_levels","streams","staff_profiles","users","terms","learning_areas","learners","learner_enrollments","assessments","attendance_sessions","attendance_records","fee_structures","inventory_items","library_books","transport_routes","boarding_houses"]);
   if(!allowed.has(table))return false;
   if(table==="subscription_plans"||table==="users")return !!(await db.prepare("SELECT 1 FROM "+table+" WHERE id=?").bind(ref).first());
   return !!(await db.prepare("SELECT 1 FROM "+table+" WHERE id=? AND school_id=?").bind(ref,schoolId).first());
@@ -59,6 +84,23 @@ export async function onRequestGet({request,env}){
   const a=await auth(request,env);if(a.error)return a.error;
   const url=new URL(request.url),name=url.pathname.split("/").pop(),cfg=resources[name];
   if(!cfg)return json({ok:false,error:"Unknown data resource."},404);
+  if(name==="platform-users"){
+    try{const rows=await env.DB.prepare("SELECT id,full_name,username,email,phone,status,created_at,last_login_at FROM users ORDER BY created_at DESC LIMIT 1000").all();return json({ok:true,records:rows.results||[]});}
+    catch(error){console.error("NAVSTAR platform users read",error);return json({ok:false,error:"Could not load platform users."},500)}
+  }
+  if(name==="analytics"){
+    try{
+      const q=await Promise.all([
+        env.DB.prepare("SELECT COUNT(*) total FROM schools").first(),
+        env.DB.prepare("SELECT COUNT(*) total FROM schools WHERE status='active'").first(),
+        env.DB.prepare("SELECT COUNT(*) total FROM learners").first(),
+        env.DB.prepare("SELECT COUNT(*) total FROM users").first(),
+        env.DB.prepare("SELECT COUNT(*) total FROM invoices").first(),
+        env.DB.prepare("SELECT COALESCE(SUM(amount),0) total FROM payments WHERE status='confirmed'").first()
+      ]);
+      return json({ok:true,analytics:{schools:Number(q[0]?.total||0),activeSchools:Number(q[1]?.total||0),learners:Number(q[2]?.total||0),users:Number(q[3]?.total||0),invoices:Number(q[4]?.total||0),confirmedPayments:Number(q[5]?.total||0)}});
+    }catch(error){console.error("NAVSTAR analytics read",error);return json({ok:false,error:"Could not load platform analytics."},500)}
+  }
   const schoolId=url.searchParams.get("schoolId");
   if(cfg.scope&&!schoolId)return json({ok:false,error:"schoolId is required for school records."},400);
   if(cfg.scope&&!await env.DB.prepare("SELECT 1 FROM schools WHERE id=?").bind(schoolId).first())return json({ok:false,error:"School not found."},404);
