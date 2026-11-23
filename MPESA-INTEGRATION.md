@@ -13,7 +13,7 @@ In Cloudflare Dashboard → Workers & Pages → navstarerp → Settings → Vari
 | MPESA_SHORTCODE | Variable/Secret | PayBill or Till shortcode |
 | MPESA_PASSKEY | Secret | Daraja Lipa Na M-Pesa passkey |
 | MPESA_CALLBACK_TOKEN | Secret | Generate a long random token (at least 32 random bytes) |
-| MPESA_ENV | Variable | `sandbox` for testing or `production` for live payments |
+| MPESA_ENV | Not used | Navstar uses Safaricom production endpoints. |
 | MPESA_TRANSACTION_TYPE | Variable | `CustomerPayBillOnline` for PayBill; use the Daraja-supported Till type for a Buy Goods shortcode |
 
 Never commit the consumer secret, passkey or callback token to GitHub or put them in browser code.
@@ -29,7 +29,7 @@ The application constructs this URL from the current Navstar origin and the Work
 ## Test sequence
 
 1. Apply `migrations/0005_samples_automation_payments.sql` to the production D1 database.
-2. Add the Safaricom Daraja production consumer key, consumer secret, shortcode and Lipa Na M-Pesa passkey as protected Cloudflare Worker secrets. Set `MPESA_ENV=production`.
+2. Add the Safaricom Daraja production consumer key, consumer secret, shortcode and Lipa Na M-Pesa passkey as protected Cloudflare Worker secrets. Navstar sends requests to Safaricom production endpoints automatically.
 3. Create a Navstar subscription invoice for a test school.
 4. Sign in to that school and open the Navstar subscription payment panel.
 5. Submit a valid Safaricom number and complete the production STK prompt on a controlled low-value invoice.
