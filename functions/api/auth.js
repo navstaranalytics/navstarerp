@@ -350,3 +350,69 @@ export async function onRequestPostPasswordResetConfirm({ request, env }) {
     return json({ok:true,message:"Your password has been reset. Please log in using your new password."});
   }catch(error){console.error("Password reset confirmation failed:",String(error?.message||error));return json({ok:false,error:"Password reset could not be completed. Please try again."},503);}
 }
+
+
+const USERNAME_OTP_TTL_MINUTES = 10;
+async function ensureUsernameRecoveryTable(db) {
+  await db.prepare(`CREATE TABLE IF NOT EXISTS auth_username_resets (
+    id TEXT PRIMARY KEY, user_id TEXT NOT NULL, code_hash TEXT NOT NULL,
+    expires_at TEXT NOT NULL, attempts INTEGER NOT NULL DEFAULT 0,
+    used_at TEXT, created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+  )`).run();
+}
+export async function onRequestPostUsernameRecoveryRequest({ request, env }) {
+  if (!env.DB) return json({ok:false,error:"Database connection is unavailable."},503);
+  if (!env.RESEND_API_KEY) return json({ok:false,error:"Email delivery is not configured yet. Please contact the platform administrator."},503);
+  let body; try { body=await request.json(); } catch { return json({ok:false,error:"Enter the email address registered to your account."},400); }
+  const email=normalize(body.email);
+  if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email) || email.length>190) return json({ok:false,error:"Enter a valid registered email address."},400);
+  try {
+    await ensureUsernameRecoveryTable(env.DB);
+    const user=await env.DB.prepare(`SELECT u.id,u.email,u.full_name FROM users u
+      JOIN user_role_assignments a ON a.user_id=u.id AND a.school_id IS NULL
+      JOIN roles r ON r.id=a.role_id AND r.role_key='super_admin'
+      WHERE u.email_normalized=? LIMIT 1`).bind(email).first();
+    if (!user) return json({ok:true,message:"If that email belongs to an active account, a verification code will be sent."});
+    const recent=await env.DB.prepare("SELECT COUNT(*) AS total FROM auth_username_resets WHERE user_id=? AND created_at > datetime('now','-1 hour')").bind(user.id).first();
+    if (Number(recent?.total||0)>=3) return json({ok:false,error:"Too many recovery requests. Please wait before requesting another code."},429);
+    const code=String(crypto.getRandomValues(new Uint32Array(1))[0]%1000000).padStart(6,"0");
+    const resetId=id(), expiresAt=new Date(Date.now()+USERNAME_OTP_TTL_MINUTES*60*1000).toISOString();
+    await env.DB.prepare("UPDATE auth_username_resets SET used_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE user_id=? AND used_at IS NULL").bind(user.id).run();
+    await env.DB.prepare("INSERT INTO auth_username_resets(id,user_id,code_hash,expires_at) VALUES(?,?,?,?)").bind(resetId,user.id,await digest(code),expiresAt).run();
+    const rows=await env.DB.prepare("SELECT setting_key,setting_value FROM platform_settings WHERE setting_key IN ('platform_name','platform_tagline','platform_address','platform_city','platform_county','platform_phone','platform_website','platform_support_email')").all();
+    const brand=Object.fromEntries((rows.results||[]).map(x=>[x.setting_key,x.setting_value]));
+    const name=brand.platform_name||"Navstar Analytics", tagline=brand.platform_tagline||"Empowering Schools with Smart Data";
+    const origin=new URL(request.url).origin, logoUrl=origin+"/api/branding/logo";
+    const details=[brand.platform_address,brand.platform_city,brand.platform_county,brand.platform_phone,brand.platform_support_email,brand.platform_website].filter(Boolean).join(" · ");
+    const safe=v=>String(v||"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+    const html="<div style='margin:0;background:#f2f6fc;padding:32px 12px;font-family:Arial,sans-serif;color:#102b5c'><div style='max-width:560px;margin:auto;background:#fff;border:1px solid #dce6f5;border-radius:16px;overflow:hidden'><div style='background:#082b70;padding:24px;text-align:center'><img src='"+logoUrl+"' alt='"+safe(name)+"' style='max-width:190px;max-height:76px;object-fit:contain;background:#fff;border-radius:8px;padding:5px'><div style='color:#fff;font-size:12px;margin-top:10px'>"+safe(tagline)+"</div></div><div style='padding:30px'><p>Hello "+safe(user.full_name)+",</p><h2 style='color:#082b70'>Username recovery verification</h2><p>Use this code to verify your email and choose a new username for your Navstar Analytics account.</p><div style='margin:24px 0;padding:18px;background:#edf4ff;border:1px solid #d6e5ff;border-radius:12px;text-align:center;font-size:32px;font-weight:800;letter-spacing:8px;color:#075be8'>"+code+"</div><p>This code expires in <b>10 minutes</b>. If you did not request this, ignore this email.</p><p style='margin-top:28px'>Regards,<br><b>"+safe(name)+"</b></p></div><div style='background:#f6f8fc;padding:16px 22px;color:#718096;font-size:11px;text-align:center'>"+safe(details)+"</div></div></div>";
+    const from=env.MAIL_FROM||"Navstar Analytics <onboarding@resend.dev>";
+    const response=await fetch("https://api.resend.com/emails",{method:"POST",headers:{"Authorization":"Bearer "+env.RESEND_API_KEY,"Content-Type":"application/json"},body:JSON.stringify({from,to:[user.email],subject:name+" username recovery code",html,text:"Hello "+user.full_name+",\\n\\nYour username recovery verification code is "+code+". It expires in 10 minutes. If you did not request this, ignore this email.\\n\\n"+name})});
+    if(!response.ok){await env.DB.prepare("UPDATE auth_username_resets SET used_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?").bind(resetId).run();console.error("Username recovery email failed:",response.status,await response.text());return json({ok:false,error:"We could not deliver the email. Please try again later."},502);}
+    await audit(env,user.id,"auth.username_recovery.requested","success");
+    return json({ok:true,message:"A 6-digit verification code has been sent to your registered email. It expires in 10 minutes."});
+  } catch(error) { console.error("Username recovery request failed:",String(error?.message||error)); return json({ok:false,error:"Username recovery is temporarily unavailable."},503); }
+}
+export async function onRequestPostUsernameRecoveryConfirm({ request, env }) {
+  if (!env.DB) return json({ok:false,error:"Database connection is unavailable."},503);
+  let body;try{body=await request.json()}catch{return json({ok:false,error:"Enter your email, verification code and new username."},400)}
+  const email=normalize(body.email),code=String(body.code||"").trim(),username=normalize(body.newUsername);
+  if(!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)||!/^[0-9]{6}$/.test(code)||!/^[a-z0-9._-]{3,32}$/.test(username))return json({ok:false,error:"Enter a valid email, 6-digit code and username (3–32 letters, numbers, dots, underscores or hyphens)."},400);
+  try {
+    await ensureUsernameRecoveryTable(env.DB);
+    const user=await env.DB.prepare(`SELECT u.id FROM users u JOIN user_role_assignments a ON a.user_id=u.id AND a.school_id IS NULL JOIN roles r ON r.id=a.role_id AND r.role_key='super_admin' WHERE u.email_normalized=? LIMIT 1`).bind(email).first();
+    if(!user)return json({ok:false,error:"The verification code is invalid or expired. Request a new code."},400);
+    const reset=await env.DB.prepare("SELECT id,code_hash,expires_at,attempts FROM auth_username_resets WHERE user_id=? AND used_at IS NULL ORDER BY created_at DESC LIMIT 1").bind(user.id).first();
+    if(!reset||reset.expires_at<=new Date().toISOString()||Number(reset.attempts)>=5)return json({ok:false,error:"The verification code is invalid or expired. Request a new code."},400);
+    if(await digest(code)!==reset.code_hash){await env.DB.prepare("UPDATE auth_username_resets SET attempts=attempts+1 WHERE id=?").bind(reset.id).run();return json({ok:false,error:"That verification code is incorrect. Please check the email and try again."},400);}
+    const duplicate=await env.DB.prepare("SELECT id FROM users WHERE username_normalized=? AND id<>? LIMIT 1").bind(username,user.id).first();
+    if(duplicate)return json({ok:false,error:"That username is already in use. Please choose another one."},409);
+    await env.DB.batch([
+      env.DB.prepare("UPDATE users SET username=?,username_normalized=?,updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?").bind(username,username,user.id),
+      env.DB.prepare("UPDATE auth_username_resets SET used_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?").bind(reset.id),
+      env.DB.prepare("UPDATE auth_sessions SET revoked_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE user_id=? AND revoked_at IS NULL").bind(user.id)
+    ]);
+    await audit(env,user.id,"auth.username_recovery.completed","success",{username});
+    return json({ok:true,username,message:"Your username has been updated. Use your new username and existing password to sign in."});
+  } catch(error) { console.error("Username recovery confirmation failed:",String(error?.message||error)); return json({ok:false,error:"Your username could not be updated. Please try again."},503); }
+}
