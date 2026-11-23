@@ -71,7 +71,7 @@ const permissionFor=(name,write=false)=>{
   if(["library-books","library-loans"].includes(name))return "library.manage";
   if(["transport-routes","transport-assignments","boarding-houses","boarding-allocations"].includes(name))return "school.settings.manage";
   if(name==="payroll")return write?"hr.manage":"hr.view";
-  if(name==="report-cards")return "reports.view";
+  if(name==="report-cards")return write?"academics.manage":"reports.view";
   if(name==="discipline")return "discipline.manage";
   if(name==="announcements")return "school.settings.manage";
   return null;
@@ -124,6 +124,8 @@ function teacherFilter(name,user){
   if(name==="attendance-sessions")return " AND "+staff+"ta.grade_level_id=attendance_sessions.grade_level_id AND (ta.stream_id IS NULL OR ta.stream_id=attendance_sessions.stream_id) AND ta.academic_year_id=attendance_sessions.academic_year_id )";
   if(name==="attendance-records")return " AND EXISTS (SELECT 1 FROM attendance_sessions ats WHERE ats.id=attendance_records.session_id AND "+staff+"ta.grade_level_id=ats.grade_level_id AND (ta.stream_id IS NULL OR ta.stream_id=ats.stream_id) AND ta.academic_year_id=ats.academic_year_id))";
   if(name==="timetable")return " AND "+staff+"ta.grade_level_id=timetable_entries.grade_level_id AND (ta.stream_id IS NULL OR ta.stream_id=timetable_entries.stream_id) AND ta.learning_area_id=timetable_entries.learning_area_id AND ta.academic_year_id=timetable_entries.academic_year_id )";
+  if(name==="report-cards")return " AND EXISTS (SELECT 1 FROM learner_enrollments le JOIN teacher_allocations ta ON ta.school_id=le.school_id AND ta.academic_year_id=le.academic_year_id AND ta.grade_level_id=le.grade_level_id AND (ta.stream_id IS NULL OR ta.stream_id=le.stream_id) JOIN staff_profiles sp ON sp.id=ta.staff_id WHERE sp.user_id='"+user.id+"' AND le.school_id=report_cards.school_id AND le.learner_id=report_cards.learner_id AND le.academic_year_id=report_cards.academic_year_id)";
+
   return "";
 }
 async function existsInSchool(db,table,ref,schoolId){
