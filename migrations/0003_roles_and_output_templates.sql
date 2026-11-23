@@ -90,6 +90,8 @@ SELECT r.id,p.id FROM roles r JOIN permissions p ON p.permission_key IN (
 'library.manage','learners.view','reports.view','profile.self'
 ) WHERE r.school_id IS NULL AND r.role_key='librarian';
 
+DELETE FROM role_permissions WHERE role_id IN (SELECT id FROM roles WHERE school_id IS NULL AND role_key IN ('parent_guardian','student_learner')) AND permission_id=(SELECT id FROM permissions WHERE permission_key='reports.view');
+
 -- Parent and learner accounts only receive their linked-personal information.
 INSERT OR IGNORE INTO role_permissions(role_id,permission_id)
 SELECT r.id,p.id FROM roles r JOIN permissions p ON p.permission_key IN ('profile.self')
