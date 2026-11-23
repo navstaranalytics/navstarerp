@@ -199,10 +199,9 @@ export async function onRequestPost({request,env}){
   const schoolId=cfg.scope?(a.user.is_super_admin?values.school_id:a.user.school_id):(values.school_id||null);
   if(cfg.scope&&!schoolId)return json({ok:false,error:"School workspace is required."},400);
   if(cfg.scope&&!a.user.is_super_admin&&values.school_id&&values.school_id!==a.user.school_id)return json({ok:false,error:"You cannot create records for another school."},403);
-  if(cfg.scope&&!await env.DB.prepare("SELECT 1 FROM schools WHERE id=? AND status='active'").bind(schoolId).first())return json({ok:false,error:"School not found or inactive."},404);
+  if(cfg.scope&&!await env.DB.prepare("SELECT 1 FROM schools WHERE id=?"+(a.user.is_super_admin?"":" AND status='active'")).bind(schoolId).first())return json({ok:false,error:"School not found or inactive."},404);
   if(cfg.scope)values.school_id=schoolId;
   const refError=await validateRefs(env.DB,cfg,values,schoolId);if(refError)return json({ok:false,error:refError},400);
-    const teacherValues={...current,...values};const teacherError=await validateTeacherWrite(env.DB,a.user,name,teacherValues);if(teacherError)return json({ok:false,error:teacherError},403);
   const teacherError=await validateTeacherWrite(env.DB,a.user,name,values);if(teacherError)return json({ok:false,error:teacherError},403);
   const recordId=id();
   try{
@@ -229,6 +228,7 @@ export async function onRequestPatch({request,env}){
   const a=await auth(request,env);if(a.error)return a.error;
   const parts=new URL(request.url).pathname.split("/"),name=parts[parts.length-2],recordId=decodeURIComponent(parts[parts.length-1]||""),cfg=resources[name];
   if(!cfg||!recordId)return json({ok:false,error:"Unknown resource or record."},404);
+  if(!allowed(a.user,permissionFor(name,true)))return json({ok:false,error:"Your role does not have permission to change this resource."},403);
   if(cfg.readOnly)return json({ok:false,error:"This resource is read-only."},405);
   let body;try{body=await request.json()}catch{return json({ok:false,error:"Invalid record update."},400)}
   const values=bodyFields(body,cfg);delete values.school_id;
@@ -242,6 +242,7 @@ export async function onRequestPatch({request,env}){
     const current=await env.DB.prepare("SELECT * FROM "+cfg.table+" WHERE "+where).bind(...(cfg.scope?[recordId,schoolId]:[recordId])).first();
     if(!current)return json({ok:false,error:"Record not found in the selected school."},404);
     const refError=await validateRefs(env.DB,cfg,values,schoolId);if(refError)return json({ok:false,error:refError},400);
+    const teacherError=await validateTeacherWrite(env.DB,a.user,name,{...current,...values});if(teacherError)return json({ok:false,error:teacherError},403);
     const keys=Object.keys(values),sql="UPDATE "+cfg.table+" SET "+keys.map(k=>k+"=?").join(",")+(cfg.table==="schools"?",updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now')":"")+" WHERE "+where;
     await env.DB.prepare(sql).bind(...keys.map(k=>values[k]),...(cfg.scope?[recordId,schoolId]:[recordId])).run();
     const record=await env.DB.prepare("SELECT * FROM "+cfg.table+" WHERE "+where).bind(...(cfg.scope?[recordId,schoolId]:[recordId])).first();
