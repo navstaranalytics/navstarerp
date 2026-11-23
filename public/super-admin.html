@@ -309,6 +309,23 @@ async function loadSystemHealth(){
 }
 const renderBeforeHealth=render;
 render=function(){renderBeforeHealth();if(page==="system")loadSystemHealth()};
+
+integrationsPage=function(){
+  const item=(name,detail,status)=>'<div class="list-row"><div><b>'+name+'</b><small>'+detail+'</small></div>'+pill(status)+'</div>';
+  return head("CONNECTED SERVICES","Integrations","Review connected infrastructure and services that still require production verification.")+
+    panel("Platform infrastructure","Current Navstar deployment configuration",'<div class="list">'+
+      item("Cloudflare Workers","Application and API runtime · current workspace is served from the Worker","Active")+
+      item("Cloudflare D1","Central school, identity, settings, academic and billing database","Configured · live check in System Health")+
+      item("Cloudflare R2","Optional document and image storage · D1 fallback remains enabled","Not enabled yet")+
+      item("Resend email","Central Navstar sender identity and account notifications","Configured · delivery test pending")+
+      item("M-Pesa Daraja","Payment collection and automated transaction confirmation","Not connected")+
+      item("Card / online payments","Payment gateway and settlement reconciliation","Not connected")+
+      item("Google Workspace / Microsoft 365","Optional school productivity integration","Not connected")+
+      item("AI provider","Approved AI document and analytics workflows","Not connected")+
+    '</div>')+
+    '<div class="notice">Never paste API keys or passwords into this page. Production secrets must remain in protected Cloudflare Worker settings. Use System Health to check D1 and storage connectivity.</div>';
+};
+pages.integrations=integrationsPage;
 document.querySelectorAll('[data-page]').forEach(b=>b.onclick=()=>go(b.dataset.page));$('view').addEventListener('click',e=>{let b=e.target.closest('[data-action],[data-page-go]');if(!b)return;if(b.dataset.pageGo){go(b.dataset.pageGo);return}let a=b.dataset.action,id=b.dataset.id;if(a==='add-school')addSchool();if(a==='school-details')schoolDetails(id);if(a==='add-user')addUser();if(a==='compose')compose();if(a==='add-plan')addPlan();if(a==='edit-plan')editPlan(b.dataset.plan);if(a==='school-status'){let s=schools.find(x=>x.id===id);if(s){s.status=s.status==='Active'?'Suspended':'Active';save(KEY,schools);log('School status changed',s.name+' → '+s.status);render();toast('School status updated locally.')}}if(a==='user-status'){let u=users.find(x=>x.id===id);if(u){u.status=u.status==='Active'?'Disabled':'Active';save(USERKEY,users);log('Platform user status changed',u.email+' → '+u.status);render()}}if(a==='export-schools'){let cols=['name','code','county','category','level','curriculum','plan','status','email','phone','created'];let csv=[cols.join(','),...schools.map(s=>cols.map(k=>'"'+String(s[k]??'').replace(/"/g,'""')+'"').join(','))].join('\r\n');let url=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));let x=document.createElement('a');x.href=url;x.download='navstar-school-directory.csv';x.click();URL.revokeObjectURL(url)}});
 $('closeModal').onclick=closeModal;$('cancelModal').onclick=closeModal;$('modal').onclick=e=>{if(e.target===$('modal'))closeModal()};$('helpBtn').onclick=()=>toast('Use the left navigation to manage each platform area.');$('globalSearch').onkeydown=e=>{if(e.key==='Enter'){go('schools');setTimeout(()=>{let x=$('schoolSearch');if(x){x.value=e.target.value;x.dispatchEvent(new Event('input'))}},0)}};
 
