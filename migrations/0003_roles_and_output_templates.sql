@@ -5,6 +5,8 @@ INSERT OR IGNORE INTO roles(id,school_id,role_key,role_name,description,is_syste
 ('role_school_admin',NULL,'school_admin','School Administrator','Full administration of one school workspace',1),
 ('role_senior_teacher',NULL,'senior_teacher','Senior Teacher','Teacher supervision and academic monitoring',1);
 
+CREATE UNIQUE INDEX IF NOT EXISTS one_school_admin_per_school ON user_role_assignments(school_id) WHERE role_id='role_school_admin' AND school_id IS NOT NULL;
+
 INSERT OR IGNORE INTO permissions(id,permission_key,description) VALUES
 ('perm_school_users_manage','school.users.manage','Manage accounts within the assigned school'),
 ('perm_school_settings_manage','school.settings.manage','Manage school settings and communication'),
