@@ -90,8 +90,9 @@ async function schoolScope(request,user,cfg){
   if(!user.is_super_admin&&requested&&requested!==user.school_id)return {error:json({ok:false,error:"You cannot access another school's workspace."},403)};
   return {schoolId};
 }
+function teacherLimited(user){const roles=user.role_keys||[user.role_key];return !user.is_super_admin&&roles.some(r=>["teacher","class_teacher"].includes(r))&&!user.permissions.includes("academics.manage")&&!user.permissions.includes("allocations.manage")}
 async function validateTeacherWrite(db,user,name,values){
- if(user.is_super_admin||!["teacher","class_teacher"].includes(user.role_key))return null;
+ if(!teacherLimited(user))return null;
  const staff=await db.prepare("SELECT id FROM staff_profiles WHERE user_id=? AND school_id=? AND employment_status='active'").bind(user.id,user.school_id).first();
  if(!staff)return "Your staff profile is not active.";
  let year=values.academic_year_id,term=values.term_id,grade=values.grade_level_id,stream=values.stream_id,area=values.learning_area_id,pathway=values.pathway;
@@ -118,7 +119,7 @@ async function validateTeacherWrite(db,user,name,values){
  return allocation?null:"This action is outside your assigned academic year, term, grade, stream, learning area or pathway.";
 }
 function teacherFilter(name,user){
- if(user.is_super_admin||!["teacher","class_teacher"].includes(user.role_key))return "";
+ if(!teacherLimited(user))return "";
  const staff="EXISTS (SELECT 1 FROM staff_profiles sp JOIN teacher_allocations ta ON ta.staff_id=sp.id WHERE sp.user_id='"+user.id+"' AND ta.school_id='"+user.school_id+"' AND ";
  if(name==="learners")return " AND EXISTS (SELECT 1 FROM learner_enrollments le JOIN teacher_allocations ta ON ta.school_id=le.school_id AND ta.academic_year_id=le.academic_year_id AND ta.grade_level_id=le.grade_level_id AND (ta.stream_id IS NULL OR ta.stream_id=le.stream_id) JOIN staff_profiles sp ON sp.id=ta.staff_id WHERE sp.user_id='"+user.id+"' AND le.school_id=learners.school_id AND le.learner_id=learners.id AND le.status='active' AND (ta.pathway IS NULL OR ta.pathway=learners.pathway))";
  if(name==="enrollments")return " AND "+staff+"ta.academic_year_id=learner_enrollments.academic_year_id AND ta.grade_level_id=learner_enrollments.grade_level_id AND (ta.stream_id IS NULL OR ta.stream_id=learner_enrollments.stream_id) AND (ta.term_id IS NULL OR ta.term_id IS (SELECT t.id FROM terms t WHERE t.academic_year_id=learner_enrollments.academic_year_id AND t.status='active' LIMIT 1)) )";
