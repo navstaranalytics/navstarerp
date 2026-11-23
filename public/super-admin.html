@@ -941,6 +941,7 @@ loadSignedInUser();
       loadAuditFromDatabase(),loadOverviewFromDatabase()
     ]);
     render();
+    applyNavstarTerminology();
     const status=$('saveState');if(status)status.textContent='Connected · D1 schools, settings, plans, subscriptions, invoices, payments, platform users, announcements, audit and workspace preferences · other workflows still in progress';
   }catch(error){
     console.error("Navstar startup data load failed:",String(error?.message||error));
