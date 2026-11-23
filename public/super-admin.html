@@ -786,7 +786,7 @@ async function scanLegacyBrowser(){
  const result=$('recoveryScanResult');if(result)result.textContent='Found '+records.length+' browser record(s) ('+records.reduce((n,r)=>n+r.characterCount,0).toLocaleString()+' characters). '+excluded.length+' sensitive/authentication-like key(s) excluded. Original browser data was not changed.';
  const archive=$('recoveryArchiveStatus');if(archive)archive.textContent='Ready to create a D1 snapshot.';
  const download=$('view').querySelector('[data-action="recovery-download"]'),save=$('view').querySelector('[data-action="recovery-archive"]'),migrate=$('view').querySelector('[data-action="recovery-migrate"]');
- if(download)download.disabled=!records.length;if(save)save.disabled=!records.length;if(migrate)migrate.disabled=!records.length;
+ if(download)download.disabled=!records.length;if(save)save.disabled=!records.length;if(migrate)migrate.disabled=true;
  await refreshRecoveryArchives();
 }
 function downloadRecoveryFile(name,data){
