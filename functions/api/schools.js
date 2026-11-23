@@ -60,6 +60,44 @@ async function syncSchoolGradeLevels(db,schoolId,curriculum,levels){
  }
  await db.batch(statements);
 }
+function curriculumLearningAreas(curriculum,levels){
+ const cbe=/cbe|cbc|competenc/i.test(String(curriculum||""));
+ const template=cbe?"Kenya CBE 2024-2025":"Kenya 8-4-4";
+ const stages=configuredGradeSpecs(levels).map(x=>x[0]);
+ const rows=[];
+ const add=(stage,items)=>items.forEach((x,i)=>rows.push({stage,code:x[0],name:x[1],type:x[2]||"mandatory",pathway:x[3]||null,mandatory:(x[2]||"mandatory")==="mandatory"?1:0}));
+ const core=(names)=>names.map(n=>[n.toUpperCase().replace(/[^A-Z0-9]+/g,"_").slice(0,18),n,"mandatory"]);
+ const optional=(names)=>names.map(n=>[n.toUpperCase().replace(/[^A-Z0-9]+/g,"_").slice(0,18),n,"optional"]);
+ for(const stage of stages){
+  if(cbe){
+   if(/^PP[12]$/.test(stage))add(stage,core(["Language Activities","Mathematical Activities","Environmental Activities","Psychomotor and Creative Activities","Religious Education Activities"]));
+   else if(/^G[1-3]$/.test(stage))add(stage,core(["Literacy","Kiswahili Language Activities / Kenya Sign Language","English Language Activities","Indigenous Language Activities","Mathematical Activities","Environmental Activities","Hygiene and Nutrition Activities","Religious Education Activities","Movement and Creative Activities"]));
+   else if(/^G[4-6]$/.test(stage))add(stage,[...core(["English","Kiswahili / Kenya Sign Language","Home Science","Agriculture","Science and Technology","Mathematics","Religious Education (CRE / IRE / HRE)","Creative Arts","Physical and Health Education","Social Studies"]),...optional(["Arabic","French","German","Mandarin"])]);
+   else if(/^G[7-9]$/.test(stage))add(stage,[...core(["English","Kiswahili / Kenya Sign Language","Mathematics","Religious Education (CRE / IRE / HRE)","Social Studies (including Life Skills)","Integrated Science (including Health Education)","Pre-Technical Studies (including Business and Computer Studies)","Agriculture","Creative Arts and Sports"]),...optional(["Foreign Languages","Indigenous Languages","Home Science","Computer Science","Visual Arts","Performing Arts","Kenya Sign Language"])]);
+   else if(/^G1[0-2]$/.test(stage)){
+    add(stage,[...core(["English","Kiswahili / Kenya Sign Language","Core / Essential Mathematics","Community Service Learning","Physical Education","ICT Skills","Pastoral / Religious Programme of Instruction"]),
+      ...["STEM","Social Sciences","Arts & Sports Science"].flatMap(path=> ({"STEM":["Biology","Chemistry","Physics","General Science","Agriculture","Computer Studies","Home Science","Aviation","Building Construction","Electricity","Metalwork","Power Mechanics","Woodwork","Media Technology","Marine and Fisheries Technology"],"Social Sciences":["Literature in English","Indigenous Languages","Fasihi ya Kiswahili","Sign Language","Arabic","French","German","Mandarin Chinese","Christian Religious Education","Islamic Religious Education","Hindu Religious Education","Business Studies","History and Citizenship","Geography"],"Arts & Sports Science":["Sports and Recreation","Music and Dance","Theatre and Film","Fine Arts"]}[path]||[]).map(n=>[n.toUpperCase().replace(/[^A-Z0-9]+/g,"_").slice(0,18),n,"optional",path]))]);
+   }
+  }else if(/^FORM[1-4]$/.test(stage)){
+   add(stage,[...core(["English","Kiswahili","Mathematics"]),...optional(["Biology","Chemistry","Physics","Geography","History and Government","Christian Religious Education","Islamic Religious Education","Hindu Religious Education","Business Studies","Agriculture","Computer Studies","Home Science","Art and Design","Music","French","German","Arabic","Kenya Sign Language","Woodwork","Metalwork","Building Construction","Power Mechanics","Electricity","Aviation Technology"])]);
+  }
+ }
+ return {template,rows};
+}
+async function syncSchoolLearningAreas(db,schoolId,curriculum,levels){
+ const {template,rows}=curriculumLearningAreas(curriculum,levels);
+ const wanted=new Set(rows.map(x=>x.stage));
+ await db.prepare("UPDATE learning_areas SET is_active=0 WHERE school_id=? AND curriculum<>?").bind(schoolId,curriculum).run();
+ const existing=await db.prepare("SELECT id,stage_code,code FROM learning_areas WHERE school_id=?").bind(schoolId).all();
+ const byKey=new Map((existing.results||[]).map(x=>[String(x.stage_code||"")+"|"+String(x.code||""),x.id]));
+ const statements=[];
+ for(const x of rows){
+  const found=byKey.get(x.stage+"|"+x.code);
+  if(found)statements.push(db.prepare("UPDATE learning_areas SET name=?,pathway=?,subject_type=?,is_mandatory=?,source_template=?,is_active=CASE WHEN ?=1 THEN 1 ELSE is_active END WHERE id=? AND school_id=?").bind(x.name,x.pathway,x.type,x.mandatory,template,x.mandatory,found,schoolId));
+  else statements.push(db.prepare("INSERT INTO learning_areas(id,school_id,curriculum,code,name,stage_code,pathway,is_active,subject_type,is_mandatory,source_template) VALUES(?,?,?,?,?,?,?, ?,?,?,?)").bind(makeId(),schoolId,curriculum,x.code,x.name,x.stage,x.pathway,x.mandatory,x.type,x.mandatory,template));
+ }
+ if(statements.length)await db.batch(statements);
+}
 function mapSchool(row){
   let meta={};
   try{meta=JSON.parse(row.settings_json||"{}").navstar_school_meta||{}}catch{}
@@ -118,6 +156,7 @@ export async function onRequestPost({request,env}){
       catch(error){console.error("Navstar sample data seed failed",error);sampleData={created:false,error:"Sample data could not be seeded. Confirm migration 0005 is applied before retrying."}}
     }
     await syncSchoolGradeLevels(env.DB,id,curriculum,levels);
+    await syncSchoolLearningAreas(env.DB,id,curriculum,levels);
     let emailDelivery="not_configured";
     if(env.RESEND_API_KEY && body.suppressWelcomeEmail!==true){
       const from=env.MAIL_FROM||"Navstar Analytics <no-reply@mail.navstardigitalhub.co.ke>",loginUrl=new URL("/login.html",new URL(request.url).origin).toString();
@@ -161,6 +200,7 @@ export async function onRequestPatch({request,env}){
         .bind(id,JSON.stringify({...current,navstar_school_meta:meta}))
     ]);
     await syncSchoolGradeLevels(env.DB,id,curriculum,selectedLevels);
+    await syncSchoolLearningAreas(env.DB,id,curriculum,selectedLevels);
     const row=await env.DB.prepare(`SELECT s.*,ss.settings_json,
       (SELECT u.id FROM school_memberships m JOIN users u ON u.id=m.user_id JOIN user_role_assignments a ON a.user_id=u.id AND a.school_id=s.id JOIN roles r ON r.id=a.role_id AND r.role_key='school_admin' WHERE m.school_id=s.id AND m.membership_status IN ('active','invited') ORDER BY m.created_at LIMIT 1) AS admin_user_id,
       (SELECT u.full_name FROM school_memberships m JOIN users u ON u.id=m.user_id JOIN user_role_assignments a ON a.user_id=u.id AND a.school_id=s.id JOIN roles r ON r.id=a.role_id AND r.role_key='school_admin' WHERE m.school_id=s.id AND m.membership_status IN ('active','invited') ORDER BY m.created_at LIMIT 1) AS admin_full_name,
