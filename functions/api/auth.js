@@ -108,7 +108,7 @@ async function ensureUserProfilePhotoColumn(db){
 export async function getAuthenticatedSession(request, env) {
   if (!env?.DB) return null;
   try{await ensureUserProfilePhotoColumn(env.DB)}catch(error){console.error("Profile photo column setup failed:",String(error?.message||error));return null;}
-  const token=cookieValue(request,COOKIE);
+  const token=String(request.headers.get("X-Navstar-Session")||cookieValue(request,COOKIE)).trim();
   if(!token||token.length<40)return null;
   const tokenHash=await digest(token);
   const row=await env.DB.prepare(`
@@ -279,7 +279,7 @@ export async function onRequestPostLogin({ request, env }) {
     await env.DB.prepare("UPDATE users SET last_login_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?").bind(user.id).run();
     await audit(env,user.id,"auth.login","success",{role:user.role_key,schoolId:user.school_id||null});
     const redirect=user.role_key==='super_admin'?'/super-admin.html':'/school-portal.html';
-    return json({ok:true,message:"Signed in successfully.",redirect,user:{fullName:user.full_name,username,role:user.role_name,roleKey:user.role_key,schoolId:user.school_id||null,schoolName:user.school_name||null}},200,{"Set-Cookie":sessionCookie(issued.token,issued.maxAge)});
+    return json({ok:true,message:"Signed in successfully.",redirect,sessionToken:issued.token,user:{fullName:user.full_name,username,role:user.role_name,roleKey:user.role_key,schoolId:user.school_id||null,schoolName:user.school_name||null}},200,{"Set-Cookie":sessionCookie(issued.token,issued.maxAge)});
   }catch(error){console.error("Navstar login failure:",String(error?.message||error));return json({ok:false,error:"Sign-in is temporarily unavailable. Please try again."},503)}
 }
 
@@ -290,7 +290,7 @@ export async function onRequestGetMe({request,env}) {
  return json({ok:true,authenticated:true,user:{id:user.id,fullName:user.full_name,username:user.username,email:user.email,phone:user.phone,role:user.role_name,roleKey:user.role_key,roleKeys:user.role_keys||[user.role_key],roleNames:user.role_names||[user.role_name],schoolId:user.school_id||null,schoolName:user.school_name||null,permissions:user.permissions,scope:user.scope,designation:user.designation,organisationName:user.organisation_name,profilePhotoUrl:user.profile_photo_url,country:user.country,timezone:user.timezone,currency:user.currency,accessMode:user.access_mode||"full",accessNotice:user.access_notice||"",subscriptionStatus:user.subscription_status||null}});
 }
 export async function onRequestPostLogout({ request, env }) {
-  const token = cookieValue(request, COOKIE);
+  const token = String(request.headers.get("X-Navstar-Session")||cookieValue(request, COOKIE)).trim();
   if (token && env.DB) {
     try {
       await env.DB.prepare("UPDATE auth_sessions SET revoked_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE token_hash = ? AND revoked_at IS NULL")
