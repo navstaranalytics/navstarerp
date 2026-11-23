@@ -23,7 +23,7 @@ const resources={
   assessments:{table:"assessments",scope:true,fields:["academic_year_id","term_id","grade_level_id","stream_id","learning_area_id","title","assessment_type","max_score","weight","pathway","due_date","status"],required:["school_id","academic_year_id","grade_level_id","learning_area_id","title"],refs:{academic_year_id:"academic_years",term_id:"terms",grade_level_id:"grade_levels",stream_id:"streams",learning_area_id:"learning_areas"}},
   "assessment-results":{table:"assessment_results",scope:true,fields:["assessment_id","learner_id","score","grade","feedback","status"],required:["school_id","assessment_id","learner_id"],refs:{assessment_id:"assessments",learner_id:"learners"}},
   "grading-schemes":{table:"grading_schemes",scope:true,fields:["curriculum","stage_code","name","description","is_active"],required:["school_id","name"]},
-  "grade-boundaries":{table:"grade_boundaries",scope:false,fields:["scheme_id","label","min_score","max_score","points","descriptor"],required:["scheme_id","label","min_score","max_score"]},
+  "grade-boundaries":{table:"grade_boundaries",scope:true,fields:["scheme_id","label","min_score","max_score","points","descriptor"],required:["school_id","scheme_id","label","min_score","max_score"],refs:{scheme_id:"grading_schemes"}},
   "attendance-sessions":{table:"attendance_sessions",scope:true,fields:["academic_year_id","term_id","grade_level_id","stream_id","attendance_date","session_name","status"],required:["school_id","academic_year_id","grade_level_id","attendance_date"],refs:{academic_year_id:"academic_years",term_id:"terms",grade_level_id:"grade_levels",stream_id:"streams"}},
   "attendance-records":{table:"attendance_records",scope:true,fields:["session_id","learner_id","attendance_status","notes"],required:["school_id","session_id","learner_id","attendance_status"],refs:{session_id:"attendance_sessions",learner_id:"learners"}},
   timetable:{table:"timetable_entries",scope:true,fields:["academic_year_id","term_id","grade_level_id","stream_id","learning_area_id","staff_id","weekday","start_time","end_time","room"],required:["school_id","academic_year_id","grade_level_id","learning_area_id","weekday","start_time","end_time"],refs:{academic_year_id:"academic_years",term_id:"terms",grade_level_id:"grade_levels",stream_id:"streams",learning_area_id:"learning_areas",staff_id:"staff_profiles"}},
@@ -58,7 +58,7 @@ async function auth(request,env){
 }
 const permissionFor=(name,write=false)=>{
   if(["plans","subscriptions","invoices","payments","regions","platform-users","analytics","settings","audit","ai-usage","integrations"].includes(name))return "platform.manage";
-  if(name==="grade-boundaries")return "platform.manage";
+  if(name==="grade-boundaries")return "academics.manage";
   if(name==="classes")return "classes.manage";
   if(["years","terms","grades","streams","learning-areas","grading-schemes"].includes(name))return "academics.manage";
   if(["staff"].includes(name))return "staff.manage";
@@ -91,6 +91,11 @@ async function schoolScope(request,user,cfg){
   return {schoolId};
 }
 function teacherLimited(user){const roles=user.role_keys||[user.role_key];return !user.is_super_admin&&roles.some(r=>["teacher","class_teacher"].includes(r))&&!user.permissions.includes("academics.manage")&&!user.permissions.includes("allocations.manage")}
+async function ensureGradeBoundaryScope(db){
+ const info=await db.prepare("PRAGMA table_info(grade_boundaries)").all();
+ if(!(info.results||[]).some(x=>x.name==="school_id"))await db.prepare("ALTER TABLE grade_boundaries ADD COLUMN school_id TEXT REFERENCES schools(id) ON DELETE CASCADE").run();
+ await db.prepare("UPDATE grade_boundaries SET school_id=(SELECT school_id FROM grading_schemes WHERE grading_schemes.id=grade_boundaries.scheme_id) WHERE school_id IS NULL").run();
+}
 async function validateTeacherWrite(db,user,name,values){
  if(!teacherLimited(user))return null;
  const staff=await db.prepare("SELECT id FROM staff_profiles WHERE user_id=? AND school_id=? AND employment_status='active'").bind(user.id,user.school_id).first();
@@ -190,6 +195,7 @@ export async function onRequestGet({request,env}){
   const a=await auth(request,env);if(a.error)return a.error;
   const url=new URL(request.url),name=url.pathname.split("/").pop(),cfg=resources[name];
   if(!cfg)return json({ok:false,error:"Unknown data resource."},404);
+  if(name==="grade-boundaries")await ensureGradeBoundaryScope(env.DB);
   const needed=permissionFor(name,false);if(!allowed(a.user,needed))return json({ok:false,error:"Your role does not have permission to view this resource."},403);
   if(name==="platform-users"){
     try{const rows=await env.DB.prepare("SELECT u.id,u.full_name,u.username,u.email,u.phone,u.status,u.created_at,u.last_login_at,r.role_key,r.role_name FROM users u JOIN user_role_assignments a ON a.user_id=u.id AND a.school_id IS NULL JOIN roles r ON r.id=a.role_id WHERE r.role_key IN ('super_admin','platform_operations','regional_administrator','finance_administrator','academic_standards_administrator','support_administrator') ORDER BY u.created_at DESC LIMIT 1000").all();return json({ok:true,records:rows.results||[]});}
@@ -231,6 +237,7 @@ export async function onRequestPost({request,env}){
   const a=await auth(request,env);if(a.error)return a.error;
   const name=new URL(request.url).pathname.split("/").pop(),cfg=resources[name];
   if(!cfg)return json({ok:false,error:"Unknown data resource."},404);
+  if(name==="grade-boundaries")await ensureGradeBoundaryScope(env.DB);
   if(!allowed(a.user,permissionFor(name,true)))return json({ok:false,error:"Your role does not have permission to change this resource."},403);
   if(cfg.readOnly)return json({ok:false,error:"This resource is read-only."},405);
   let body;try{body=await request.json()}catch{return json({ok:false,error:"Invalid record data."},400)}
@@ -331,6 +338,7 @@ export async function onRequestPatch({request,env}){
   const a=await auth(request,env);if(a.error)return a.error;
   const parts=new URL(request.url).pathname.split("/"),name=parts[parts.length-2],recordId=decodeURIComponent(parts[parts.length-1]||""),cfg=resources[name];
   if(!cfg||!recordId)return json({ok:false,error:"Unknown resource or record."},404);
+  if(name==="grade-boundaries")await ensureGradeBoundaryScope(env.DB);
   if(!allowed(a.user,permissionFor(name,true)))return json({ok:false,error:"Your role does not have permission to change this resource."},403);
   if(cfg.readOnly)return json({ok:false,error:"This resource is read-only."},405);
   if(name==="assessment-results")return json({ok:false,error:"Update assessment scores through the assessment marking workspace so score limits and enrolment are checked."},405);
