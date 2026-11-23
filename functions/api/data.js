@@ -244,7 +244,17 @@ export async function onRequestPost({request,env}){
   if(name==="attendance-sessions")values.taken_by=a.user.id;
   if(name==="attendance-records")values.marked_by=a.user.id;
   if(name==="finance-transactions")values.recorded_by=a.user.id;
+  if(name==="assessments")values.created_by=a.user.id;
+  if(name==="assessment-results")values.entered_by=a.user.id;
   const refError=await validateRefs(env.DB,cfg,values,schoolId);if(refError)return json({ok:false,error:refError},400);
+  if(name==="assessment-results"){
+    const assessment=await env.DB.prepare("SELECT academic_year_id,grade_level_id,stream_id,pathway,max_score FROM assessments WHERE id=? AND school_id=?").bind(values.assessment_id,schoolId).first();
+    if(!assessment)return json({ok:false,error:"Assessment not found in this school."},400);
+    if(values.score!==undefined&&values.score!==null&&(Number(values.score)<0||Number(values.score)>Number(assessment.max_score)))return json({ok:false,error:"Score must be between zero and the assessment maximum."},400);
+    const enrolled=await env.DB.prepare("SELECT 1 FROM learner_enrollments le JOIN learners l ON l.id=le.learner_id AND l.school_id=le.school_id WHERE le.learner_id=? AND le.school_id=? AND le.academic_year_id=? AND le.grade_level_id=? AND (le.stream_id IS ? OR le.stream_id=?) AND le.status='active' AND (? IS NULL OR l.pathway=?)").bind(values.learner_id,schoolId,assessment.academic_year_id,assessment.grade_level_id,assessment.stream_id,assessment.stream_id,assessment.pathway,assessment.pathway).first();
+    if(!enrolled)return json({ok:false,error:"The learner is not actively enrolled in the assessment class or pathway."},400);
+  }
+
   if(name==="learner-fee-accounts"){
     const fee=await env.DB.prepare("SELECT amount,grade_level_id,is_active FROM fee_structures WHERE id=? AND school_id=?").bind(values.fee_structure_id,schoolId).first();
     if(!fee||Number(fee.is_active)===0)return json({ok:false,error:"Select an active fee structure from this school."},400);
@@ -276,7 +286,7 @@ export async function onRequestPost({request,env}){
     }
     const columns=["id",...(cfg.scope?["school_id"]:[]),...Object.keys(values).filter(k=>k!=="school_id")];
     const vals=[recordId,...(cfg.scope?[schoolId]:[]),...Object.entries(values).filter(([k])=>k!=="school_id").map(([,v])=>v)];
-    const sql="INSERT INTO "+cfg.table+" ("+columns.join(",")+") VALUES ("+columns.map(()=>"?").join(",")+")"+(name==="attendance-records"?" ON CONFLICT(session_id,learner_id) DO UPDATE SET attendance_status=excluded.attendance_status,notes=excluded.notes,marked_by=excluded.marked_by":"");
+    const sql="INSERT INTO "+cfg.table+" ("+columns.join(",")+") VALUES ("+columns.map(()=>"?").join(",")+")"+(name==="attendance-records"?" ON CONFLICT(session_id,learner_id) DO UPDATE SET attendance_status=excluded.attendance_status,notes=excluded.notes,marked_by=excluded.marked_by":name==="assessment-results"?" ON CONFLICT(assessment_id,learner_id) DO UPDATE SET score=excluded.score,grade=excluded.grade,feedback=excluded.feedback,status=excluded.status,entered_by=excluded.entered_by,updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now')":"");
     if(name==="payments"){
       const invoiceId=values.invoice_id||null;
       if(invoiceId){
@@ -308,6 +318,7 @@ export async function onRequestPatch({request,env}){
   if(!cfg||!recordId)return json({ok:false,error:"Unknown resource or record."},404);
   if(!allowed(a.user,permissionFor(name,true)))return json({ok:false,error:"Your role does not have permission to change this resource."},403);
   if(cfg.readOnly)return json({ok:false,error:"This resource is read-only."},405);
+  if(name==="assessment-results")return json({ok:false,error:"Update assessment scores through the assessment marking workspace so score limits and enrolment are checked."},405);
   if(name==="learner-fee-accounts")return json({ok:false,error:"Fee account balances cannot be edited directly. They must be updated through a verified fee receipt workflow."},405);
   if(name==="payments")return json({ok:false,error:"Payment records are immutable. Record a separate reversal or correction instead."},405);
   let body;try{body=await request.json()}catch{return json({ok:false,error:"Invalid record update."},400)}
