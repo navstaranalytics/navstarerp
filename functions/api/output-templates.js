@@ -4,9 +4,8 @@ export async function onRequestGet({request,env}){
  if(!env.DB)return json({ok:false,error:"Database unavailable."},503);
  const user=await getAuthenticatedSession(request,env);
  if(!user)return json({ok:false,error:"Sign in to continue."},401);
- if(!user.is_super_admin)return json({ok:false,error:"Only Super Admin can manage platform output formats."},403);
  try{
-  const rows=await env.DB.prepare("SELECT template_key,name,category,description,version,template_json,is_active,updated_at FROM platform_output_templates ORDER BY category,name").all();
+  const rows=user.is_super_admin?await env.DB.prepare("SELECT template_key,name,category,description,version,template_json,is_active,updated_at FROM platform_output_templates ORDER BY category,name").all():await env.DB.prepare("SELECT template_key,name,category,description,version,template_json,is_active,updated_at FROM platform_output_templates WHERE is_active=1 ORDER BY category,name").all();
   return json({ok:true,templates:rows.results||[]});
  }catch(e){console.error("Output template read",e);return json({ok:false,error:"Output template catalogue is unavailable. Apply migration 0003 first."},503)}
 }
