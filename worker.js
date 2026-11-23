@@ -49,6 +49,9 @@ const jsonNotFound = () => Response.json(
 );
 
 export default {
+  async scheduled(controller, env, ctx) {
+    ctx.waitUntil(runScheduledAutomations(env, controller.scheduledTime));
+  },
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     const route = url.pathname;
@@ -66,7 +69,11 @@ export default {
       if (request.method === "POST") return platformControlsPost({ request, env });
       return new Response("Method not allowed", { status: 405, headers: { Allow: "GET, POST" } });
     }
-    if (route === "/api/terminology") {\n      if (request.method !== "GET") return new Response("Method not allowed", { status: 405, headers: { Allow: "GET" } });\n      return terminologyGet({ request, env });\n    }\n    if (route === "/api/terminology") {\n      if (request.method !== "GET") return new Response("Method not allowed", { status: 405, headers: { Allow: "GET" } });\n      return terminologyGet({ request, env });\n    }\n    if (route === "/api/sample-data") {
+    if (route === "/api/terminology") {
+      if (request.method !== "GET") return new Response("Method not allowed", { status: 405, headers: { Allow: "GET" } });
+      return terminologyGet({ request, env });
+    }
+    if (route === "/api/sample-data") {
       if (request.method === "GET") return sampleDataGet({ request, env });
       if (request.method === "DELETE") return sampleDataDelete({ request, env });
       return new Response("Method not allowed", { status: 405, headers: { Allow: "GET, DELETE" } });
