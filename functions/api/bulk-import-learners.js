@@ -46,9 +46,9 @@ export async function onRequestPost({request,env}){
   let streamId=null;
   if(r.stream){const stream=await env.DB.prepare("SELECT id FROM streams WHERE school_id=? AND grade_level_id=? AND lower(name)=lower(?) AND status='active'").bind(schoolId,grade.id,r.stream).first();if(!stream){problems.push({row:line,error:"Stream '"+r.stream+"' was not found in the selected grade."});continue}streamId=stream.id}
   if(r.date_of_birth&&!/^\d{4}-\d{2}-\d{2}$/.test(r.date_of_birth)){problems.push({row:line,error:"Date of birth must use YYYY-MM-DD."});continue}
-  const existing=await env.DB.prepare("SELECT 1 FROM learners WHERE school_id=? AND admission_number=?").bind(schoolId,admission).first();
+  const existing=await env.DB.prepare("SELECT 1 FROM learners WHERE school_id=? AND lower(admission_number)=lower(?)").bind(schoolId,admission).first();
   if(existing){problems.push({row:line,error:"Admission number already exists in this school."});continue}
-  prepared.push({learnerId:id(),enrollmentId:id(),admission,first,middle:r.middle_name||null,last,gender:r.gender||null,dob:r.date_of_birth||null,status:r.status||"active",pathway:r.pathway||null,yearId:year.id,gradeId:grade.id,streamId,line});
+  prepared.push({learnerId:id(),enrollmentId:id(),admission,first,middle:r.middle_name||null,last,gender:r.gender||null,dob:r.date_of_birth||null,status:(r.status||"active").toLowerCase(),pathway:r.pathway||null,yearId:year.id,gradeId:grade.id,streamId,line});
  }
  if(problems.length)return json({ok:false,imported:0,failed:problems.length,problems,message:"No records were imported. Correct the listed rows and upload the CSV again."},422);
  try{
