@@ -64,7 +64,7 @@ const permissionFor=(name,write=false)=>{
   if(name==="teacher-allocations")return "allocations.manage";
   if(["assessments","assessment-results"].includes(name))return write?"assessments.manage":"assessments.view";
   if(["attendance-sessions","attendance-records"].includes(name))return write?"attendance.manage":"attendance.view";
-  if(name==="timetable")return "timetable.view";
+  if(name==="timetable")return write?"academics.manage":"timetable.view";
   if(["fee-structures","learner-fee-accounts","finance-transactions"].includes(name))return write?"finance.manage":"finance.view";
   if(["inventory","inventory-movements"].includes(name))return "inventory.manage";
   if(["library-books","library-loans"].includes(name))return "library.manage";
@@ -88,8 +88,32 @@ async function schoolScope(request,user,cfg){
   if(!user.is_super_admin&&requested&&requested!==user.school_id)return {error:json({ok:false,error:"You cannot access another school's workspace."},403)};
   return {schoolId};
 }
+async function validateTeacherWrite(db,user,name,values){
+ if(user.is_super_admin||!["teacher","class_teacher"].includes(user.role_key))return null;
+ const staff=await db.prepare("SELECT id FROM staff_profiles WHERE user_id=? AND school_id=? AND employment_status='active'").bind(user.id,user.school_id).first();
+ if(!staff)return "Your staff profile is not active.";
+ let year=values.academic_year_id,grade=values.grade_level_id,stream=values.stream_id,area=values.learning_area_id;
+ if(name==="assessment-results"){
+  const a=await db.prepare("SELECT academic_year_id,grade_level_id,stream_id,learning_area_id FROM assessments WHERE id=? AND school_id=?").bind(values.assessment_id,user.school_id).first();
+  if(!a)return "The assessment is not available in your school.";
+  year=a.academic_year_id;grade=a.grade_level_id;stream=a.stream_id;area=a.learning_area_id;
+ }
+ if(name==="attendance-records"){
+  const a=await db.prepare("SELECT academic_year_id,grade_level_id,stream_id FROM attendance_sessions WHERE id=? AND school_id=?").bind(values.session_id,user.school_id).first();
+  if(!a)return "The attendance session is not available in your school.";
+  year=a.academic_year_id;grade=a.grade_level_id;stream=a.stream_id;
+  const learner=await db.prepare("SELECT 1 FROM learner_enrollments WHERE learner_id=? AND school_id=? AND academic_year_id=? AND grade_level_id=? AND (stream_id IS ? OR stream_id=?) AND status='active'").bind(values.learner_id,user.school_id,year,grade,stream,stream).first();
+  if(!learner)return "The learner is not enrolled in this assigned class.";
+ }
+ if(!year||!grade)return "Academic year and grade are required for your allocated teaching scope.";
+ let sql="SELECT 1 FROM teacher_allocations WHERE school_id=? AND staff_id=? AND academic_year_id=? AND grade_level_id=? AND (stream_id IS NULL OR stream_id IS ? OR stream_id=?)";
+ const args=[user.school_id,staff.id,year,grade,stream,stream];
+ if(area){sql+=" AND learning_area_id=?";args.push(area)}
+ const allocation=await db.prepare(sql+" LIMIT 1").bind(...args).first();
+ return allocation?null:"This action is outside your assigned teaching allocation.";
+}
 function teacherFilter(name,user){
-  if(user.is_super_admin||!["teacher","class_teacher","head_of_department","director_of_studies","deputy_director_of_studies","examinations_officer"].includes(user.role_key))return "";
+  if(user.is_super_admin||!["teacher","class_teacher"].includes(user.role_key))return "";
   const staff="EXISTS (SELECT 1 FROM staff_profiles sp JOIN teacher_allocations ta ON ta.staff_id=sp.id WHERE sp.user_id='"+user.id+"' AND ta.school_id='"+user.school_id+"' AND ";
   if(name==="learners"||name==="enrollments")return " AND "+staff+"ta.grade_level_id="+(name==="learners"?"(SELECT le.grade_level_id FROM learner_enrollments le WHERE le.learner_id=learners.id AND le.status='active' LIMIT 1)":"learner_enrollments.grade_level_id")+" AND (ta.stream_id IS NULL OR ta.stream_id="+(name==="learners"?"(SELECT le.stream_id FROM learner_enrollments le WHERE le.learner_id=learners.id AND le.status='active' LIMIT 1)":"learner_enrollments.stream_id")+") )";
   if(name==="assessments")return " AND "+staff+"ta.grade_level_id=assessments.grade_level_id AND (ta.stream_id IS NULL OR ta.stream_id=assessments.stream_id) AND (ta.learning_area_id=assessments.learning_area_id) AND (ta.academic_year_id=assessments.academic_year_id) )";
@@ -176,6 +200,8 @@ export async function onRequestPost({request,env}){
   if(cfg.scope&&!await env.DB.prepare("SELECT 1 FROM schools WHERE id=? AND status='active'").bind(schoolId).first())return json({ok:false,error:"School not found or inactive."},404);
   if(cfg.scope)values.school_id=schoolId;
   const refError=await validateRefs(env.DB,cfg,values,schoolId);if(refError)return json({ok:false,error:refError},400);
+    const teacherValues={...current,...values};const teacherError=await validateTeacherWrite(env.DB,a.user,name,teacherValues);if(teacherError)return json({ok:false,error:teacherError},403);
+  const teacherError=await validateTeacherWrite(env.DB,a.user,name,values);if(teacherError)return json({ok:false,error:teacherError},403);
   const recordId=id();
   try{
     if(name==="settings"){
