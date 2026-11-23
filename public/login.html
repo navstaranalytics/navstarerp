@@ -50,6 +50,68 @@ body{min-height:100vh;background:#0755bd url('/api/branding/login-background') c
 .footer span{display:flex;align-items:center;gap:10px}
 @media(max-width:1000px){.main{grid-template-columns:minmax(0,1fr) minmax(360px,560px);}.leftcopy{display:none}.features{display:none}.card{grid-column:2}}
 @media(max-width:620px){body{background-attachment:scroll}.topline{padding:14px 18px;justify-content:center;text-align:center}.main{display:flex;justify-content:center;padding:10px 14px 24px}.card{max-width:460px;padding:22px 20px 19px;border-radius:21px}.brand{min-height:75px}.mark{height:78px}.field input{height:52px}.submit{height:54px}.footer{flex-direction:column;gap:7px;text-align:center;font-size:12px;padding:12px}.footer span{justify-content:center}}
+/* Compact, single-viewport login layout */
+html,body{width:100%;height:100%;min-height:100%;overflow:hidden}
+.page{height:100vh;height:100svh;min-height:0;overflow:hidden}
+.topline{flex:0 0 auto;padding:10px 4%;font-size:clamp(12px,1.15vw,16px)}
+.main{flex:1;min-height:0;grid-template-columns:minmax(150px,1fr) minmax(330px,480px) minmax(150px,1fr);gap:clamp(10px,2vw,28px);padding:6px 3.2%;align-items:center}
+.leftcopy h2{font-size:clamp(15px,1.5vw,21px);margin-bottom:5px}
+.leftcopy p{font-size:clamp(11px,1vw,14px)}
+.card{max-width:480px;padding:14px 25px 12px;border-radius:19px}
+.brand{min-height:62px;margin-bottom:2px}
+.mark{height:64px;width:min(100%,260px)}
+.card h2{font-size:clamp(18px,1.6vw,23px);margin:3px 0}
+.intro{font-size:12px;line-height:1.35;margin:0 0 10px}
+.field{margin:7px 0}
+.field input{height:43px;border-radius:10px;padding:0 13px;font-size:13px}
+.submit{height:45px;border-radius:11px;font-size:14px}
+.toggle{font-size:12px}
+.account{gap:9px;padding:8px;margin:8px 0}
+.avatar{width:38px;height:38px;font-size:14px}
+.account strong{font-size:13px}.account small{font-size:10px}
+.back{font-size:11px;padding:7px 0}
+.remember{font-size:11px;margin:7px 0 9px}
+.security{margin-top:9px;padding-top:8px;font-size:10px;gap:6px}
+.copyright{font-size:9px;margin:7px 0 0}
+.features{gap:16px;font-size:clamp(11px,1.1vw,15px)}
+.feature{gap:9px}
+.featureicon{width:43px;height:43px;border-width:2px;font-size:19px}
+.footer{flex:0 0 auto;min-height:43px;padding:7px 3%;gap:10px;font-size:10px;border-top-width:4px}
+.footer span{gap:6px}
+@media(max-width:1000px){
+ .main{grid-template-columns:minmax(0,1fr) minmax(330px,470px);gap:12px}
+ .leftcopy,.features{display:none}
+ .card{grid-column:2}
+}
+@media(max-width:620px){
+ .topline{padding:7px 12px;font-size:11px}
+ .main{display:flex;justify-content:center;align-items:center;padding:5px 12px}
+ .card{width:100%;max-width:420px;padding:13px 18px 10px;border-radius:17px}
+ .brand{min-height:52px}.mark{height:54px;width:min(100%,230px)}
+ .card h2{font-size:19px}.intro{font-size:11px;margin-bottom:8px}
+ .field input{height:42px;font-size:13px}
+ .submit{height:43px;font-size:14px}
+ .footer{min-height:36px;flex-direction:row;justify-content:space-around;flex-wrap:nowrap;gap:5px;padding:6px 5px;font-size:8px}
+ .footer span{white-space:nowrap;justify-content:center}
+}
+@media(max-height:650px){
+ .topline{padding-top:5px;padding-bottom:5px}
+ .card{padding-top:9px;padding-bottom:8px}
+ .brand{min-height:45px}.mark{height:47px}
+ .intro{margin-bottom:6px}
+ .field{margin:5px 0}.field input{height:39px}
+ .submit{height:40px}
+ .security{margin-top:6px;padding-top:6px}
+ .copyright{margin-top:5px}
+ .footer{min-height:32px;padding-top:4px;padding-bottom:4px}
+}
+@media(max-height:520px){
+ .topline{display:none}
+ .card{padding:7px 16px}
+ .brand{min-height:35px}.mark{height:37px}
+ .security,.copyright{display:none}
+ .footer{min-height:25px}
+}
 </style></head><body>
 <div class="page">
 <div class="topline">Smart Analytics… Better Education…</div>
