@@ -11,6 +11,7 @@ import { onRequestGet as schoolWorkspaceSummaryGet } from "./functions/api/schoo
 import { onRequestGet as platformControlsGet, onRequestPost as platformControlsPost } from "./functions/api/platform-controls.js";
 import { onRequestGet as sampleDataGet, onRequestDelete as sampleDataDelete } from "./functions/api/sample-data.js";
 import { onRequestGet as terminologyGet } from "./functions/api/terminology.js";
+import { runScheduledAutomations } from "./functions/api/scheduled-automations.js";
 import { onRequestGet as schoolLogoGet, onRequestPost as schoolLogoPost } from "./functions/api/school-branding.js";
 import { onRequestGetSettings as admissionSettingsGet, onRequestPostSettings as admissionSettingsPost, onRequestPostNextAdmissionNumber as nextAdmissionNumberPost, onRequestPostPhotos as learnerPhotosPost, onRequestGetPhoto as learnerPhotoGet } from "./functions/api/learner-photos.js";
 import { onRequestGet as recoveryGet, onRequestPost as recoveryPost } from "./functions/api/recovery.js";
@@ -51,6 +52,15 @@ export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     const route = url.pathname;
+    if (route.startsWith("/api/") && !["/api/auth/login","/api/auth/me","/api/auth/logout","/api/health","/api/setup-status","/api/setup-database"].includes(route)) {
+      const policySession = await getAuthenticatedSession(request, env);
+      if (policySession && !policySession.is_super_admin) {
+        const mode = policySession.access_mode || "full";
+        const billingAllowed = ["/api/auth/me","/api/auth/logout","/api/school-workspace-summary","/api/terminology","/api/support","/api/payments/mpesa/stkpush"].includes(route) || /^\/api\/data\/(invoices|payments|subscriptions)$/.test(route);
+        const locked = mode === "block_all" || (mode === "billing_only" && !billingAllowed) || (mode === "read_only" && !["GET","HEAD","OPTIONS"].includes(request.method));
+        if (locked) return Response.json({ ok:false, error: policySession.access_notice || "This school account is restricted by its subscription policy. Contact Navstar Analytics or open Billing & Support.", accessMode:mode }, { status:423, headers:{"Cache-Control":"no-store"} });
+      }
+    }
     if (route === "/api/platform-controls") {
       if (request.method === "GET") return platformControlsGet({ request, env });
       if (request.method === "POST") return platformControlsPost({ request, env });
