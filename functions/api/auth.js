@@ -83,23 +83,6 @@ export async function getSuperAdminSession(request, env) {
   const user = await getAuthenticatedSession(request, env);
   return user?.is_super_admin ? user : null;
 }
-  const row = await env.DB.prepare(`
-    SELECT u.id, u.full_name, u.username, u.email, u.phone, u.status,
-           p.designation, p.organisation_name, p.profile_photo_url, p.country, p.timezone, p.currency,
-           s.id AS session_id, s.expires_at
-    FROM auth_sessions s
-    JOIN users u ON u.id = s.user_id
-    JOIN user_role_assignments a ON a.user_id = u.id AND a.school_id IS NULL
-    JOIN roles r ON r.id = a.role_id AND r.role_key = 'super_admin'
-    LEFT JOIN super_admin_profiles p ON p.user_id = u.id
-    WHERE s.token_hash = ? AND s.revoked_at IS NULL
-      AND s.expires_at > strftime('%Y-%m-%dT%H:%M:%fZ','now')
-      AND u.status = 'active'
-    LIMIT 1
-  `).bind(tokenHash).first();
-  return row || null;
-}
-
 async function ensureUserProfilePhotoColumn(db){
   const info=await db.prepare("PRAGMA table_info(users)").all();
   if(!(info.results||[]).some(x=>x.name==="profile_photo_url"))await db.prepare("ALTER TABLE users ADD COLUMN profile_photo_url TEXT").run();
