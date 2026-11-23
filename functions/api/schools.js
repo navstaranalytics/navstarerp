@@ -128,7 +128,7 @@ function curriculumLearningAreas(curriculum,levels){
 async function syncSchoolLearningAreas(db,schoolId,curriculum,levels){
  const {template,rows}=curriculumLearningAreas(curriculum,levels);
  const wanted=new Set(rows.map(x=>x.stage));
- await db.prepare("UPDATE learning_areas SET is_active=0 WHERE school_id=? AND curriculum<>?").bind(schoolId,curriculum).run();
+ // Do not deactivate other curriculum rows; a school may offer CBE and 8-4-4 concurrently.
  const existing=await db.prepare("SELECT id,stage_code,code,name,catalogue_code,school_customized FROM learning_areas WHERE school_id=?").bind(schoolId).all();
  const byKey=new Map();
  for(const row of existing.results||[]){
@@ -224,7 +224,7 @@ export async function onRequestPost({request,env}){
     ]);
     let sampleData={created:false};
     if(body.includeSampleData!==false){
-      try{sampleData={created:true,...await seedSchoolSampleData(env.DB,id,curriculum,levels)};}
+      try{sampleData={created:true,...await seedSchoolSampleData(env.DB,id,curricula[0]||curriculum,levels)};}
       catch(error){console.error("Navstar sample data seed failed",error);sampleData={created:false,error:"Sample data could not be seeded. Confirm migration 0005 is applied before retrying."}}
     }
     await syncSchoolCurricula(env.DB,id,curricula,levels);
