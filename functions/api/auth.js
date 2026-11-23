@@ -365,7 +365,7 @@ export async function onRequestPostUsernameRecoveryRequest({ request, env }) {
   if (!env.RESEND_API_KEY) return json({ok:false,error:"Email delivery is not configured yet. Please contact the platform administrator."},503);
   let body; try { body=await request.json(); } catch { return json({ok:false,error:"Enter the email address registered to your account."},400); }
   const email=normalize(body.email);
-  if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email) || email.length>190) return json({ok:false,error:"Enter a valid registered email address."},400);
+  if (!/^[^\s@]+@[^\s@]+\\.[^\s@]+$/.test(email) || email.length>190) return json({ok:false,error:"Enter a valid registered email address."},400);
   try {
     await ensureUsernameRecoveryTable(env.DB);
     const user=await env.DB.prepare(`SELECT u.id,u.email,u.full_name FROM users u
@@ -397,7 +397,7 @@ export async function onRequestPostUsernameRecoveryConfirm({ request, env }) {
   if (!env.DB) return json({ok:false,error:"Database connection is unavailable."},503);
   let body;try{body=await request.json()}catch{return json({ok:false,error:"Enter your email, verification code and new username."},400)}
   const email=normalize(body.email),code=String(body.code||"").trim(),username=normalize(body.newUsername);
-  if(!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)||!/^[0-9]{6}$/.test(code)||!/^[a-z0-9._-]{3,32}$/.test(username))return json({ok:false,error:"Enter a valid email, 6-digit code and username (3–32 letters, numbers, dots, underscores or hyphens)."},400);
+  if(!/^[^\s@]+@[^\s@]+\\.[^\s@]+$/.test(email)||!/^[0-9]{6}$/.test(code)||!/^[a-z0-9._-]{3,32}$/.test(username))return json({ok:false,error:"Enter a valid email, 6-digit code and username (3–32 letters, numbers, dots, underscores or hyphens)."},400);
   try {
     await ensureUsernameRecoveryTable(env.DB);
     const user=await env.DB.prepare(`SELECT u.id FROM users u JOIN user_role_assignments a ON a.user_id=u.id AND a.school_id IS NULL JOIN roles r ON r.id=a.role_id AND r.role_key='super_admin' WHERE u.email_normalized=? LIMIT 1`).bind(email).first();
