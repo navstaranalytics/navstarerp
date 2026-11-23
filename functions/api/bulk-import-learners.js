@@ -37,6 +37,7 @@ export async function onRequestPost({request,env}){
   if(!admission||!first||!last){problems.push({row:line,error:"Admission number, first name and last name are required."});continue}
   const duplicate=admission.toLowerCase();if(seen.has(duplicate)){problems.push({row:line,error:"Duplicate admission number in this CSV."});continue}seen.add(duplicate);
   if(!["","male","female","other"].includes((r.gender||"").toLowerCase())){problems.push({row:line,error:"Gender must be Male, Female, Other or blank."});continue}
+  if(r.status&&!["applicant","active","transferred","graduated","withdrawn","inactive"].includes(r.status.toLowerCase())){problems.push({row:line,error:"Status must be applicant, active, transferred, graduated, withdrawn or inactive."});continue}
   if(r.pathway&&!["STEM","Social Sciences","Arts & Sports Science"].includes(r.pathway)){problems.push({row:line,error:"Pathway must be STEM, Social Sciences or Arts & Sports Science."});continue}
   const year=await env.DB.prepare("SELECT id FROM academic_years WHERE school_id=? AND lower(name)=lower(?)").bind(schoolId,r.academic_year).first();
   const grade=await env.DB.prepare("SELECT id FROM grade_levels WHERE school_id=? AND (lower(stage_name)=lower(?) OR lower(stage_code)=lower(?)) AND is_active=1").bind(schoolId,r.grade,r.grade).first();
