@@ -1,0 +1,3 @@
+import { getAuthenticatedSession } from "./auth.js";
+const json=(d,s=200)=>Response.json(d,{status:s,headers:{"Cache-Control":"no-store"}});
+export async function onRequestGet({request,env}){const user=await getAuthenticatedSession(request,env);if(!user)return json({ok:false,error:"Sign in to access the Navstar system guide."},401);try{const row=await env.DB.prepare("SELECT setting_value FROM platform_settings WHERE setting_key='system_guide'").first();let guide=null;try{guide=JSON.parse(row?.setting_value||"null")}catch{}return json({ok:true,guide})}catch(e){console.error("System guide read",e);return json({ok:false,error:"The system guide could not be loaded."},500)}}
