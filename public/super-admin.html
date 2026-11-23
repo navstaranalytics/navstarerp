@@ -311,7 +311,7 @@ schoolDetails=function(id){
     const payload={name:d.get("name"),code:d.get("code"),contact:d.get("contact"),email:d.get("email"),phone:d.get("phone"),address:d.get("address"),registrationNumber:d.get("registrationNumber"),county:d.get("county"),category:d.get("category"),ownership:d.get("ownership"),curriculum:d.get("curriculum"),plan:d.get("plan"),status:d.get("status"),expiry:d.get("expiry"),learnerCount:Number(d.get("learnerCount"))||0,teacherCount:Number(d.get("teacherCount"))||0,levels:d.getAll("levels"),modules:d.getAll("modules")};
     if(!String(payload.name||"").trim()){toast("Official school name is required.");return}
     if(submit){submit.disabled=true;submit.textContent="Saving…"}
-    try{const result=await schoolApi("/api/schools/"+encodeURIComponent(id),{method:"PATCH",body:JSON.stringify(payload)});const index=schools.findIndex(x=>x.id===id);if(index>=0)schools[index]=result.school;closeModal();render();toast("School profile saved to the central database.");}
+    try{const result=await schoolApi("/api/schools/"+encodeURIComponent(id),{method:"PATCH",body:JSON.stringify(payload)});const index=schools.findIndex(x=>x.id===id);if(index>=0)schools[index]=result.school;closeModal();render();toast(result.adminProvisioning?.created?"School saved. New School Admin username: "+result.adminProvisioning.admin.username+" · email: "+(result.adminProvisioning.emailDelivery==="sent"?"sent":"delivery not confirmed"):result.adminProvisioning?.error?"School saved, but School Admin setup needs attention: "+result.adminProvisioning.error:"School profile saved to the central database.");}
     catch(error){toast(error.message||"School changes could not be saved.");if(submit){submit.disabled=false;submit.textContent="Save record"}}
   };
 };
