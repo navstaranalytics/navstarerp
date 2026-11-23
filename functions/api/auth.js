@@ -152,10 +152,10 @@ export async function onRequestPostSetupAdmin({ request, env }) {
 export async function onRequestPostLogin({ request, env }) {
   if (!env.DB) return json({ ok: false, error: "Database connection is unavailable." }, 503);
   let body;
-  try { body = await request.json(); } catch { return json({ ok: false, error: "Enter your username/email and password." }, 400); }
+  try { body = await request.json(); } catch { return json({ ok: false, error: "Enter your username and password." }, 400); }
   const identifier = normalize(body.identifier);
   const password = String(body.password || "");
-  if (!identifier || !password || identifier.length > 190 || password.length > 128) {
+  if (!/^[a-z0-9._-]{3,32}$/.test(identifier) || !password || password.length > 128) {
     return json({ ok: false, error: "Enter your username/email and password." }, 400);
   }
   try {
@@ -172,9 +172,9 @@ export async function onRequestPostLogin({ request, env }) {
       FROM users u
       JOIN user_role_assignments a ON a.user_id = u.id AND a.school_id IS NULL
       JOIN roles r ON r.id = a.role_id AND r.role_key = 'super_admin'
-      WHERE (u.username_normalized = ? OR u.email_normalized = ?)
+      WHERE u.username_normalized = ?
       LIMIT 1
-    `).bind(identifier, identifier).first();
+    `).bind(identifier).first();
     const valid = user && user.status === "active" && await verifyPassword(password, user.password_hash);
     if (!valid) {
       const failures = Number(attempt?.failed_count || 0) + 1;
@@ -298,13 +298,13 @@ export async function onRequestPostPasswordResetRequest({ request, env }) {
   if (!env.RESEND_API_KEY) return json({ ok:false, error:"Email delivery is not configured yet. The platform administrator must configure the email service before password resets can be used." },503);
   let body; try { body=await request.json(); } catch { return json({ok:false,error:"Enter your username or email address."},400); }
   const identifier=normalize(body.identifier);
-  if (!identifier || identifier.length>190) return json({ok:false,error:"Enter your username or email address."},400);
+  if (!/^[a-z0-9._-]{3,32}$/.test(identifier)) return json({ok:false,error:"Enter your username (not your email address)."},400);
   try {
     await ensurePasswordResetTable(env.DB);
     const user=await env.DB.prepare(`SELECT u.id,u.email,u.full_name FROM users u
       JOIN user_role_assignments a ON a.user_id=u.id AND a.school_id IS NULL
       JOIN roles r ON r.id=a.role_id AND r.role_key='super_admin'
-      WHERE u.username_normalized=? OR u.email_normalized=? LIMIT 1`).bind(identifier,identifier).first();
+      WHERE u.username_normalized=? LIMIT 1`).bind(identifier).first();
     if (!user || !user.email) return json({ok:true,message:"If the account exists and has a registered email, a verification code will be sent."});
     const recent=await env.DB.prepare("SELECT COUNT(*) AS total FROM auth_password_resets WHERE user_id=? AND created_at > datetime('now','-1 hour')").bind(user.id).first();
     if (Number(recent?.total||0)>=3) return json({ok:false,error:"Too many reset requests. Please wait before requesting another code."},429);
@@ -323,7 +323,7 @@ export async function onRequestPostPasswordResetConfirm({ request, env }) {
   if (!env.DB) return json({ok:false,error:"Database connection is unavailable."},503);
   let body;try{body=await request.json()}catch{return json({ok:false,error:"Enter the verification code and your new password."},400)}
   const identifier=normalize(body.identifier),code=String(body.code||"").trim(),password=String(body.newPassword||""),confirm=String(body.confirmPassword||"");
-  if(!identifier||!/^[0-9]{6}$/.test(code))return json({ok:false,error:"Enter the 6-digit email verification code."},400);
+  if(!/^[a-z0-9._-]{3,32}$/.test(identifier)||!/^[0-9]{6}$/.test(code))return json({ok:false,error:"Enter your username and the 6-digit email verification code."},400);
   if(!passwordPolicy(password))return json({ok:false,error:"Password must be at least 6 characters and contain at least 3 of these 4 types: uppercase, lowercase, number and special character."},400);
   if(password!==confirm)return json({ok:false,error:"The new passwords do not match."},400);
   try{
