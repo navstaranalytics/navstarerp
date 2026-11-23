@@ -135,6 +135,23 @@ export async function getAuthenticatedSession(request, env) {
   if(!row)return null;
   const roleRows=await env.DB.prepare("SELECT r.id,r.role_key,r.role_name FROM user_role_assignments a JOIN roles r ON r.id=a.role_id WHERE a.user_id=? AND a.school_id IS ? ORDER BY CASE r.role_key WHEN 'school_admin' THEN 0 WHEN 'principal' THEN 1 WHEN 'school_owner' THEN 2 WHEN 'deputy_principal' THEN 3 WHEN 'director_of_studies' THEN 4 WHEN 'deputy_director_of_studies' THEN 5 WHEN 'senior_teacher' THEN 6 WHEN 'head_of_department' THEN 7 WHEN 'teacher' THEN 8 WHEN 'class_teacher' THEN 9 WHEN 'parent_guardian' THEN 20 WHEN 'student_learner' THEN 21 ELSE 10 END").bind(row.id,row.school_id??null).all();
   const roleKeysRaw=(roleRows.results||[]).map(x=>x.role_key);
+  let accessMode="full",accessNotice="",subscriptionStatus=null;
+  if(row.school_id){
+    try{
+      const sub=await env.DB.prepare("SELECT ss.status,ss.next_due_date,p.grace_period_days FROM school_subscriptions ss LEFT JOIN subscription_plans p ON p.id=ss.plan_id WHERE ss.school_id=? ORDER BY ss.updated_at DESC LIMIT 1").bind(row.school_id).first();
+      let policy={};const setting=await env.DB.prepare("SELECT setting_value FROM platform_settings WHERE setting_key='subscription_policy'").first();try{policy=JSON.parse(setting?.setting_value||"{}")}catch{}
+      subscriptionStatus=sub?.status||null;
+      if(row.school_status==="suspended"||sub?.status==="suspended"){
+        accessMode=policy.suspended_access||"billing_only";accessNotice="This school workspace is suspended under its subscription policy.";
+      }else if(sub?.next_due_date){
+        const today=new Date().toISOString().slice(0,10),daysLate=Math.floor((Date.parse(today+"T00:00:00Z")-Date.parse(sub.next_due_date+"T00:00:00Z"))/86400000);
+        const grace=Number(policy.grace_period_days??sub.grace_period_days??7);
+        if(daysLate>0){accessNotice="Subscription payment is overdue by "+daysLate+" day(s).";if(daysLate>grace){const action=policy.expiry_action||"suspend";if(action==="suspend")accessMode=policy.suspended_access||"billing_only";else if(action==="read_only"||action==="billing_only")accessMode=action;}}
+      }
+      if(sub?.status==="expired"||sub?.status==="cancelled"){const action=policy.expiry_action||"suspend";accessMode=action==="suspend"?(policy.suspended_access||"billing_only"):action==="warning_only"?"full":action;accessNotice="The school subscription is "+sub.status+".";}
+    }catch(error){console.error("Subscription access policy lookup failed",error)}
+  }
+
   const roleNames=(roleRows.results||[]).map(x=>x.role_name);
   const roleKeys=roleKeysRaw.map(k=>k==='parent_guardian'?'parent':k==='student_learner'?'student':k);
   let permissions=[];
@@ -152,7 +169,7 @@ export async function getAuthenticatedSession(request, env) {
   let scope={};try{scope=JSON.parse(row.scope_json||'{}')}catch{}
   const primaryRoleKey=roleKeysRaw[0]||row.role_key,primaryRoleName=roleNames[0]||row.role_name,primaryRoleId=(roleRows.results||[])[0]?.id||row.role_id;
   const normalizedRoleKey=primaryRoleKey==='parent_guardian'?'parent':primaryRoleKey==='student_learner'?'student':primaryRoleKey;
-  return {...row,role_id:primaryRoleId,role_name:primaryRoleName,role_key:normalizedRoleKey,role_keys:roleKeys,role_names:roleNames,permissions,scope,is_super_admin:roleKeysRaw.includes('super_admin')};
+  return {...row,role_id:primaryRoleId,role_name:primaryRoleName,role_key:normalizedRoleKey,role_keys:roleKeys,role_names:roleNames,permissions,scope,is_super_admin:roleKeysRaw.includes('super_admin'),access_mode:accessMode,access_notice:accessNotice,subscription_status:subscriptionStatus};
 }
 async function issueSession(env, request, userId, remember = false) {
   const token = randomHex(32);
