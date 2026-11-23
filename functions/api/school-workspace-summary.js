@@ -12,7 +12,7 @@ export async function onRequestGet({request,env}){
    env.DB.prepare("SELECT ss.status,ss.next_due_date,ss.estimated_amount_kes,ss.preferred_payment_method,p.name AS plan_name,p.grace_period_days FROM school_subscriptions ss LEFT JOIN subscription_plans p ON p.id=ss.plan_id WHERE ss.school_id=? ORDER BY ss.updated_at DESC LIMIT 1").bind(schoolId).first(),
    Promise.all([
     env.DB.prepare("SELECT COUNT(*) AS total FROM learners WHERE school_id=?").bind(schoolId).first(),
-    env.DB.prepare("SELECT COUNT(*) AS total FROM staff WHERE school_id=?").bind(schoolId).first(),
+    env.DB.prepare("SELECT COUNT(*) AS total FROM staff_profiles WHERE school_id=? AND employment_status='active'").bind(schoolId).first(),
     env.DB.prepare("SELECT COUNT(*) AS total FROM classes WHERE school_id=?").bind(schoolId).first(),
     env.DB.prepare("SELECT COUNT(*) AS total FROM attendance_sessions WHERE school_id=?").bind(schoolId).first()
    ])
