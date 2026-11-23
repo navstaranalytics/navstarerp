@@ -10,6 +10,7 @@
       "database_id": "7eead9ab-83ca-4867-96b1-183612dbf9e0"
     }
   ],
+  "ai": { "binding": "AI" },
   "assets": {
     "directory": "./public",
     "binding": "ASSETS"
