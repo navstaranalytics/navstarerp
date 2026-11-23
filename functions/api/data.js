@@ -62,7 +62,7 @@ const permissionFor=(name,write=false)=>{
   if(name==="grade-boundaries")return "academics.manage";
   if(name==="classes")return "classes.manage";
   if(["years","terms","grades","streams","learning-areas","grading-schemes"].includes(name))return "academics.manage";
-  if(name==="learner-learning-areas")return "allocations.manage";
+  if(name==="learner-learning-areas")return write?"allocations.manage":"learners.view";
   if(["staff"].includes(name))return "staff.manage";
   if(["learners","enrollments","guardians","transfers"].includes(name))return write?"learners.manage":"learners.view";
   if(name==="teacher-allocations")return "allocations.manage";
@@ -329,8 +329,16 @@ export async function onRequestPost({request,env}){
     const area=await env.DB.prepare("SELECT id,is_mandatory,is_active,stage_code,pathway FROM learning_areas WHERE id=? AND school_id=?").bind(values.learning_area_id,schoolId).first();
     if(!area||Number(area.is_active)!==1||String(area.stage_code||"")!==String(enrol.stage_code||""))return json({ok:false,error:"This learning area is not active for the learner's current grade."},400);
     if(Number(area.is_mandatory)===1)return json({ok:false,error:"Mandatory learning areas are assigned automatically during enrollment."},400);
-    if(area.pathway&&area.pathway!==enrol.pathway)return json({ok:false,error:"This learning area does not match the learner's selected pathway."},400);
-    values.selection_type="elective";
+    if(/^G1[0-2]$/.test(String(enrol.stage_code||""))){
+      if(!enrol.pathway)return json({ok:false,error:"Set the learner's Senior School pathway before assigning elective learning areas."},400);
+      const assigned=await env.DB.prepare("SELECT la.pathway FROM learner_learning_areas lla JOIN learning_areas la ON la.id=lla.learning_area_id AND la.school_id=lla.school_id WHERE lla.school_id=? AND lla.enrollment_id=? AND lla.selection_type='elective' AND lla.status='active'").bind(schoolId,enrol.id).all();
+      const chosen=(assigned.results||[]).filter(x=>x.pathway===enrol.pathway).length;
+      const other=(assigned.results||[]).filter(x=>x.pathway&&x.pathway!==enrol.pathway).length;
+      const total=(assigned.results||[]).length;
+      if(total>=3)return json({ok:false,error:"Senior School learners may select only three elective learning areas."},400);
+      if(area.pathway!==enrol.pathway&&chosen<2)return json({ok:false,error:"Assign at least two electives from the learner's chosen pathway before selecting one from another pathway."},400);
+      if(area.pathway!==enrol.pathway&&other>=1)return json({ok:false,error:"Only one elective may be selected from outside the learner's chosen pathway."},400);
+    }
   }
   try{
     if(name==="settings"){
