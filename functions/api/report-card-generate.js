@@ -1,11 +1,20 @@
 import { getAuthenticatedSession } from "./auth.js";
 const json=(data,status=200)=>Response.json(data,{status,headers:{"Cache-Control":"no-store"}});
 const id=()=>crypto.randomUUID();
+async function ensureReportTables(db){
+ const boundaryCols=await db.prepare("PRAGMA table_info(grade_boundaries)").all();
+ if(!(boundaryCols.results||[]).some(x=>x.name==="school_id"))await db.prepare("ALTER TABLE grade_boundaries ADD COLUMN school_id TEXT REFERENCES schools(id) ON DELETE CASCADE").run();
+ await db.prepare("UPDATE grade_boundaries SET school_id=(SELECT school_id FROM grading_schemes WHERE grading_schemes.id=grade_boundaries.scheme_id) WHERE school_id IS NULL").run();
+ const reportCols=await db.prepare("PRAGMA table_info(report_cards)").all(),names=new Set((reportCols.results||[]).map(x=>x.name));
+ if(!names.has("created_by"))await db.prepare("ALTER TABLE report_cards ADD COLUMN created_by TEXT REFERENCES users(id) ON DELETE SET NULL").run();
+ if(!names.has("updated_at"))await db.prepare("ALTER TABLE report_cards ADD COLUMN updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))").run();
+}
 export async function onRequestPost({request,env}){
  if(!env.DB)return json({ok:false,error:"Database unavailable."},503);
  const actor=await getAuthenticatedSession(request,env);if(!actor)return json({ok:false,error:"Sign in to continue."},401);
  if(!actor.is_super_admin&&!actor.permissions.includes("academics.manage"))return json({ok:false,error:"Your role cannot generate report cards."},403);
  let b;try{b=await request.json()}catch{return json({ok:false,error:"Invalid report-card generation request."},400)}
+ await ensureReportTables(env.DB);
  const schoolId=actor.is_super_admin?String(b.schoolId||""):actor.school_id;
  const yearId=String(b.academic_year_id||""),termId=String(b.term_id||"")||null,gradeId=String(b.grade_level_id||""),streamId=String(b.stream_id||"")||null,schemeId=String(b.scheme_id||"");
  if(!schoolId||!yearId||!gradeId||!schemeId)return json({ok:false,error:"Select an academic year, grade and grading scheme."},400);
