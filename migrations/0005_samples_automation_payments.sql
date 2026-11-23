@@ -30,3 +30,11 @@ CREATE TABLE IF NOT EXISTS payment_provider_events (
  UNIQUE(provider,provider_event_id)
 );
 CREATE INDEX IF NOT EXISTS ix_payment_events_payment ON payment_provider_events(payment_id);
+CREATE TABLE IF NOT EXISTS platform_automation_notifications (
+ id TEXT PRIMARY KEY,
+ school_id TEXT NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+ task_key TEXT NOT NULL,
+ reference_date TEXT NOT NULL,
+ created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+ UNIQUE(school_id,task_key,reference_date)
+);
