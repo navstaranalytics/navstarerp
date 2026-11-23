@@ -95,7 +95,7 @@ export async function onRequestPost({request,env}){
     let sampleData={created:false};
     if(body.includeSampleData!==false){
       try{sampleData={created:true,...await seedSchoolSampleData(env.DB,id,curriculum,levels)};}
-      catch(error){console.error("Navstar sample data seed failed",error);return json({ok:false,error:"School was registered, but sample data could not be created. Please retry sample setup from the school workspace."},500)}
+      catch(error){console.error("Navstar sample data seed failed",error);sampleData={created:false,error:"Sample data could not be seeded. Confirm migration 0005 is applied before retrying."}}
     }
     let emailDelivery="not_configured";
     if(env.RESEND_API_KEY && body.suppressWelcomeEmail!==true){
