@@ -12,7 +12,8 @@ const resources={
   terms:{table:"terms",scope:true,fields:["academic_year_id","name","start_date","end_date","status"],required:["school_id","academic_year_id","name","start_date","end_date"],refs:{academic_year_id:"academic_years"}},
   grades:{table:"grade_levels",scope:true,fields:["curriculum","stage_code","stage_name","stage_order","school_level","is_active"],required:["school_id","stage_code","stage_name"]},
   streams:{table:"streams",scope:true,fields:["grade_level_id","name","capacity","classroom","status"],required:["school_id","grade_level_id","name"],refs:{grade_level_id:"grade_levels"}},
-  "learning-areas":{table:"learning_areas",scope:true,fields:["curriculum","code","name","stage_code","pathway","is_active"],required:["school_id","name"]},
+  "learning-areas":{table:"learning_areas",scope:true,fields:["curriculum","code","name","stage_code","pathway","is_active","subject_type","is_mandatory","source_template"],required:["school_id","name"]},
+  "learner-learning-areas":{table:"learner_learning_areas",scope:true,fields:["enrollment_id","learner_id","learning_area_id","selection_type","status"],required:["school_id","enrollment_id","learner_id","learning_area_id"],refs:{enrollment_id:"learner_enrollments",learner_id:"learners",learning_area_id:"learning_areas"}},
   staff:{table:"staff_profiles",scope:true,fields:["user_id","staff_number","department","employment_type","employment_status","hire_date","profile_json"],required:["school_id"],refs:{user_id:"users"}},
   classes:{table:"classes",scope:true,fields:["academic_year_id","grade_level_id","stream_id","class_teacher_staff_id","capacity","room","status"],required:["school_id","academic_year_id","grade_level_id","stream_id"],refs:{academic_year_id:"academic_years",grade_level_id:"grade_levels",stream_id:"streams",class_teacher_staff_id:"staff_profiles"}},
   learners:{table:"learners",scope:true,fields:["admission_number","first_name","middle_name","last_name","gender","date_of_birth","status","pathway","profile_json"],required:["school_id","admission_number","first_name","last_name"]},
@@ -61,6 +62,7 @@ const permissionFor=(name,write=false)=>{
   if(name==="grade-boundaries")return "academics.manage";
   if(name==="classes")return "classes.manage";
   if(["years","terms","grades","streams","learning-areas","grading-schemes"].includes(name))return "academics.manage";
+  if(name==="learner-learning-areas")return "allocations.manage";
   if(["staff"].includes(name))return "staff.manage";
   if(["learners","enrollments","guardians","transfers"].includes(name))return write?"learners.manage":"learners.view";
   if(name==="teacher-allocations")return "allocations.manage";
@@ -235,7 +237,7 @@ export async function onRequestGet({request,env}){
       return json({ok:true,records:rows.results||[]});
     }
     let sql="SELECT * FROM "+cfg.table+(cfg.scope?" WHERE school_id=?":"");
-    if(name==="grades"&&!a.user.is_super_admin)sql+=" AND is_active=1";
+    if(name==="grades"&&!a.user.is_super_admin&&!url.searchParams.has("includeInactive"))sql+=" AND is_active=1";
     if(cfg.scope)sql+=teacherFilter(name,a.user);
     sql+=(name==="audit"?" ORDER BY created_at DESC LIMIT 500":" ORDER BY rowid DESC LIMIT 1000");
     const rows=cfg.scope?await env.DB.prepare(sql).bind(schoolId).all():await env.DB.prepare(sql).all();
@@ -248,6 +250,7 @@ export async function onRequestPost({request,env}){
   if(!cfg)return json({ok:false,error:"Unknown data resource."},404);
   if(!allowed(a.user,permissionFor(name,true)))return json({ok:false,error:"Your role does not have permission to change this resource."},403);
   if(name==="grades"&&!a.user.is_super_admin)return json({ok:false,error:"Grade levels are configured by Navstar Super Admin. School Admins may create streams only."},403);
+  if(name==="learning-areas"&&!a.user.is_super_admin)return json({ok:false,error:"Learning areas are provided by Navstar Super Admin. Schools may activate or deactivate optional areas only."},403);
   if(name==="grade-boundaries")await ensureGradeBoundaryScope(env.DB);
   if(cfg.readOnly)return json({ok:false,error:"This resource is read-only."},405);
   let body;try{body=await request.json()}catch{return json({ok:false,error:"Invalid record data."},400)}
@@ -310,6 +313,15 @@ export async function onRequestPost({request,env}){
   if(name==="grade-boundaries"){const issue=await validateGradeBoundary(env.DB,schoolId,values);if(issue)return json({ok:false,error:issue},400)}
   const teacherError=await validateTeacherWrite(env.DB,a.user,name,values);if(teacherError)return json({ok:false,error:teacherError},403);
   const recordId=id();
+  if(name==="learner-learning-areas"){
+    const enrol=await env.DB.prepare("SELECT le.id,le.learner_id,le.grade_level_id,l.pathway,gl.stage_code FROM learner_enrollments le JOIN learners l ON l.id=le.learner_id AND l.school_id=le.school_id JOIN grade_levels gl ON gl.id=le.grade_level_id AND gl.school_id=le.school_id WHERE le.id=? AND le.school_id=? AND le.learner_id=? AND le.status='active'").bind(values.enrollment_id,schoolId,values.learner_id).first();
+    if(!enrol)return json({ok:false,error:"Select an active enrollment for this learner."},400);
+    const area=await env.DB.prepare("SELECT id,is_mandatory,is_active,stage_code,pathway FROM learning_areas WHERE id=? AND school_id=?").bind(values.learning_area_id,schoolId).first();
+    if(!area||Number(area.is_active)!==1||String(area.stage_code||"")!==String(enrol.stage_code||""))return json({ok:false,error:"This learning area is not active for the learner's current grade."},400);
+    if(Number(area.is_mandatory)===1)return json({ok:false,error:"Mandatory learning areas are assigned automatically during enrollment."},400);
+    if(area.pathway&&area.pathway!==enrol.pathway)return json({ok:false,error:"This learning area does not match the learner's selected pathway."},400);
+    values.selection_type="elective";
+  }
   try{
     if(name==="settings"){
       await env.DB.prepare("INSERT INTO platform_settings (setting_key,setting_value,updated_by) VALUES (?,?,?) ON CONFLICT(setting_key) DO UPDATE SET setting_value=excluded.setting_value,updated_by=excluded.updated_by,updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now')")
@@ -336,6 +348,14 @@ export async function onRequestPost({request,env}){
         }else await env.DB.prepare(sql).bind(...vals).run();
       }else await env.DB.prepare(sql).bind(...vals).run();
     }else await env.DB.prepare(sql).bind(...vals).run();
+    if(name==="enrollments"){
+      const grade=await env.DB.prepare("SELECT stage_code FROM grade_levels WHERE id=? AND school_id=?").bind(values.grade_level_id,schoolId).first();
+      if(grade?.stage_code){
+        const mandatory=await env.DB.prepare("SELECT id FROM learning_areas WHERE school_id=? AND stage_code=? AND is_active=1 AND is_mandatory=1").bind(schoolId,grade.stage_code).all();
+        if((mandatory.results||[]).length)await env.DB.batch(mandatory.results.map(x=>env.DB.prepare("INSERT OR IGNORE INTO learner_learning_areas(id,school_id,enrollment_id,learner_id,learning_area_id,selection_type,status) VALUES(?,?,?,?,?,'mandatory','active')").bind(id(),schoolId,recordId,values.learner_id,x.id)));
+      }
+    }
+    if(name==="learner-learning-areas")values.selected_by=a.user.id;
     const record=await env.DB.prepare("SELECT * FROM "+cfg.table+" WHERE id=?").bind(recordId).first();
     await audit(env.DB,a.user,schoolId,"record.created",name,recordId);
     return json({ok:true,record},201);
@@ -371,7 +391,14 @@ export async function onRequestPatch({request,env}){
   const parts=new URL(request.url).pathname.split("/"),name=parts[parts.length-2],recordId=decodeURIComponent(parts[parts.length-1]||""),cfg=resources[name];
   if(!cfg||!recordId)return json({ok:false,error:"Unknown resource or record."},404);
   if(!allowed(a.user,permissionFor(name,true)))return json({ok:false,error:"Your role does not have permission to change this resource."},403);
-  if(name==="grades"&&!a.user.is_super_admin)return json({ok:false,error:"Grade levels are configured by Navstar Super Admin. School Admins may create streams only."},403);
+  if(name==="grades"&&!a.user.is_super_admin){
+    let submitted;try{submitted=await request.clone().json()}catch{submitted={}}
+    if(Object.keys(submitted).some(k=>k!=="is_active")||submitted.is_active===undefined)return json({ok:false,error:"School Admins may only activate or deactivate grades assigned by Super Admin."},403);
+  }
+  if(name==="learning-areas"&&!a.user.is_super_admin){
+    let submitted;try{submitted=await request.clone().json()}catch{submitted={}}
+    if(Object.keys(submitted).some(k=>k!=="is_active")||submitted.is_active===undefined)return json({ok:false,error:"School Admins may only activate or deactivate optional learning areas supplied by Super Admin."},403);
+  }
   if(name==="grade-boundaries")await ensureGradeBoundaryScope(env.DB);
   if(cfg.readOnly)return json({ok:false,error:"This resource is read-only."},405);
   if(name==="assessment-results")return json({ok:false,error:"Update assessment scores through the assessment marking workspace so score limits and enrolment are checked."},405);
@@ -390,6 +417,17 @@ export async function onRequestPatch({request,env}){
     if(cfg.scope&&!a.user.is_super_admin&&requested&&requested!==a.user.school_id)return json({ok:false,error:"You cannot update records in another school."},403);
     const current=await env.DB.prepare("SELECT * FROM "+cfg.table+" WHERE "+where).bind(...(cfg.scope?[recordId,schoolId]:[recordId])).first();
     if(!current)return json({ok:false,error:"Record not found in the selected school."},404);
+    if(name==="grades"&&!a.user.is_super_admin&&Number(values.is_active)===0){
+      const hasLearners=await env.DB.prepare("SELECT 1 FROM learner_enrollments WHERE school_id=? AND grade_level_id=? AND status='active' LIMIT 1").bind(schoolId,recordId).first();
+      if(hasLearners)return json({ok:false,error:"This grade has active learner enrollments. Keep it active or complete/transfer those enrollments first."},409);
+    }
+    if(name==="learning-areas"&&!a.user.is_super_admin){
+      if(Number(current.is_mandatory)===1)return json({ok:false,error:"Mandatory learning areas cannot be deactivated."},403);
+      if(Number(values.is_active)===0){
+        const assigned=await env.DB.prepare("SELECT 1 FROM learner_learning_areas WHERE school_id=? AND learning_area_id=? AND status='active' LIMIT 1").bind(schoolId,recordId).first();
+        if(assigned)return json({ok:false,error:"This learning area is assigned to learners. Preserve existing learner records and deactivate it only after their selections are reviewed."},409);
+      }
+    }
     const gradeError=await validateConfiguredGrade(env.DB,name,schoolId,values,current);if(gradeError)return json({ok:false,error:gradeError},403);
     const refError=await validateRefs(env.DB,cfg,values,schoolId);if(refError)return json({ok:false,error:refError},400);
     if(name==="timetable"){const issue=await validateTimetableEntry(env.DB,schoolId,{...current,...values},recordId);if(issue)return json({ok:false,error:issue},400);}
