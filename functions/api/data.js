@@ -243,7 +243,16 @@ export async function onRequestPost({request,env}){
   if(name==="announcements")values.created_by=a.user.id;
   if(name==="attendance-sessions")values.taken_by=a.user.id;
   if(name==="attendance-records")values.marked_by=a.user.id;
+  if(name==="finance-transactions")values.recorded_by=a.user.id;
   const refError=await validateRefs(env.DB,cfg,values,schoolId);if(refError)return json({ok:false,error:refError},400);
+  if(name==="learner-fee-accounts"){
+    const fee=await env.DB.prepare("SELECT amount,grade_level_id,is_active FROM fee_structures WHERE id=? AND school_id=?").bind(values.fee_structure_id,schoolId).first();
+    if(!fee||Number(fee.is_active)===0)return json({ok:false,error:"Select an active fee structure from this school."},400);
+    if(values.academic_year_id){const enrollment=await env.DB.prepare("SELECT grade_level_id FROM learner_enrollments WHERE learner_id=? AND school_id=? AND academic_year_id=? AND status='active'").bind(values.learner_id,schoolId,values.academic_year_id).first();if(!enrollment)return json({ok:false,error:"The learner must be actively enrolled in the selected academic year before fees are assigned."},400);if(fee.grade_level_id&&fee.grade_level_id!==enrollment.grade_level_id)return json({ok:false,error:"This fee structure is not assigned to the learner's grade."},400);}
+    values.amount_due=Number(fee.amount);values.amount_paid=0;values.balance=Number(fee.amount);values.status="open";
+  }
+  if(name==="finance-transactions"&&(!Number.isFinite(Number(values.amount))||Number(values.amount)<=0))return json({ok:false,error:"Transaction amount must be greater than zero."},400);
+
   if(name==="timetable"){const issue=await validateTimetableEntry(env.DB,schoolId,values);if(issue)return json({ok:false,error:issue},400);}
   if(name==="attendance-sessions"&&values.stream_id){const stream=await env.DB.prepare("SELECT grade_level_id FROM streams WHERE id=? AND school_id=?").bind(values.stream_id,schoolId).first();if(!stream||stream.grade_level_id!==values.grade_level_id)return json({ok:false,error:"The selected stream must belong to the selected grade."},400);}
   if(name==="attendance-records"){const pair=await env.DB.prepare("SELECT s.grade_level_id,s.stream_id,e.grade_level_id AS enrolled_grade,e.stream_id AS enrolled_stream,e.status FROM attendance_sessions s JOIN learner_enrollments e ON e.learner_id=? AND e.school_id=s.school_id AND e.academic_year_id=s.academic_year_id WHERE s.id=? AND s.school_id=?").bind(values.learner_id,values.session_id,schoolId).first();if(!pair||pair.status!=="active"||pair.grade_level_id!==pair.enrolled_grade||(pair.stream_id&&pair.stream_id!==pair.enrolled_stream))return json({ok:false,error:"This learner is not actively enrolled in the selected attendance class."},400);}
@@ -299,6 +308,7 @@ export async function onRequestPatch({request,env}){
   if(!cfg||!recordId)return json({ok:false,error:"Unknown resource or record."},404);
   if(!allowed(a.user,permissionFor(name,true)))return json({ok:false,error:"Your role does not have permission to change this resource."},403);
   if(cfg.readOnly)return json({ok:false,error:"This resource is read-only."},405);
+  if(name==="learner-fee-accounts")return json({ok:false,error:"Fee account balances cannot be edited directly. They must be updated through a verified fee receipt workflow."},405);
   if(name==="payments")return json({ok:false,error:"Payment records are immutable. Record a separate reversal or correction instead."},405);
   let body;try{body=await request.json()}catch{return json({ok:false,error:"Invalid record update."},400)}
   if(name==="invoices"&&body.amount_paid!==undefined)return json({ok:false,error:"Invoice payments must be recorded through the payment register."},403);
