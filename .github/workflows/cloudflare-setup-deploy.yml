@@ -64,6 +64,34 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: wrangler d1 migrations apply navstar-erp-db --remote
 
+      - name: Sync M-Pesa secrets to Cloudflare (when supplied)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          MPESA_CONSUMER_KEY: ${{ secrets.MPESA_CONSUMER_KEY }}
+          MPESA_CONSUMER_SECRET: ${{ secrets.MPESA_CONSUMER_SECRET }}
+          MPESA_SHORTCODE: ${{ secrets.MPESA_SHORTCODE }}
+          MPESA_PASSKEY: ${{ secrets.MPESA_PASSKEY }}
+          MPESA_CALLBACK_TOKEN: ${{ secrets.MPESA_CALLBACK_TOKEN }}
+          MPESA_ENV: ${{ secrets.MPESA_ENV }}
+          MPESA_TRANSACTION_TYPE: ${{ secrets.MPESA_TRANSACTION_TYPE }}
+        run: |
+          set -eu
+          put_secret() {
+            name="$1"
+            value="$2"
+            if [ -n "$value" ]; then
+              printf '%s' "$value" | wrangler secret put "$name"
+            fi
+          }
+          put_secret MPESA_CONSUMER_KEY "$MPESA_CONSUMER_KEY"
+          put_secret MPESA_CONSUMER_SECRET "$MPESA_CONSUMER_SECRET"
+          put_secret MPESA_SHORTCODE "$MPESA_SHORTCODE"
+          put_secret MPESA_PASSKEY "$MPESA_PASSKEY"
+          put_secret MPESA_CALLBACK_TOKEN "$MPESA_CALLBACK_TOKEN"
+          put_secret MPESA_ENV "$MPESA_ENV"
+          put_secret MPESA_TRANSACTION_TYPE "$MPESA_TRANSACTION_TYPE"
+
       - name: Deploy Navstar Worker
         if: ${{ inputs.deploy_worker }}
         env:
