@@ -63,7 +63,8 @@ export default {
       if (policySession && !policySession.is_super_admin) {
         const mode = policySession.access_mode || "full";
         const billingAllowed = ["/api/auth/me","/api/auth/logout","/api/school-workspace-summary","/api/terminology","/api/system-guide","/api/support","/api/payments/mpesa/stkpush"].includes(route) || /^\/api\/data\/(invoices|payments|subscriptions)$/.test(route);
-        const locked = mode === "block_all" || (mode === "billing_only" && !billingAllowed) || (mode === "read_only" && !["GET","HEAD","OPTIONS"].includes(request.method));
+        const readOnlyPaymentAllowed = route === "/api/payments/mpesa/stkpush" || route === "/api/support";
+        const locked = mode === "block_all" || (mode === "billing_only" && !billingAllowed) || (mode === "read_only" && !["GET","HEAD","OPTIONS"].includes(request.method) && !readOnlyPaymentAllowed);
         if (locked) return Response.json({ ok:false, error: policySession.access_notice || "This school account is restricted by its subscription policy. Contact Navstar Analytics or open Billing & Support.", accessMode:mode }, { status:423, headers:{"Cache-Control":"no-store"} });
       }
     }
