@@ -3,6 +3,7 @@ import { onRequestPost as supportUpgradePost } from "./functions/api/support-upg
 import { onRequestPost as aiDiagnosticsPost } from "./functions/api/ai-diagnostics.js";
 import { onRequestGet as feeReceiptsGet, onRequestPost as feeReceiptsPost } from "./functions/api/fee-receipts.js";
 import { onRequestGet as outputTemplatesGet, onRequestPost as outputTemplatesPost } from "./functions/api/output-templates.js";
+import { onRequestPost as bulkLearnerImportPost } from "./functions/api/bulk-import-learners.js";
 import { onRequestGetSettings as admissionSettingsGet, onRequestPostSettings as admissionSettingsPost, onRequestPostNextAdmissionNumber as nextAdmissionNumberPost, onRequestPostPhotos as learnerPhotosPost, onRequestGetPhoto as learnerPhotoGet } from "./functions/api/learner-photos.js";
 import { onRequestGet as recoveryGet, onRequestPost as recoveryPost } from "./functions/api/recovery.js";
 import { onRequestGet as healthGet } from "./functions/api/health.js";
@@ -68,6 +69,10 @@ export default {
       return learnerPhotosPost({ request, env });
     }
     if (route.startsWith("/api/learner-photos/") && request.method === "GET") return learnerPhotoGet({ request, env });
+    if (route === "/api/bulk-import/learners") {
+      if (request.method !== "POST") return new Response("Method not allowed", { status: 405, headers: { Allow: "POST" } });
+      return bulkLearnerImportPost({ request, env });
+    }
     if (route === "/api/output-templates") {
       if (request.method === "GET") return outputTemplatesGet({ request, env });
       if (request.method === "POST") return outputTemplatesPost({ request, env });
