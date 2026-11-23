@@ -48,6 +48,7 @@ function configuredGradeSpecs(levels){
  if(selected.some(x=>/^primary$/i.test(x)))specs.push(...Array.from({length:6},(_,i)=>["G"+(i+1),"Grade "+(i+1),i+1,"Primary"]));
  if(selected.some(x=>/junior/i.test(x))||selected.some(x=>/^Grade (7|8|9)$/.test(x)))specs.push(...[7,8,9].map(n=>["G"+n,"Grade "+n,n+1,"Junior School"]));
  if(selected.some(x=>/senior/i.test(x))||selected.some(x=>/^Grade (10|11|12)$/.test(x)))specs.push(...[10,11,12].map(n=>["G"+n,"Grade "+n,n+1,"Senior School"]));
+ if(selected.some(x=>/8-4-4 primary/i.test(x)))specs.push(...Array.from({length:8},(_,i)=>["STD"+(i+1),"Standard "+(i+1),i+1,"Primary"]));
  if(selected.some(x=>/8-4-4|secondary/i.test(x)))specs.push(...[1,2,3,4].map(n=>["FORM"+n,"Form "+n,20+n,"Secondary"]));
  for(const value of selected){const m=String(value).match(/^(Grade (?:[1-9]|1[0-2])|Form [1-4]|PP[12])$/i);if(m&&!specs.some(x=>x[0].toLowerCase()===m[1].replace(/\s/g,"").toLowerCase())){const name=m[1],code=name.replace(/\s/g,"").toUpperCase(),level=/^PP/.test(code)||/^Grade [1-6]$/i.test(name)?"Primary":/^Grade [7-9]$/i.test(name)?"Junior School":/^Grade 1[0-2]$/i.test(name)?"Senior School":"Secondary";specs.push([code,name,specs.length+1,level]);}}
  return specs;
@@ -80,6 +81,8 @@ function curriculumLearningAreas(curriculum,levels){
     add(stage,[...core(["English","Kiswahili / Kenya Sign Language","Core / Essential Mathematics","Community Service Learning","Physical Education","ICT Skills","Pastoral / Religious Programme of Instruction"]),
       ...["STEM","Social Sciences","Arts & Sports Science"].flatMap(path=> ({"STEM":["Biology","Chemistry","Physics","General Science","Agriculture","Computer Studies","Home Science","Aviation","Building Construction","Electricity","Metalwork","Power Mechanics","Woodwork","Media Technology","Marine and Fisheries Technology"],"Social Sciences":["Literature in English","Indigenous Languages","Fasihi ya Kiswahili","Sign Language","Arabic","French","German","Mandarin Chinese","Christian Religious Education","Islamic Religious Education","Hindu Religious Education","Business Studies","History and Citizenship","Geography"],"Arts & Sports Science":["Sports and Recreation","Music and Dance","Theatre and Film","Fine Arts"]}[path]||[]).map(n=>[n.toUpperCase().replace(/[^A-Z0-9]+/g,"_").slice(0,18),n,"optional",path]))]);
    }
+  }else if(/^STD[1-8]$/.test(stage)){
+   add(stage,[...core(["English","Kiswahili","Mathematics"]),...optional(["Science and Technology","Social Studies","Religious Education (CRE / IRE / HRE)","Agriculture","Home Science","Art and Craft","Music","Physical Education","Computer Studies"])]);
   }else if(/^FORM[1-4]$/.test(stage)){
    add(stage,[...core(["English","Kiswahili","Mathematics"]),...optional(["Biology","Chemistry","Physics","Geography","History and Government","Christian Religious Education","Islamic Religious Education","Hindu Religious Education","Business Studies","Agriculture","Computer Studies","Home Science","Art and Design","Music","French","German","Arabic","Kenya Sign Language","Woodwork","Metalwork","Building Construction","Power Mechanics","Electricity","Aviation Technology"])]);
   }
