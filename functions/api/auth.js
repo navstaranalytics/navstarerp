@@ -168,7 +168,7 @@ export async function getAuthenticatedSession(request, env) {
   let scope={};try{scope=JSON.parse(row.scope_json||'{}')}catch{}
   const primaryRoleKey=roleKeysRaw[0]||row.role_key,primaryRoleName=roleNames[0]||row.role_name,primaryRoleId=(roleRows.results||[])[0]?.id||row.role_id;
   const normalizedRoleKey=primaryRoleKey==='parent_guardian'?'parent':primaryRoleKey==='student_learner'?'student':primaryRoleKey;
-  return {...row,role_id:primaryRoleId,role_name:primaryRoleName,role_key:normalizedRoleKey,role_keys:roleKeys,role_names:roleNames,permissions,scope,is_super_admin:roleKeysRaw.includes('super_admin'),access_mode:accessMode,access_notice:accessNotice,subscription_status:subscriptionStatus};
+  return {...row,role_id:primaryRoleId,role_name:primaryRoleName,role_key:normalizedRoleKey,role_keys:roleKeys,role_names:roleNames,permissions,scope,is_super_admin:roleKeysRaw.includes('super_admin'),access_mode:accessMode,access_notice:accessNotice,subscription_status:subscriptionStatus,session_idle_timeout_minutes:sessionPolicy.idle_timeout_minutes};
 }
 async function issueSession(env, request, userId, remember = false) {
   const token = randomHex(32);
@@ -286,7 +286,7 @@ export async function onRequestPostLogin({ request, env }) {
 export async function onRequestGetMe({request,env}) {
  const user=await getAuthenticatedSession(request,env);
  if(!user)return json({ok:false,authenticated:false},401);
- return json({ok:true,authenticated:true,user:{id:user.id,fullName:user.full_name,username:user.username,email:user.email,phone:user.phone,role:user.role_name,roleKey:user.role_key,roleKeys:user.role_keys||[user.role_key],roleNames:user.role_names||[user.role_name],schoolId:user.school_id||null,schoolName:user.school_name||null,permissions:user.permissions,scope:user.scope,designation:user.designation,organisationName:user.organisation_name,profilePhotoUrl:user.profile_photo_url,country:user.country,timezone:user.timezone,currency:user.currency,accessMode:user.access_mode||"full",accessNotice:user.access_notice||"",subscriptionStatus:user.subscription_status||null}});
+ return json({ok:true,authenticated:true,user:{id:user.id,fullName:user.full_name,username:user.username,email:user.email,phone:user.phone,role:user.role_name,roleKey:user.role_key,roleKeys:user.role_keys||[user.role_key],roleNames:user.role_names||[user.role_name],schoolId:user.school_id||null,schoolName:user.school_name||null,permissions:user.permissions,scope:user.scope,designation:user.designation,organisationName:user.organisation_name,profilePhotoUrl:user.profile_photo_url,country:user.country,timezone:user.timezone,currency:user.currency,accessMode:user.access_mode||"full",accessNotice:user.access_notice||"",subscriptionStatus:user.subscription_status||null,sessionIdleTimeoutMinutes:user.session_idle_timeout_minutes||30}});
 }
 export async function onRequestPostLogout({ request, env }) {
   const token = String(request.headers.get("X-Navstar-Session")||cookieValue(request, COOKIE)).trim();
