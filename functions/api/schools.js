@@ -67,6 +67,23 @@ async function syncSchoolGradeLevels(db,schoolId,curriculum,levels){
  for(const row of existing.results||[])if(!wanted.has(row.stage_code))statements.push(db.prepare("UPDATE grade_levels SET is_active=0 WHERE id=? AND school_id=?").bind(row.id,schoolId));
  if(statements.length)await db.batch(statements);
 }
+function normalizeCurricula(body, fallback) {
+ const allowed=["Kenyan CBE","Kenyan 8-4-4","International / Cambridge","Custom"];
+ const values=Array.isArray(body.curricula)?body.curricula:(fallback?[fallback]:[]);
+ return [...new Set(values.map(clean).filter(x=>allowed.includes(x)))];
+}
+function validateCurricula(curricula,levels) {
+ if(!curricula.length)return "Select at least one curriculum framework.";
+ if(levels.some(x=>/^8-4-4/.test(x))&&!curricula.includes("Kenyan 8-4-4"))return "Select Kenyan 8-4-4 to offer Standards 1–8 or Forms 1–4.";
+ if(levels.some(x=>/^(Pre-Primary|Primary|Junior School|Senior School)$/.test(x))&&!curricula.includes("Kenyan CBE"))return "Select Kenyan CBE to offer CBE school divisions.";
+ return null;
+}
+async function syncSchoolCurricula(db,schoolId,curricula,levels) {
+ for(const curriculum of curricula){
+  const scoped=curriculum==="Kenyan 8-4-4"?levels.filter(x=>/^8-4-4/.test(x)):curriculum==="Kenyan CBE"?levels.filter(x=>/^(Pre-Primary|Primary|Junior School|Senior School)$/.test(x)):[];
+  if(scoped.length){await syncSchoolGradeLevels(db,schoolId,curriculum,scoped);await syncSchoolLearningAreas(db,schoolId,curriculum,scoped);}
+ }
+}
 function curriculumSelectionError(curriculum,levels){
  const is844=/8-4-4/i.test(String(curriculum||"")),isCbe=/cbe|cbc|competenc/i.test(String(curriculum||""));
  const legacy=(levels||[]).some(x=>/^8-4-4/i.test(String(x)));
@@ -137,6 +154,7 @@ function mapSchool(row){
   let meta={};
   try{meta=JSON.parse(row.settings_json||"{}").navstar_school_meta||{}}catch{}
   let levels=[];try{levels=JSON.parse(row.school_levels_json||"[]")}catch{}
+  let curricula=[];try{curricula=JSON.parse(row.curricula_json||"[]")}catch{} if(!curricula.length&&row.curriculum)curricula=[row.curriculum];
   if(Array.isArray(levels)&&levels.some(x=>/^Grade |^Form |^PP[12]$/i.test(String(x)))){
     const legacy=levels.map(String),groups=[];
     if(legacy.some(x=>/^PP[12]$/i.test(x)))groups.push("Pre-Primary");
@@ -149,7 +167,7 @@ function mapSchool(row){
   return {id:row.id,name:row.name,code:row.school_code,registrationNumber:row.registration_number||"",emisCode:row.emis_code||"",
     category:meta.category||row.institution_type||"",level:meta.level||"",ownership:row.ownership||"",county:row.county||"",
     subCounty:row.sub_county||"",town:row.town||"",contact:row.contact_person||"",email:row.contact_email||"",
-    phone:row.contact_phone||"",address:row.physical_address||"",curriculum:row.curriculum||"Kenyan CBE",
+    phone:row.contact_phone||"",address:row.physical_address||"",curriculum:row.curriculum||"Kenyan CBE",curricula,
     curriculumLabel:meta.curriculumLabel||row.curriculum||"Kenyan CBE",levels,plan:meta.plan||"Starter",
     status:displayStatus(row.status),expiry:meta.expiry||"",modules:modulesForLevels(levels),
     learnerCount:Number(meta.learnerCount||0),teacherCount:Number(meta.teacherCount||0),created:row.created_at,schoolAdmin:row.admin_user_id?{id:row.admin_user_id,fullName:row.admin_full_name,username:row.admin_username,email:row.admin_email,phone:row.admin_phone,status:row.admin_status,role:"School Administrator"}:null};
@@ -189,10 +207,11 @@ export async function onRequestPost({request,env}){
   if(!/^\S+@\S+\.\S+$/.test(email)||email.length>190)return json({ok:false,error:"Enter the school's official email address so Navstar can send its welcome information."},400);
   if(phone.length>40||contact.length>120)return json({ok:false,error:"Check the school contact name and phone number."},400);
   const id=makeId(),code=clean(body.code)||("NS-"+crypto.randomUUID().slice(0,8).toUpperCase());
-  const status=normStatus(body.status),curriculum=clean(body.curriculum)||"Kenyan CBE";
+  const status=normStatus(body.status),curricula=normalizeCurricula(body,clean(body.curriculum)||"Kenyan CBE");
+  const curriculum=curricula.length>1?"Multiple curricula":(curricula[0]||"Kenyan CBE");
   const levels=Array.isArray(body.levels)?[...new Set(body.levels.map(clean).filter(Boolean))]:[];
   if(!levels.length)return json({ok:false,error:"Select at least one school level in Super Admin before registering this school."},400);
-  const curriculumIssue=curriculumSelectionError(curriculum,levels);if(curriculumIssue)return json({ok:false,error:curriculumIssue},400);
+  const curriculumIssue=validateCurricula(curricula,levels);if(curriculumIssue)return json({ok:false,error:curriculumIssue},400);
   const meta={category:clean(body.category),level:clean(body.level),plan:clean(body.plan)||"Starter",expiry:clean(body.expiry),modules:modulesForLevels(levels),learnerCount:0,teacherCount:0};
   try{
     await env.DB.batch([
@@ -200,6 +219,7 @@ export async function onRequestPost({request,env}){
         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,CASE WHEN ?='active' THEN strftime('%Y-%m-%dT%H:%M:%fZ','now') ELSE NULL END)`)
         .bind(id,code,name,clean(body.registrationNumber)||null,clean(body.emisCode)||null,meta.category||null,clean(body.ownership)||null,county,clean(body.subCounty)||null,clean(body.town)||null,clean(body.address)||null,contact||null,email,phone||null,curriculum,JSON.stringify(levels),status,auth.user.id,status),
       env.DB.prepare("INSERT INTO school_settings (school_id,timezone,currency,settings_json) VALUES (?,'Africa/Nairobi','KES',?)").bind(id,JSON.stringify({navstar_school_meta:meta})),
+      env.DB.prepare("UPDATE schools SET curricula_json=? WHERE id=?").bind(JSON.stringify(curricula),id),
       env.DB.prepare("INSERT INTO audit_logs (id,actor_user_id,school_id,action,resource_type,resource_id,outcome,details_json) VALUES (?,?,?,'school.created','school',?,'success',?)").bind(makeId(),auth.user.id,id,id,JSON.stringify({name,schoolCode:code,levels}))
     ]);
     let sampleData={created:false};
@@ -207,8 +227,7 @@ export async function onRequestPost({request,env}){
       try{sampleData={created:true,...await seedSchoolSampleData(env.DB,id,curriculum,levels)};}
       catch(error){console.error("Navstar sample data seed failed",error);sampleData={created:false,error:"Sample data could not be seeded. Confirm migration 0005 is applied before retrying."}}
     }
-    await syncSchoolGradeLevels(env.DB,id,curriculum,levels);
-    await syncSchoolLearningAreas(env.DB,id,curriculum,levels);
+    await syncSchoolCurricula(env.DB,id,curricula,levels);
     let emailDelivery="not_configured";
     if(env.RESEND_API_KEY && body.suppressWelcomeEmail!==true){
       const from=env.MAIL_FROM||"Navstar Analytics <no-reply@mail.navstardigitalhub.co.ke>",loginUrl=new URL("/login.html",new URL(request.url).origin).toString();
@@ -242,18 +261,19 @@ export async function onRequestPatch({request,env}){
     let selectedLevels=[];
     try{selectedLevels=body.levels===undefined?JSON.parse(existing.school_levels_json||"[]"):(Array.isArray(body.levels)?body.levels:[])}catch{selectedLevels=[]}
     selectedLevels=[...new Set(selectedLevels.map(clean).filter(Boolean))];
-    const curriculumIssue=curriculumSelectionError(body.curriculum===undefined?existing.curriculum:clean(body.curriculum),selectedLevels);if(curriculumIssue)return json({ok:false,error:curriculumIssue},400);
+    let previousCurricula=[];try{previousCurricula=JSON.parse(existing.curricula_json||"[]")}catch{}
+    const curricula=normalizeCurricula(body,previousCurricula[0]||existing.curriculum||"Kenyan CBE");
+    const curriculumIssue=validateCurricula(curricula,selectedLevels);if(curriculumIssue)return json({ok:false,error:curriculumIssue},400);
     const levels=JSON.stringify(selectedLevels);
     meta.modules=modulesForLevels(selectedLevels);
-    const curriculum=body.curriculum===undefined?existing.curriculum:clean(body.curriculum);
+    const curriculum=curricula.length>1?"Multiple curricula":(curricula[0]||existing.curriculum);
     await env.DB.batch([
-      env.DB.prepare(`UPDATE schools SET school_code=?,name=?,registration_number=?,institution_type=?,ownership=?,county=?,sub_county=?,town=?,physical_address=?,contact_person=?,contact_email=?,contact_phone=?,curriculum=?,school_levels_json=?,status=?,activated_at=CASE WHEN ?='active' THEN COALESCE(activated_at,strftime('%Y-%m-%dT%H:%M:%fZ','now')) ELSE activated_at END,updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?`)
-        .bind(code,name,body.registrationNumber===undefined?existing.registration_number:clean(body.registrationNumber),meta.category||null,body.ownership===undefined?existing.ownership:clean(body.ownership),body.county===undefined?existing.county:clean(body.county),body.subCounty===undefined?existing.sub_county:clean(body.subCounty),body.town===undefined?existing.town:clean(body.town),body.address===undefined?existing.physical_address:clean(body.address),body.contact===undefined?existing.contact_person:clean(body.contact),body.email===undefined?existing.contact_email:clean(body.email),body.phone===undefined?existing.contact_phone:clean(body.phone),curriculum,levels,status,status,id),
+      env.DB.prepare(`UPDATE schools SET school_code=?,name=?,registration_number=?,institution_type=?,ownership=?,county=?,sub_county=?,town=?,physical_address=?,contact_person=?,contact_email=?,contact_phone=?,curriculum=?,curricula_json=?,school_levels_json=?,status=?,activated_at=CASE WHEN ?='active' THEN COALESCE(activated_at,strftime('%Y-%m-%dT%H:%M:%fZ','now')) ELSE activated_at END,updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?`)
+        .bind(code,name,body.registrationNumber===undefined?existing.registration_number:clean(body.registrationNumber),meta.category||null,body.ownership===undefined?existing.ownership:clean(body.ownership),body.county===undefined?existing.county:clean(body.county),body.subCounty===undefined?existing.sub_county:clean(body.subCounty),body.town===undefined?existing.town:clean(body.town),body.address===undefined?existing.physical_address:clean(body.address),body.contact===undefined?existing.contact_person:clean(body.contact),body.email===undefined?existing.contact_email:clean(body.email),body.phone===undefined?existing.contact_phone:clean(body.phone),curriculum,JSON.stringify(curricula),levels,status,status,id),
       env.DB.prepare("INSERT INTO school_settings (school_id,settings_json) VALUES (?,?) ON CONFLICT(school_id) DO UPDATE SET settings_json=excluded.settings_json,updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now')")
         .bind(id,JSON.stringify({...current,navstar_school_meta:meta}))
     ]);
-    await syncSchoolGradeLevels(env.DB,id,curriculum,selectedLevels);
-    await syncSchoolLearningAreas(env.DB,id,curriculum,selectedLevels);
+    await syncSchoolCurricula(env.DB,id,curricula,selectedLevels);
     const row=await env.DB.prepare(`SELECT s.*,ss.settings_json,
       (SELECT u.id FROM school_memberships m JOIN users u ON u.id=m.user_id JOIN user_role_assignments a ON a.user_id=u.id AND a.school_id=s.id JOIN roles r ON r.id=a.role_id AND r.role_key='school_admin' WHERE m.school_id=s.id AND m.membership_status IN ('active','invited') ORDER BY m.created_at LIMIT 1) AS admin_user_id,
       (SELECT u.full_name FROM school_memberships m JOIN users u ON u.id=m.user_id JOIN user_role_assignments a ON a.user_id=u.id AND a.school_id=s.id JOIN roles r ON r.id=a.role_id AND r.role_key='school_admin' WHERE m.school_id=s.id AND m.membership_status IN ('active','invited') ORDER BY m.created_at LIMIT 1) AS admin_full_name,
