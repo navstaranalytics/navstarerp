@@ -151,8 +151,7 @@ export async function onRequestGet({request,env}){
       if(!levels.length)continue;
       const existingGrades=await env.DB.prepare("SELECT 1 FROM grade_levels WHERE school_id=? LIMIT 1").bind(row.id).first();
       if(!existingGrades)await syncSchoolGradeLevels(env.DB,row.id,row.curriculum||"Kenyan CBE",levels);
-      const existingAreas=await env.DB.prepare("SELECT 1 FROM learning_areas WHERE school_id=? LIMIT 1").bind(row.id).first();
-      if(!existingAreas)await syncSchoolLearningAreas(env.DB,row.id,row.curriculum||"Kenyan CBE",levels);
+      await syncSchoolLearningAreas(env.DB,row.id,row.curriculum||"Kenyan CBE",levels);
     }
     return json({ok:true,schools:(rows.results||[]).map(mapSchool)});
   }catch{return json({ok:false,error:"School records could not be loaded from the database."},500)}
