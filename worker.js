@@ -7,6 +7,7 @@ import { onRequestPost as bulkLearnerImportPost } from "./functions/api/bulk-imp
 import { onRequestPost as bulkEnrollmentImportPost } from "./functions/api/bulk-import-enrollments.js";
 import { onRequestPost as timetableGeneratePost } from "./functions/api/timetable-generate.js";
 import { onRequestPost as reportCardGeneratePost } from "./functions/api/report-card-generate.js";
+import { onRequestGet as schoolWorkspaceSummaryGet } from "./functions/api/school-workspace-summary.js";
 import { onRequestGet as schoolLogoGet, onRequestPost as schoolLogoPost } from "./functions/api/school-branding.js";
 import { onRequestGetSettings as admissionSettingsGet, onRequestPostSettings as admissionSettingsPost, onRequestPostNextAdmissionNumber as nextAdmissionNumberPost, onRequestPostPhotos as learnerPhotosPost, onRequestGetPhoto as learnerPhotoGet } from "./functions/api/learner-photos.js";
 import { onRequestGet as recoveryGet, onRequestPost as recoveryPost } from "./functions/api/recovery.js";
@@ -47,7 +48,7 @@ export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     const route = url.pathname;
-    if (route === "/api/health") {
+    if (route === "/api/school-workspace-summary") {\n      if (request.method !== "GET") return new Response("Method not allowed", { status: 405, headers: { Allow: "GET" } });\n      return schoolWorkspaceSummaryGet({ request, env });\n    }\n    if (route === "/api/health") {
       if (request.method !== "GET") return new Response("Method not allowed", { status: 405, headers: { Allow: "GET" } });
       return healthGet({ request, env, params: {}, data: {}, waitUntil: promise => ctx.waitUntil(promise) });
     }
