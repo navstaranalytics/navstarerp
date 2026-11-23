@@ -70,7 +70,11 @@ export default {
       if (request.method !== "POST") return new Response("Method not allowed", { status: 405, headers: { Allow: "POST" } });
       return onRequestPostSetupAdmin({ request, env });
     }
-    if (route === "/api/storage/status") {\n      if (request.method !== "GET") return new Response("Method not allowed", { status: 405, headers: { Allow: "GET" } });\n      return storageStatusGet({ request, env });\n    }\n    if (route === "/api/branding/logo") {
+    if (route === "/api/storage/status") {
+      if (request.method !== "GET") return new Response("Method not allowed", { status: 405, headers: { Allow: "GET" } });
+      return storageStatusGet({ request, env });
+    }
+    if (route === "/api/branding/logo") {
       if (request.method === "GET") return brandingLogoGet({ request, env });
       if (request.method === "POST") return brandingLogoPost({ request, env });
       return new Response("Method not allowed", { status: 405, headers: { Allow: "GET, POST" } });
