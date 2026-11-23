@@ -7,6 +7,7 @@ import { onRequestPost as upgradePost } from "./functions/api/upgrade.js";
 import { onRequestPost as accessUpgradePost } from "./functions/api/access-upgrade.js";
 import { onRequestPost as schoolAdminPost } from "./functions/api/school-admin.js";
 import { onRequestGet as schoolUsersGet, onRequestPost as schoolUsersPost } from "./functions/api/school-users.js";
+import { onRequestGet as portalGet } from "./functions/api/portal.js";
 import { onRequestGet as brandingGet, onRequestPost as brandingPost, onRequestGetLogo as brandingLogoGet, onRequestPostLogo as brandingLogoPost, onRequestGetStorageStatus as storageStatusGet, onRequestGetLoginBackground as loginBackgroundGet, onRequestPostLoginBackground as loginBackgroundPost } from "./functions/api/branding.js";
 import { onRequestPost as accountLookupPost } from "./functions/api/account-lookup.js";
 import {
@@ -98,6 +99,10 @@ export default {
       if (request.method === "GET") return brandingGet({ request, env });
       if (request.method === "POST") return brandingPost({ request, env });
       return new Response("Method not allowed", { status: 405, headers: { Allow: "GET, POST" } });
+    }
+    if (route === "/api/portal/me") {
+      if (request.method !== "GET") return new Response("Method not allowed", { status: 405, headers: { Allow: "GET" } });
+      return portalGet({ request, env });
     }
     if (route === "/api/auth/account-lookup") {
       if (request.method !== "POST") return new Response("Method not allowed", { status: 405, headers: { Allow: "POST" } });
