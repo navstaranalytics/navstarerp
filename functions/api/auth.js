@@ -181,7 +181,7 @@ export async function onRequestPostSetupAdmin({ request, env }) {
   try {
     if (!(await setupState(env))) return json({ ok: false, setupRequired: false, error: "Initial Super Admin setup has already been completed. Please sign in." }, 409);
     const usernameTaken=await env.DB.prepare("SELECT 1 AS found FROM users WHERE username_normalized=? LIMIT 1").bind(username).first();
-    if(usernameTaken)return json({ok:false,setupRequired:true,error:"That username is already taken across NAVSTAR. Please choose a different username."},409);
+    if(usernameTaken)return json({ok:false,setupRequired:true,error:"That username is already taken across Navstar. Please choose a different username."},409);
     const emailTaken=await env.DB.prepare("SELECT 1 AS found FROM users WHERE email_normalized=? LIMIT 1").bind(email).first();
     if(emailTaken)return json({ok:false,setupRequired:true,error:"That email address is already registered. Use a different email address."},409);
     const userId = id();
@@ -197,10 +197,10 @@ export async function onRequestPostSetupAdmin({ request, env }) {
       env.DB.prepare("INSERT INTO audit_logs (id, actor_user_id, action, resource_type, resource_id, outcome, details_json) VALUES (?, ?, 'super_admin.initial_setup', 'user', ?, 'success', ?)").bind(id(), userId, userId, JSON.stringify({ username, email }))
     ];
     await env.DB.batch(statements);
-    return json({ ok: true, setupRequired: false, message: "Your NAVSTAR Super Admin account has been created. Please sign in using your username or email and password." }, 201);
+    return json({ ok: true, setupRequired: false, message: "Your Navstar Super Admin account has been created. Please sign in using your username or email and password." }, 201);
   } catch (error) {
     const message = String(error?.message || "Unknown database error");
-    console.error("NAVSTAR initial Super Admin setup failed:", message);
+    console.error("Navstar initial Super Admin setup failed:", message);
     if (/super_admin_initialized|UNIQUE constraint/i.test(message)) {
       return json({ ok: false, setupRequired: false, error: "Initial setup has already been claimed or these details are already in use. Please sign in." }, 409);
     }
@@ -252,7 +252,7 @@ export async function onRequestPostLogin({ request, env }) {
     await audit(env,user.id,"auth.login","success",{role:user.role_key,schoolId:user.school_id||null});
     const redirect=user.role_key==='super_admin'?'/super-admin.html':'/school-portal.html';
     return json({ok:true,message:"Signed in successfully.",redirect,user:{fullName:user.full_name,username,role:user.role_name,roleKey:user.role_key,schoolId:user.school_id||null,schoolName:user.school_name||null}},200,{"Set-Cookie":sessionCookie(issued.token,issued.maxAge)});
-  }catch(error){console.error("NAVSTAR login failure:",String(error?.message||error));return json({ok:false,error:"Sign-in is temporarily unavailable. Please try again."},503)}
+  }catch(error){console.error("Navstar login failure:",String(error?.message||error));return json({ok:false,error:"Sign-in is temporarily unavailable. Please try again."},503)}
 }
 
 
