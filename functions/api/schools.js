@@ -41,6 +41,25 @@ async function seedSchoolSampleData(db,schoolId,curriculum,levels){
  await db.batch(q);
  return {created:true,academicYear:String(year),terms:3,gradeLevels:gradeRows.length,streams:1,learningAreas:areas.length,sampleLearners:2};
 }
+function configuredGradeSpecs(levels){
+ const selected=Array.isArray(levels)?levels:[];
+ const specs=[];
+ if(selected.some(x=>/primary/i.test(x)))specs.push(["PP1","PP1",0,"Primary"],["PP2","PP2",1,"Primary"],...Array.from({length:6},(_,i)=>["G"+(i+1),"Grade "+(i+1),i+2,"Primary"]));
+ if(selected.some(x=>/junior/i.test(x))||selected.some(x=>/^Grade (7|8|9)$/.test(x)))specs.push(...[7,8,9].map(n=>["G"+n,"Grade "+n,n+1,"Junior School"]));
+ if(selected.some(x=>/senior/i.test(x))||selected.some(x=>/^Grade (10|11|12)$/.test(x)))specs.push(...[10,11,12].map(n=>["G"+n,"Grade "+n,n+1,"Senior School"]));
+ for(const value of selected){const m=String(value).match(/^(Grade (?:[1-9]|1[0-2])|Form [1-4]|PP[12])$/i);if(m&&!specs.some(x=>x[0].toLowerCase()===m[1].replace(/\s/g,"").toLowerCase())){const name=m[1],code=name.replace(/\s/g,"").toUpperCase(),level=/^PP/.test(code)||/^Grade [1-6]$/i.test(name)?"Primary":/^Grade [7-9]$/i.test(name)?"Junior School":/^Grade 1[0-2]$/i.test(name)?"Senior School":"Secondary";specs.push([code,name,specs.length+1,level]);}}
+ return specs;
+}
+async function syncSchoolGradeLevels(db,schoolId,curriculum,levels){
+ const specs=configuredGradeSpecs(levels);
+ await db.prepare("UPDATE grade_levels SET is_active=0 WHERE school_id=?").bind(schoolId).run();
+ if(!specs.length)return;
+ const statements=[];
+ for(const [code,name,order,level] of specs){
+  statements.push(db.prepare("INSERT INTO grade_levels(id,school_id,curriculum,stage_code,stage_name,stage_order,school_level,is_active) VALUES(?,?,?,?,?,?,?,1) ON CONFLICT(school_id,curriculum,stage_code) DO UPDATE SET stage_name=excluded.stage_name,stage_order=excluded.stage_order,school_level=excluded.school_level,is_active=1").bind(makeId(),schoolId,curriculum,code,name,order,level));
+ }
+ await db.batch(statements);
+}
 function mapSchool(row){
   let meta={};
   try{meta=JSON.parse(row.settings_json||"{}").navstar_school_meta||{}}catch{}
@@ -83,6 +102,7 @@ export async function onRequestPost({request,env}){
   const id=makeId(),code=clean(body.code)||("NS-"+crypto.randomUUID().slice(0,8).toUpperCase());
   const status=normStatus(body.status),curriculum=clean(body.curriculum)||"CBC";
   const levels=Array.isArray(body.levels)?[...new Set(body.levels.map(clean).filter(Boolean))]:[];
+  if(!levels.length)return json({ok:false,error:"Select at least one school level in Super Admin before registering this school."},400);
   const meta={category:clean(body.category),level:clean(body.level),plan:clean(body.plan)||"Starter",expiry:clean(body.expiry),modules:modulesForLevels(levels),learnerCount:0,teacherCount:0};
   try{
     await env.DB.batch([
@@ -97,6 +117,7 @@ export async function onRequestPost({request,env}){
       try{sampleData={created:true,...await seedSchoolSampleData(env.DB,id,curriculum,levels)};}
       catch(error){console.error("Navstar sample data seed failed",error);sampleData={created:false,error:"Sample data could not be seeded. Confirm migration 0005 is applied before retrying."}}
     }
+    await syncSchoolGradeLevels(env.DB,id,curriculum,levels);
     let emailDelivery="not_configured";
     if(env.RESEND_API_KEY && body.suppressWelcomeEmail!==true){
       const from=env.MAIL_FROM||"Navstar Analytics <no-reply@mail.navstardigitalhub.co.ke>",loginUrl=new URL("/login.html",new URL(request.url).origin).toString();
@@ -139,6 +160,7 @@ export async function onRequestPatch({request,env}){
       env.DB.prepare("INSERT INTO school_settings (school_id,settings_json) VALUES (?,?) ON CONFLICT(school_id) DO UPDATE SET settings_json=excluded.settings_json,updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now')")
         .bind(id,JSON.stringify({...current,navstar_school_meta:meta}))
     ]);
+    await syncSchoolGradeLevels(env.DB,id,curriculum,selectedLevels);
     const row=await env.DB.prepare(`SELECT s.*,ss.settings_json,
       (SELECT u.id FROM school_memberships m JOIN users u ON u.id=m.user_id JOIN user_role_assignments a ON a.user_id=u.id AND a.school_id=s.id JOIN roles r ON r.id=a.role_id AND r.role_key='school_admin' WHERE m.school_id=s.id AND m.membership_status IN ('active','invited') ORDER BY m.created_at LIMIT 1) AS admin_user_id,
       (SELECT u.full_name FROM school_memberships m JOIN users u ON u.id=m.user_id JOIN user_role_assignments a ON a.user_id=u.id AND a.school_id=s.id JOIN roles r ON r.id=a.role_id AND r.role_key='school_admin' WHERE m.school_id=s.id AND m.membership_status IN ('active','invited') ORDER BY m.created_at LIMIT 1) AS admin_full_name,
