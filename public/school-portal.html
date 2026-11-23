@@ -328,7 +328,7 @@ async function printReportCard(id){const row=(window.navstarReportCards||[]).fin
 $("reportCardGenerateForm").addEventListener("submit",async e=>{e.preventDefault();if(!has("academics.manage"))return;const f=e.currentTarget,b=$("generateReportCards"),payload=Object.fromEntries(new FormData(f).entries());if(!payload.term_id)delete payload.term_id;if(!payload.stream_id)delete payload.stream_id;b.disabled=true;b.textContent="Generating…";try{const d=await api("/api/report-cards/generate",{method:"POST",body:JSON.stringify(payload)});message("reportCardGenerateNotice",d.message);await loadReportCards()}catch(x){message("reportCardGenerateNotice",x.message,true)}finally{b.disabled=false;b.textContent="Generate draft report cards"}});
 async function loadAcademicSetup(){
  try{
-  const [years,terms,grades,streams,areas,staff,classes,schemes,boundaries]=await Promise.all(["years","terms","grades","streams","learning-areas","staff","classes","grading-schemes","grade-boundaries","learners","enrollments"].map(x=>api("/api/data/"+x+(x==="grades"?"?schoolId="+encodeURIComponent(schoolId)+"&includeInactive=1":"?schoolId="+encodeURIComponent(schoolId)))));
+  const [years,terms,grades,streams,areas,staff,classes,schemes,boundaries,learners,enrollments]=await Promise.all(["years","terms","grades","streams","learning-areas","staff","classes","grading-schemes","grade-boundaries","learners","enrollments"].map(x=>api("/api/data/"+x+(x==="grades"?"?schoolId="+encodeURIComponent(schoolId)+"&includeInactive=1":"?schoolId="+encodeURIComponent(schoolId)))));
   const sets={years:years.records||[],terms:terms.records||[],grades:grades.records||[],streams:streams.records||[],areas:areas.records||[],staff:staff.records||[],classes:classes.records||[],schemes:schemes.records||[],boundaries:boundaries.records||[],learners:learners.records||[],enrollments:enrollments.records||[]};
   const fill=(selector,rows,id,label,first)=>{document.querySelectorAll(selector).forEach(el=>{const selected=el.value;el.innerHTML='<option value="">'+first+'</option>'+rows.map(x=>'<option value="'+esc(x[id])+'">'+esc(label(x))+'</option>').join("");if(selected)el.value=selected})};
   fill('form[data-create-resource="terms"] [name="academic_year_id"]',sets.years,"id",x=>x.name,"Select academic year");
@@ -339,7 +339,7 @@ async function loadAcademicSetup(){
   fill('form[data-create-resource="grade-boundaries"] [name="scheme_id"],#reportCardGenerateForm [name="scheme_id"]',sets.schemes,"id",x=>x.name,"Select grading scheme");
   fill('#reportCardGenerateForm [name="academic_year_id"]',sets.years,"id",x=>x.name,"Select academic year");
   fill('#reportCardGenerateForm [name="term_id"]',sets.terms,"id",x=>x.name,"All terms");
-  fill('#reportCardGenerateForm [name="grade_level_id"]',sets.grades,"id",x=>x.stage_name||x.stage_code,"Select grade");
+  fill('#reportCardGenerateForm [name="grade_level_id"]',sets.grades.filter(x=>Number(x.is_active)!==0),"id",x=>x.stage_name||x.stage_code,"Select grade");
   fill('#reportCardGenerateForm [name="stream_id"]',sets.streams,"id",x=>x.name,"All streams");
 
   window.currentAcademicYears=sets.years;window.currentAcademicTerms=sets.terms;
