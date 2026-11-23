@@ -7,7 +7,7 @@ const resources={
   plans:{table:"subscription_plans",scope:false,fields:["plan_code","name","description","billing_model","rate_kes","max_learners","storage_gb","ai_credits","onboarding_fee_kes","grace_period_days","learner_count_basis","capabilities_json","school_levels_json","payment_methods_json","is_active"],required:["plan_code","name","billing_model"]},
   subscriptions:{table:"school_subscriptions",scope:true,fields:["plan_id","billing_model_override","rate_override_kes","learner_count","learner_count_basis","discount_percent","contract_start_date","next_due_date","preferred_payment_method","payment_terms","status","estimated_amount_kes"],required:["school_id"],refs:{plan_id:"subscription_plans"}},
   invoices:{table:"invoices",scope:true,fields:["subscription_id","invoice_number","currency","subtotal","discount","tax","total","amount_paid","status","issue_date","due_date"],required:["school_id","invoice_number"],refs:{subscription_id:"school_subscriptions"}},
-  payments:{table:"payments",scope:true,fields:["invoice_id","amount","currency","method","provider_reference","status","received_at"],required:["school_id","amount","method"],refs:{invoice_id:"invoices"}},
+  payments:{table:"payments",scope:true,fields:["invoice_id","amount","currency","method","provider_reference","status","received_at","recorded_by"],required:["school_id","amount","method"],refs:{invoice_id:"invoices"}},
   years:{table:"academic_years",scope:true,fields:["name","start_date","end_date","status"],required:["school_id","name","start_date","end_date"]},
   terms:{table:"terms",scope:true,fields:["academic_year_id","name","start_date","end_date","status"],required:["school_id","academic_year_id","name","start_date","end_date"],refs:{academic_year_id:"academic_years"}},
   grades:{table:"grade_levels",scope:true,fields:["curriculum","stage_code","stage_name","stage_order","school_level","is_active"],required:["school_id","stage_code","stage_name"]},
@@ -225,6 +225,12 @@ export async function onRequestPost({request,env}){
   const gradeError=await validateConfiguredGrade(env.DB,name,schoolId,values);if(gradeError)return json({ok:false,error:gradeError},403);
   if(name==="announcements")values.created_by=a.user.id;
   const refError=await validateRefs(env.DB,cfg,values,schoolId);if(refError)return json({ok:false,error:refError},400);
+  if(name==="payments"){values.recorded_by=a.user.id;values.currency=values.currency||"KES";}
+  if(name==="invoices"){
+    const subtotal=Number(values.subtotal??0),discount=Number(values.discount??0),tax=Number(values.tax??0),total=Number(values.total??0);
+    if(![subtotal,discount,tax,total].every(Number.isFinite)||subtotal<0||discount<0||tax<0||total<0||discount>subtotal||Math.abs(total-(subtotal-discount+tax))>0.01)return json({ok:false,error:"Invoice total must equal subtotal minus discount plus tax."},400);
+    values.amount_paid=0;values.currency=values.currency||"KES";
+  }
   const teacherError=await validateTeacherWrite(env.DB,a.user,name,values);if(teacherError)return json({ok:false,error:teacherError},403);
   const recordId=id();
   try{
@@ -237,7 +243,22 @@ export async function onRequestPost({request,env}){
     const columns=["id",...(cfg.scope?["school_id"]:[]),...Object.keys(values).filter(k=>k!=="school_id")];
     const vals=[recordId,...(cfg.scope?[schoolId]:[]),...Object.entries(values).filter(([k])=>k!=="school_id").map(([,v])=>v)];
     const sql="INSERT INTO "+cfg.table+" ("+columns.join(",")+") VALUES ("+columns.map(()=>"?").join(",")+")";
-    await env.DB.prepare(sql).bind(...vals).run();
+    if(name==="payments"){
+      const invoiceId=values.invoice_id||null;
+      if(invoiceId){
+        const invoice=await env.DB.prepare("SELECT id,total,amount_paid FROM invoices WHERE id=? AND school_id=?").bind(invoiceId,schoolId).first();
+        if(!invoice)return json({ok:false,error:"The invoice does not belong to this school."},400);
+        if(values.status==="confirmed"){
+          const nextPaid=Number(invoice.amount_paid||0)+Number(values.amount||0),total=Number(invoice.total||0);
+          if(nextPaid>total+0.01)return json({ok:false,error:"This payment would exceed the invoice balance."},400);
+          const nextStatus=nextPaid>=total-0.01?"paid":"part_paid";
+          await env.DB.batch([
+            env.DB.prepare(sql).bind(...vals),
+            env.DB.prepare("UPDATE invoices SET amount_paid=?,status=? WHERE id=? AND school_id=?").bind(nextPaid,nextStatus,invoiceId,schoolId)
+          ]);
+        }else await env.DB.prepare(sql).bind(...vals).run();
+      }else await env.DB.prepare(sql).bind(...vals).run();
+    }else await env.DB.prepare(sql).bind(...vals).run();
     const record=await env.DB.prepare("SELECT * FROM "+cfg.table+" WHERE id=?").bind(recordId).first();
     await audit(env.DB,a.user,schoolId,"record.created",name,recordId);
     return json({ok:true,record},201);
@@ -253,7 +274,9 @@ export async function onRequestPatch({request,env}){
   if(!cfg||!recordId)return json({ok:false,error:"Unknown resource or record."},404);
   if(!allowed(a.user,permissionFor(name,true)))return json({ok:false,error:"Your role does not have permission to change this resource."},403);
   if(cfg.readOnly)return json({ok:false,error:"This resource is read-only."},405);
+  if(name==="payments")return json({ok:false,error:"Payment records are immutable. Record a separate reversal or correction instead."},405);
   let body;try{body=await request.json()}catch{return json({ok:false,error:"Invalid record update."},400)}
+  if(name==="invoices"&&body.amount_paid!==undefined)return json({ok:false,error:"Invoice payments must be recorded through the payment register."},403);
   const values=bodyFields(body,cfg);delete values.school_id;
   if(!Object.keys(values).length)return json({ok:false,error:"No editable fields were supplied."},400);
   try{
