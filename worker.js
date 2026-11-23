@@ -14,6 +14,7 @@ import { onRequestGet as terminologyGet } from "./functions/api/terminology.js";
 import { onRequestGet as systemGuideGet } from "./functions/api/system-guide.js";
 import { runScheduledAutomations } from "./functions/api/scheduled-automations.js";
 import { onRequestPostStk as mpesaStkPost, onRequestPostCallback as mpesaCallbackPost } from "./functions/api/mpesa-payments.js";
+import { onRequestGet as paymentProviderStatusGet } from "./functions/api/payment-provider-status.js";
 import { onRequestGet as schoolLogoGet, onRequestPost as schoolLogoPost } from "./functions/api/school-branding.js";
 import { onRequestGetSettings as admissionSettingsGet, onRequestPostSettings as admissionSettingsPost, onRequestPostNextAdmissionNumber as nextAdmissionNumberPost, onRequestPostPhotos as learnerPhotosPost, onRequestGetPhoto as learnerPhotoGet } from "./functions/api/learner-photos.js";
 import { onRequestGet as recoveryGet, onRequestPost as recoveryPost } from "./functions/api/recovery.js";
@@ -70,6 +71,10 @@ export default {
       if (request.method === "GET") return platformControlsGet({ request, env });
       if (request.method === "POST") return platformControlsPost({ request, env });
       return new Response("Method not allowed", { status: 405, headers: { Allow: "GET, POST" } });
+    }
+    if (route === "/api/payment-provider-status") {
+      if (request.method !== "GET") return new Response("Method not allowed", { status: 405, headers: { Allow: "GET" } });
+      return paymentProviderStatusGet({ request, env });
     }
     if (route === "/api/payments/mpesa/stkpush") {
       if (request.method !== "POST") return new Response("Method not allowed", { status: 405, headers: { Allow: "POST" } });
