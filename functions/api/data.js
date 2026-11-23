@@ -93,40 +93,40 @@ async function validateTeacherWrite(db,user,name,values){
  if(user.is_super_admin||!["teacher","class_teacher"].includes(user.role_key))return null;
  const staff=await db.prepare("SELECT id FROM staff_profiles WHERE user_id=? AND school_id=? AND employment_status='active'").bind(user.id,user.school_id).first();
  if(!staff)return "Your staff profile is not active.";
- let year=values.academic_year_id,grade=values.grade_level_id,stream=values.stream_id,area=values.learning_area_id;
+ let year=values.academic_year_id,term=values.term_id,grade=values.grade_level_id,stream=values.stream_id,area=values.learning_area_id,pathway=values.pathway;
  if(name==="assessment-results"){
-  const a=await db.prepare("SELECT academic_year_id,grade_level_id,stream_id,learning_area_id FROM assessments WHERE id=? AND school_id=?").bind(values.assessment_id,user.school_id).first();
+  const a=await db.prepare("SELECT academic_year_id,term_id,grade_level_id,stream_id,learning_area_id,pathway FROM assessments WHERE id=? AND school_id=?").bind(values.assessment_id,user.school_id).first();
   if(!a)return "The assessment is not available in your school.";
-  year=a.academic_year_id;grade=a.grade_level_id;stream=a.stream_id;area=a.learning_area_id;
-  const enrolled=await db.prepare("SELECT 1 FROM learner_enrollments WHERE learner_id=? AND school_id=? AND academic_year_id=? AND grade_level_id=? AND (stream_id IS ? OR stream_id=?) AND status='active'").bind(values.learner_id,user.school_id,year,grade,stream,stream).first();
-  if(!enrolled)return "The learner is not enrolled in the class for this assessment.";
+  year=a.academic_year_id;term=a.term_id;grade=a.grade_level_id;stream=a.stream_id;area=a.learning_area_id;pathway=a.pathway;
+  const enrolled=await db.prepare("SELECT 1 FROM learner_enrollments le JOIN learners l ON l.id=le.learner_id AND l.school_id=le.school_id WHERE le.learner_id=? AND le.school_id=? AND le.academic_year_id=? AND le.grade_level_id=? AND (le.stream_id IS ? OR le.stream_id=?) AND le.status='active' AND (? IS NULL OR l.pathway=?)").bind(values.learner_id,user.school_id,year,grade,stream,stream,pathway,pathway).first();
+  if(!enrolled)return "The learner is not enrolled in the class or pathway for this assessment.";
  }
  if(name==="attendance-records"){
-  const a=await db.prepare("SELECT academic_year_id,grade_level_id,stream_id FROM attendance_sessions WHERE id=? AND school_id=?").bind(values.session_id,user.school_id).first();
+  const a=await db.prepare("SELECT academic_year_id,term_id,grade_level_id,stream_id FROM attendance_sessions WHERE id=? AND school_id=?").bind(values.session_id,user.school_id).first();
   if(!a)return "The attendance session is not available in your school.";
-  year=a.academic_year_id;grade=a.grade_level_id;stream=a.stream_id;
-  const learner=await db.prepare("SELECT 1 FROM learner_enrollments WHERE learner_id=? AND school_id=? AND academic_year_id=? AND grade_level_id=? AND (stream_id IS ? OR stream_id=?) AND status='active'").bind(values.learner_id,user.school_id,year,grade,stream,stream).first();
-  if(!learner)return "The learner is not enrolled in this assigned class.";
+  year=a.academic_year_id;term=a.term_id;grade=a.grade_level_id;stream=a.stream_id;area=null;pathway=null;
+  const enrolled=await db.prepare("SELECT 1 FROM learner_enrollments WHERE learner_id=? AND school_id=? AND academic_year_id=? AND grade_level_id=? AND (stream_id IS ? OR stream_id=?) AND status='active'").bind(values.learner_id,user.school_id,year,grade,stream,stream).first();
+  if(!enrolled)return "The learner is not enrolled in the class for this attendance session.";
  }
  if(!year||!grade)return "Academic year and grade are required for your allocated teaching scope.";
- let sql="SELECT 1 FROM teacher_allocations WHERE school_id=? AND staff_id=? AND academic_year_id=? AND grade_level_id=? AND (stream_id IS NULL OR stream_id IS ? OR stream_id=?)";
- const args=[user.school_id,staff.id,year,grade,stream,stream];
- if(area){sql+=" AND learning_area_id=?";args.push(area)}
+ let sql="SELECT 1 FROM teacher_allocations ta WHERE ta.school_id=? AND ta.staff_id=? AND ta.academic_year_id=? AND ta.grade_level_id=? AND (ta.stream_id IS NULL OR ta.stream_id IS ? OR ta.stream_id=?) AND (ta.term_id IS NULL OR ta.term_id=?) AND (ta.pathway IS NULL OR ta.pathway=?)";
+ const args=[user.school_id,staff.id,year,grade,stream,stream,term??null,pathway??null];
+ if(area){sql+=" AND ta.learning_area_id=?";args.push(area)}
  const allocation=await db.prepare(sql+" LIMIT 1").bind(...args).first();
- return allocation?null:"This action is outside your assigned teaching allocation.";
+ return allocation?null:"This action is outside your assigned academic year, term, grade, stream, learning area or pathway.";
 }
 function teacherFilter(name,user){
-  if(user.is_super_admin||!["teacher","class_teacher"].includes(user.role_key))return "";
-  const staff="EXISTS (SELECT 1 FROM staff_profiles sp JOIN teacher_allocations ta ON ta.staff_id=sp.id WHERE sp.user_id='"+user.id+"' AND ta.school_id='"+user.school_id+"' AND ";
-  if(name==="learners"||name==="enrollments")return " AND "+staff+"ta.grade_level_id="+(name==="learners"?"(SELECT le.grade_level_id FROM learner_enrollments le WHERE le.learner_id=learners.id AND le.status='active' LIMIT 1)":"learner_enrollments.grade_level_id")+" AND (ta.stream_id IS NULL OR ta.stream_id="+(name==="learners"?"(SELECT le.stream_id FROM learner_enrollments le WHERE le.learner_id=learners.id AND le.status='active' LIMIT 1)":"learner_enrollments.stream_id")+") )";
-  if(name==="assessments")return " AND "+staff+"ta.grade_level_id=assessments.grade_level_id AND (ta.stream_id IS NULL OR ta.stream_id=assessments.stream_id) AND (ta.learning_area_id=assessments.learning_area_id) AND (ta.academic_year_id=assessments.academic_year_id) )";
-  if(name==="assessment-results")return " AND EXISTS (SELECT 1 FROM assessments ax WHERE ax.id=assessment_results.assessment_id AND "+staff+"ta.grade_level_id=ax.grade_level_id AND (ta.stream_id IS NULL OR ta.stream_id=ax.stream_id) AND ta.learning_area_id=ax.learning_area_id AND ta.academic_year_id=ax.academic_year_id))";
-  if(name==="attendance-sessions")return " AND "+staff+"ta.grade_level_id=attendance_sessions.grade_level_id AND (ta.stream_id IS NULL OR ta.stream_id=attendance_sessions.stream_id) AND ta.academic_year_id=attendance_sessions.academic_year_id )";
-  if(name==="attendance-records")return " AND EXISTS (SELECT 1 FROM attendance_sessions ats WHERE ats.id=attendance_records.session_id AND "+staff+"ta.grade_level_id=ats.grade_level_id AND (ta.stream_id IS NULL OR ta.stream_id=ats.stream_id) AND ta.academic_year_id=ats.academic_year_id))";
-  if(name==="timetable")return " AND "+staff+"ta.grade_level_id=timetable_entries.grade_level_id AND (ta.stream_id IS NULL OR ta.stream_id=timetable_entries.stream_id) AND ta.learning_area_id=timetable_entries.learning_area_id AND ta.academic_year_id=timetable_entries.academic_year_id )";
-  if(name==="report-cards")return " AND EXISTS (SELECT 1 FROM learner_enrollments le JOIN teacher_allocations ta ON ta.school_id=le.school_id AND ta.academic_year_id=le.academic_year_id AND ta.grade_level_id=le.grade_level_id AND (ta.stream_id IS NULL OR ta.stream_id=le.stream_id) JOIN staff_profiles sp ON sp.id=ta.staff_id WHERE sp.user_id='"+user.id+"' AND le.school_id=report_cards.school_id AND le.learner_id=report_cards.learner_id AND le.academic_year_id=report_cards.academic_year_id)";
-
-  return "";
+ if(user.is_super_admin||!["teacher","class_teacher"].includes(user.role_key))return "";
+ const staff="EXISTS (SELECT 1 FROM staff_profiles sp JOIN teacher_allocations ta ON ta.staff_id=sp.id WHERE sp.user_id='"+user.id+"' AND ta.school_id='"+user.school_id+"' AND ";
+ if(name==="learners")return " AND EXISTS (SELECT 1 FROM learner_enrollments le JOIN teacher_allocations ta ON ta.school_id=le.school_id AND ta.academic_year_id=le.academic_year_id AND ta.grade_level_id=le.grade_level_id AND (ta.stream_id IS NULL OR ta.stream_id=le.stream_id) JOIN staff_profiles sp ON sp.id=ta.staff_id WHERE sp.user_id='"+user.id+"' AND le.school_id=learners.school_id AND le.learner_id=learners.id AND le.status='active' AND (ta.pathway IS NULL OR ta.pathway=learners.pathway))";
+ if(name==="enrollments")return " AND "+staff+"ta.academic_year_id=learner_enrollments.academic_year_id AND ta.grade_level_id=learner_enrollments.grade_level_id AND (ta.stream_id IS NULL OR ta.stream_id=learner_enrollments.stream_id) AND (ta.term_id IS NULL OR ta.term_id IS (SELECT t.id FROM terms t WHERE t.academic_year_id=learner_enrollments.academic_year_id AND t.status='active' LIMIT 1)) )";
+ if(name==="assessments")return " AND "+staff+"ta.academic_year_id=assessments.academic_year_id AND (ta.term_id IS NULL OR ta.term_id=assessments.term_id) AND ta.grade_level_id=assessments.grade_level_id AND (ta.stream_id IS NULL OR ta.stream_id=assessments.stream_id) AND ta.learning_area_id=assessments.learning_area_id AND (ta.pathway IS NULL OR ta.pathway=assessments.pathway) )";
+ if(name==="assessment-results")return " AND EXISTS (SELECT 1 FROM assessments ax JOIN learners l ON l.id=assessment_results.learner_id AND l.school_id=assessment_results.school_id WHERE ax.id=assessment_results.assessment_id AND "+staff+"ta.academic_year_id=ax.academic_year_id AND (ta.term_id IS NULL OR ta.term_id=ax.term_id) AND ta.grade_level_id=ax.grade_level_id AND (ta.stream_id IS NULL OR ta.stream_id=ax.stream_id) AND ta.learning_area_id=ax.learning_area_id AND (ta.pathway IS NULL OR ta.pathway=ax.pathway) AND (ax.pathway IS NULL OR l.pathway=ax.pathway)) )";
+ if(name==="attendance-sessions")return " AND "+staff+"ta.academic_year_id=attendance_sessions.academic_year_id AND (ta.term_id IS NULL OR ta.term_id=attendance_sessions.term_id) AND ta.grade_level_id=attendance_sessions.grade_level_id AND (ta.stream_id IS NULL OR ta.stream_id=attendance_sessions.stream_id) )";
+ if(name==="attendance-records")return " AND EXISTS (SELECT 1 FROM attendance_sessions ats WHERE ats.id=attendance_records.session_id AND "+staff+"ta.academic_year_id=ats.academic_year_id AND (ta.term_id IS NULL OR ta.term_id=ats.term_id) AND ta.grade_level_id=ats.grade_level_id AND (ta.stream_id IS NULL OR ta.stream_id=ats.stream_id)) )";
+ if(name==="timetable")return " AND "+staff+"ta.academic_year_id=timetable_entries.academic_year_id AND (ta.term_id IS NULL OR ta.term_id=timetable_entries.term_id) AND ta.grade_level_id=timetable_entries.grade_level_id AND (ta.stream_id IS NULL OR ta.stream_id=timetable_entries.stream_id) AND ta.learning_area_id=timetable_entries.learning_area_id )";
+ if(name==="report-cards")return " AND EXISTS (SELECT 1 FROM learner_enrollments le JOIN learners l ON l.id=le.learner_id AND l.school_id=le.school_id JOIN teacher_allocations ta ON ta.school_id=le.school_id AND ta.academic_year_id=le.academic_year_id AND (ta.term_id IS NULL OR ta.term_id=report_cards.term_id) AND ta.grade_level_id=le.grade_level_id AND (ta.stream_id IS NULL OR ta.stream_id=le.stream_id) AND (ta.pathway IS NULL OR ta.pathway=l.pathway) JOIN staff_profiles sp ON sp.id=ta.staff_id WHERE sp.user_id='"+user.id+"' AND le.school_id=report_cards.school_id AND le.learner_id=report_cards.learner_id AND le.academic_year_id=report_cards.academic_year_id AND le.status='active')";
+ return "";
 }
 async function existsInSchool(db,table,ref,schoolId){
   if(!ref)return true;
