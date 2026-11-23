@@ -1,6 +1,7 @@
 import { onRequestGet as supportGet, onRequestPost as supportPost } from "./functions/api/support.js";
 import { onRequestPost as supportUpgradePost } from "./functions/api/support-upgrade.js";
 import { onRequestPost as aiDiagnosticsPost } from "./functions/api/ai-diagnostics.js";
+import { onRequestGet as feeReceiptsGet, onRequestPost as feeReceiptsPost } from "./functions/api/fee-receipts.js";
 import { onRequestGet as recoveryGet, onRequestPost as recoveryPost } from "./functions/api/recovery.js";
 import { onRequestGet as healthGet } from "./functions/api/health.js";
 import { onRequestGet as setupStatusGet } from "./functions/api/setup-status.js";
@@ -50,6 +51,11 @@ export default {
     if (route === "/api/setup-database") {
       if (request.method !== "POST") return new Response("Method not allowed", { status: 405, headers: { Allow: "POST" } });
       return setupDatabasePost({ request, env, params: {}, data: {}, waitUntil: promise => ctx.waitUntil(promise) });
+    }
+    if (route === "/api/fee-receipts") {
+      if (request.method === "GET") return feeReceiptsGet({ request, env });
+      if (request.method === "POST") return feeReceiptsPost({ request, env });
+      return new Response("Method not allowed", { status: 405, headers: { Allow: "GET, POST" } });
     }
     if (route === "/api/support") {
       if (request.method === "GET") return supportGet({ request, env });
