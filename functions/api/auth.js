@@ -17,6 +17,20 @@ const randomHex = (length = 32) => {
 const digest = async value => hex(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value)));
 const normalize = value => String(value || "").trim().toLowerCase();
 const safeText = value => String(value || "").trim();
+async function getInlineBrandLogo(env) {
+ try {
+  const row=await env.DB.prepare("SELECT content_type,image_data,storage_provider,object_key FROM platform_branding_assets WHERE asset_key='platform-logo'").first();
+  if(!row)return null;let bytes;
+  if(row.storage_provider==="r2"&&env.R2&&row.object_key){const o=await env.R2.get(row.object_key);if(!o)return null;bytes=new Uint8Array(await o.arrayBuffer())}
+  else bytes=row.image_data instanceof Uint8Array?row.image_data:new Uint8Array(row.image_data||[]);
+  if(!bytes.length)return null;let binary="";
+  for(let i=0;i<bytes.length;i+=0x8000)binary+=String.fromCharCode(...bytes.subarray(i,i+0x8000));
+  const mime=["image/png","image/jpeg","image/webp"].includes(row.content_type)?row.content_type:"image/png";
+  const ext={"image/png":"png","image/jpeg":"jpg","image/webp":"webp"}[mime];
+  return {attachment:{filename:"navstar-platform-logo."+ext,content:btoa(binary),content_type:mime,content_id:"navstar-platform-logo"}};
+ }catch(e){console.error("Could not attach platform logo:",String(e?.message||e));return null}
+}
+
 export const passwordPolicy = value => {
   if (value.length < 6 || value.length > 128) return false;
   const types = [/[A-Z]/.test(value), /[a-z]/.test(value), /[0-9]/.test(value), /[^A-Za-z0-9]/.test(value)];
@@ -315,12 +329,12 @@ export async function onRequestPostPasswordResetRequest({ request, env }) {
     const brandRows=await env.DB.prepare("SELECT setting_key,setting_value FROM platform_settings WHERE setting_key IN ('platform_name','platform_tagline','platform_address','platform_city','platform_county','platform_phone','platform_website','platform_support_email')").all();
     const brand=Object.fromEntries((brandRows.results||[]).map(x=>[x.setting_key,x.setting_value]));
     const brandName=brand.platform_name||"Navstar Analytics",tagline=brand.platform_tagline||"Empowering Schools with Smart Data";
-    const origin=new URL(request.url).origin,logoUrl=origin+"/api/branding/logo";
+    const inlineLogo=await getInlineBrandLogo(env),logoUrl=inlineLogo?"cid:navstar-platform-logo":new URL(request.url).origin+"/api/branding/logo";
     const details=[brand.platform_address,brand.platform_city,brand.platform_county,brand.platform_phone,brand.platform_support_email,brand.platform_website].filter(Boolean).join(" · ");
     const safe=v=>String(v||"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
     const html="<div style='margin:0;background:#f2f6fc;padding:32px 12px;font-family:Arial,sans-serif;color:#102b5c'><div style='max-width:560px;margin:auto;background:#fff;border:1px solid #dce6f5;border-radius:16px;overflow:hidden'><div style='background:#082b70;padding:24px;text-align:center'><img src='"+logoUrl+"' alt='"+safe(brandName)+"' style='max-width:190px;max-height:76px;object-fit:contain;background:#fff;border-radius:8px;padding:5px'><div style='color:#fff;font-size:12px;margin-top:10px'>"+safe(tagline)+"</div></div><div style='padding:30px'><p>Hello "+safe(user.full_name)+",</p><h2 style='color:#082b70'>Password reset verification</h2><p>Use the code below to verify your identity and create a new password.</p><div style='margin:24px 0;padding:18px;background:#edf4ff;border:1px solid #d6e5ff;border-radius:12px;text-align:center;font-size:32px;font-weight:800;letter-spacing:8px;color:#075be8'>"+code+"</div><p>This code expires in <b>10 minutes</b>. You have a limited number of attempts. If you did not request this reset, ignore this email.</p><p style='margin-top:28px'>Regards,<br><b>"+safe(brandName)+"</b></p></div><div style='background:#f6f8fc;padding:16px 22px;color:#718096;font-size:11px;text-align:center'>"+safe(details)+"</div></div></div>";
     const from=env.MAIL_FROM||"Navstar Analytics <onboarding@resend.dev>";
-    const response=await fetch("https://api.resend.com/emails",{method:"POST",headers:{"Authorization":"Bearer "+env.RESEND_API_KEY,"Content-Type":"application/json"},body:JSON.stringify({from,to:[user.email],subject:brandName+" password reset code",html,text:"Hello "+user.full_name+",\n\nYour password reset verification code is "+code+". It expires in 10 minutes. If you did not request this, ignore this email.\n\n"+brandName})});
+    const response=await fetch("https://api.resend.com/emails",{method:"POST",headers:{"Authorization":"Bearer "+env.RESEND_API_KEY,"Content-Type":"application/json"},body:JSON.stringify({from,to:[user.email],subject:brandName+" password reset code",...(inlineLogo?{attachments:[inlineLogo.attachment]}:{}),html,text:"Hello "+user.full_name+",\n\nYour password reset verification code is "+code+". It expires in 10 minutes. If you did not request this, ignore this email.\n\n"+brandName})});
     if(!response.ok){await env.DB.prepare("UPDATE auth_password_resets SET used_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?").bind(resetId).run();console.error("Password reset email delivery failed:",response.status,await response.text());return json({ok:false,error:"We could not deliver the email. Please contact the Help Desk or try again later."},502);}
     await audit(env,user.id,"auth.password_reset.requested","success");
     return json({ok:true,message:"A 6-digit verification code has been sent to your registered email address. It expires in 10 minutes."});
@@ -382,12 +396,12 @@ export async function onRequestPostUsernameRecoveryRequest({ request, env }) {
     const rows=await env.DB.prepare("SELECT setting_key,setting_value FROM platform_settings WHERE setting_key IN ('platform_name','platform_tagline','platform_address','platform_city','platform_county','platform_phone','platform_website','platform_support_email')").all();
     const brand=Object.fromEntries((rows.results||[]).map(x=>[x.setting_key,x.setting_value]));
     const name=brand.platform_name||"Navstar Analytics", tagline=brand.platform_tagline||"Empowering Schools with Smart Data";
-    const origin=new URL(request.url).origin, logoUrl=origin+"/api/branding/logo";
+    const inlineLogo=await getInlineBrandLogo(env),logoUrl=inlineLogo?"cid:navstar-platform-logo":new URL(request.url).origin+"/api/branding/logo";
     const details=[brand.platform_address,brand.platform_city,brand.platform_county,brand.platform_phone,brand.platform_support_email,brand.platform_website].filter(Boolean).join(" · ");
     const safe=v=>String(v||"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
     const html="<div style='margin:0;background:#f2f6fc;padding:32px 12px;font-family:Arial,sans-serif;color:#102b5c'><div style='max-width:560px;margin:auto;background:#fff;border:1px solid #dce6f5;border-radius:16px;overflow:hidden'><div style='background:#082b70;padding:24px;text-align:center'><img src='"+logoUrl+"' alt='"+safe(name)+"' style='max-width:190px;max-height:76px;object-fit:contain;background:#fff;border-radius:8px;padding:5px'><div style='color:#fff;font-size:12px;margin-top:10px'>"+safe(tagline)+"</div></div><div style='padding:30px'><p>Hello "+safe(user.full_name)+",</p><h2 style='color:#082b70'>Username recovery verification</h2><p>Use this code to verify your email and choose a new username for your Navstar Analytics account.</p><div style='margin:24px 0;padding:18px;background:#edf4ff;border:1px solid #d6e5ff;border-radius:12px;text-align:center;font-size:32px;font-weight:800;letter-spacing:8px;color:#075be8'>"+code+"</div><p>This code expires in <b>10 minutes</b>. If you did not request this, ignore this email.</p><p style='margin-top:28px'>Regards,<br><b>"+safe(name)+"</b></p></div><div style='background:#f6f8fc;padding:16px 22px;color:#718096;font-size:11px;text-align:center'>"+safe(details)+"</div></div></div>";
     const from=env.MAIL_FROM||"Navstar Analytics <onboarding@resend.dev>";
-    const response=await fetch("https://api.resend.com/emails",{method:"POST",headers:{"Authorization":"Bearer "+env.RESEND_API_KEY,"Content-Type":"application/json"},body:JSON.stringify({from,to:[user.email],subject:name+" username recovery code",html,text:"Hello "+user.full_name+",\\n\\nYour username recovery verification code is "+code+". It expires in 10 minutes. If you did not request this, ignore this email.\\n\\n"+name})});
+    const response=await fetch("https://api.resend.com/emails",{method:"POST",headers:{"Authorization":"Bearer "+env.RESEND_API_KEY,"Content-Type":"application/json"},body:JSON.stringify({from,to:[user.email],subject:name+" username recovery code",...(inlineLogo?{attachments:[inlineLogo.attachment]}:{}),html,text:"Hello "+user.full_name+",\\n\\nYour username recovery verification code is "+code+". It expires in 10 minutes. If you did not request this, ignore this email.\\n\\n"+name})});
     if(!response.ok){await env.DB.prepare("UPDATE auth_username_resets SET used_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?").bind(resetId).run();console.error("Username recovery email failed:",response.status,await response.text());return json({ok:false,error:"We could not deliver the email. Please try again later."},502);}
     await audit(env,user.id,"auth.username_recovery.requested","success");
     return json({ok:true,message:"A 6-digit verification code has been sent to your registered email. It expires in 10 minutes."});
