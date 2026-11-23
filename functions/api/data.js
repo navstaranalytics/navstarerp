@@ -369,6 +369,23 @@ export async function onRequestPost({request,env}){
       await audit(env.DB,a.user,null,"platform.setting.updated","platform_setting",body.setting_key);
       return json({ok:true,id:body.setting_key,record:{setting_key:body.setting_key,setting_value:String(body.setting_value??"")} },201);
     }
+    if(name==="fee-adjustments"){
+      const account=await env.DB.prepare("SELECT id,amount_due,amount_paid FROM learner_fee_accounts WHERE id=? AND school_id=?").bind(values.learner_fee_account_id,schoolId).first();
+      const amount=Number(values.amount);
+      if(!account||!Number.isFinite(amount)||amount<=0)return json({ok:false,error:"Select a valid fee account and positive adjustment amount."},400);
+      if(!["charge","discount","waiver","correction"].includes(values.adjustment_type))return json({ok:false,error:"Choose a valid fee adjustment type."},400);
+      const delta=["discount","waiver"].includes(values.adjustment_type)?-amount:amount;
+      const nextDue=Number(account.amount_due||0)+delta,nextBalance=nextDue-Number(account.amount_paid||0);
+      if(nextDue<0||nextBalance<0)return json({ok:false,error:"This adjustment cannot reduce the fee below the amount already paid."},400);
+      const adjustmentId=id();
+      await env.DB.batch([
+        env.DB.prepare("INSERT INTO fee_adjustments(id,school_id,learner_fee_account_id,adjustment_type,amount,reason,adjusted_by) VALUES(?,?,?,?,?,?,?)").bind(adjustmentId,schoolId,account.id,values.adjustment_type,amount,values.reason,values.adjusted_by),
+        env.DB.prepare("UPDATE learner_fee_accounts SET amount_due=?,balance=?,adjustment_total=COALESCE(adjustment_total,0)+?,adjustment_note=?,last_adjusted_by=?,status=CASE WHEN ?>0 THEN 'open' WHEN ?>0 THEN 'part_paid' ELSE 'paid' END,updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=? AND school_id=?").bind(nextDue,nextBalance,delta,values.reason,values.adjusted_by,nextBalance,nextBalance,account.id,schoolId)
+      ]);
+      const record=await env.DB.prepare("SELECT * FROM fee_adjustments WHERE id=? AND school_id=?").bind(adjustmentId,schoolId).first();
+      await audit(env.DB,a.user,schoolId,"fee.adjusted","learner_fee_account",account.id);
+      return json({ok:true,record,updatedBalance:nextBalance},201);
+    }
     const columns=["id",...(cfg.scope?["school_id"]:[]),...Object.keys(values).filter(k=>k!=="school_id")];
     const vals=[recordId,...(cfg.scope?[schoolId]:[]),...Object.entries(values).filter(([k])=>k!=="school_id").map(([,v])=>v)];
     const sql="INSERT INTO "+cfg.table+" ("+columns.join(",")+") VALUES ("+columns.map(()=>"?").join(",")+")"+(name==="attendance-records"?" ON CONFLICT(session_id,learner_id) DO UPDATE SET attendance_status=excluded.attendance_status,notes=excluded.notes,marked_by=excluded.marked_by":name==="assessment-results"?" ON CONFLICT(assessment_id,learner_id) DO UPDATE SET score=excluded.score,grade=excluded.grade,feedback=excluded.feedback,status=excluded.status,entered_by=excluded.entered_by,updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now')":"");
