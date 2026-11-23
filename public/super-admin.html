@@ -742,6 +742,25 @@ pages.communications=()=>head('PLATFORM COMMUNICATIONS','Announcements & notices
   '</tbody></table></div>')+
   '<div class="notice">Announcement creation is stored centrally. Editing and deletion are not exposed until corresponding secure database endpoints are available.</div>';
 
+/* Plan editing is also persisted through the D1 plan API. */
+editPlan=function(name){
+ const p=plans.find(x=>x.name===name);if(!p)return;
+ openModal('Configure plan · '+p.name,'<div class="form-grid">'+
+  field('Plan name *','name','', 'text',p.name)+
+  selectFieldRich('Billing model','billingModel',BILLING_MODELS.map(x=>({value:x.value,label:x.label})),p.billingModel||'per_learner_month')+
+  field('Price / rate (KES)','rate','0','number',p.rate??p.price??0)+
+  field('Maximum learners (0 = unlimited)','learners','0','number',p.learners)+
+  field('Included storage (GB)','storage','0','number',p.storage)+
+  field('AI credits per billing cycle','ai','0','number',p.ai)+
+  field('Onboarding fee (KES)','setupFee','0','number',p.setupFee||0)+
+  field('Grace period (days)','graceDays','7','number',p.graceDays??7)+
+  '<div class="form-field full"><label>Included capabilities</label><input class="field" name="modules" value="'+esc(Array.isArray(p.modules)?p.modules.join(', '):p.modules||'Core')+'"></div></div>',
+  async d=>{
+   const nextName=d.get('name')?.trim();if(!nextName||plans.some(x=>x.id!==p.id&&x.name.toLowerCase()===nextName.toLowerCase())){toast('Enter a unique plan name.');return}
+   const rate=Number(d.get('rate'))||0,next={...p,name:nextName,billingModel:d.get('billingModel'),rate,price:rate,learners:Number(d.get('learners'))||0,storage:Number(d.get('storage'))||0,ai:Number(d.get('ai'))||0,setupFee:Number(d.get('setupFee'))||0,graceDays:Number(d.get('graceDays'))||7,modules:d.get('modules')?.trim()||'Core'};
+   try{await savePlanToDatabase(next,p.id);closeModal();render();toast('Plan changes saved centrally in D1.')}catch(error){toast(error.message||'Plan changes could not be saved.')}
+  });
+};
 /* Legacy browser-data recovery: read-only scan, immutable D1 archive, then safe migration of supported records. */
 let legacyRecoveryRecords=[],legacyRecoveryScanDone=false;
 function recoveryPage(){
@@ -752,6 +771,7 @@ function recoveryPage(){
  panel('D1 recovery archive','Previously captured recovery snapshots','<div class="panel-pad"><button class="btn light" data-action="recovery-refresh">Refresh archive list</button><div id="recoveryArchiveList" class="muted small">Loading archives…</div></div>');
 }
 pages.backup=recoveryPage;
+const renderWithRecovery=render;render=function(){renderWithRecovery();if(page==='backup')refreshRecoveryArchives()};
 async function scanLegacyBrowser(){
  const records=[],excluded=[];
  for(let i=0;i<localStorage.length;i++){
