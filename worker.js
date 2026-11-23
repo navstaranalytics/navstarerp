@@ -7,6 +7,7 @@ import { onRequestPost as upgradePost } from "./functions/api/upgrade.js";
 import { onRequestPost as accessUpgradePost } from "./functions/api/access-upgrade.js";
 import { onRequestPost as schoolAdminPost, onRequestPatch as schoolAdminPatch } from "./functions/api/school-admin.js";
 import { onRequestGet as schoolUsersGet, onRequestPost as schoolUsersPost } from "./functions/api/school-users.js";
+import { onRequestGet as schoolNameRequestsGet, onRequestPost as schoolNameRequestsPost, onRequestPatch as schoolNameRequestsPatch } from "./functions/api/school-name-requests.js";
 import { onRequestGet as portalGet } from "./functions/api/portal.js";
 import { onRequestGet as brandingGet, onRequestPost as brandingPost, onRequestGetLogo as brandingLogoGet, onRequestPostLogo as brandingLogoPost, onRequestGetStorageStatus as storageStatusGet, onRequestGetLoginBackground as loginBackgroundGet, onRequestPostLoginBackground as loginBackgroundPost, onRequestPostProfilePhoto as profilePhotoPost, onRequestGetProfilePhoto as profilePhotoGet } from "./functions/api/branding.js";
 import { onRequestPost as accountLookupPost, onRequestPostUsernameAvailability } from "./functions/api/account-lookup.js";
@@ -59,6 +60,12 @@ export default {
       if (request.method === "PATCH") return dataPatch({ request, env });
       return new Response("Method not allowed", { status: 405, headers: { Allow: "GET, POST, PATCH" } });
     }
+    if (route === "/api/school-name-requests") {
+      if (request.method === "GET") return schoolNameRequestsGet({ request, env });
+      if (request.method === "POST") return schoolNameRequestsPost({ request, env });
+      return new Response("Method not allowed", { status: 405, headers: { Allow: "GET, POST" } });
+    }
+    if (route.startsWith("/api/school-name-requests/") && request.method === "PATCH") return schoolNameRequestsPatch({ request, env });
     if (route === "/api/schools") {
       if (request.method === "GET") return schoolsGet({ request, env });
       if (request.method === "POST") return schoolsPost({ request, env });
