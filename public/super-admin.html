@@ -927,23 +927,43 @@ $('logoutButton').addEventListener('click',async()=>{
 loadSignedInUser();
 
 (async()=>{
+  const upgradeCall=async path=>{
+    const response=await fetch(path,{method:'POST',credentials:'same-origin'});
+    let data={};try{data=await response.json()}catch{}
+    if(!response.ok||!data.ok)throw new Error(data.error||'A required platform setup check failed.');
+    return data;
+  };
   try{
-    const upgradeResponse=await fetch('/api/system/upgrade',{method:'POST',credentials:'same-origin'});
-    const upgrade=await upgradeResponse.json();
-    if(!upgradeResponse.ok||!upgrade.ok)throw new Error(upgrade.error||'Database module upgrade failed.');
-    const accessResponse=await fetch('/api/system/access-upgrade',{method:'POST',credentials:'same-origin'});
-    const accessUpgrade=await accessResponse.json();
-    if(!accessResponse.ok||!accessUpgrade.ok)throw new Error(accessUpgrade.error||'Role and permission setup failed.');
-    const supportResponse=await fetch('/api/system/support-upgrade',{method:'POST',credentials:'same-origin'});const supportUpgrade=await supportResponse.json();if(!supportResponse.ok||!supportUpgrade.ok)console.warn('Navstar support desk upgrade pending:',supportUpgrade.error||supportResponse.status);
+    // These endpoints are idempotent schema checks. Run together instead of
+    // blocking the dashboard behind three sequential network round trips.
+    const upgrades=await Promise.all([
+      upgradeCall('/api/system/upgrade'),
+      upgradeCall('/api/system/access-upgrade'),
+      upgradeCall('/api/system/support-upgrade').catch(error=>{console.warn('Navstar support desk upgrade pending:',error.message);return null;})
+    ]);
+    // Load only the records required to paint the first Super Admin screen.
     await Promise.all([
-      loadPlatformSettingsFromDatabase(),loadExtraFromDatabase(),loadTenantWorkspaceFromDatabase(),
-      loadSchoolsFromDatabase(),loadPlatformUsersFromDatabase(),loadPlansFromDatabase(),
-      loadSchoolBillingFromDatabase(),loadBillingRecordsFromDatabase(),loadAnnouncementsFromDatabase(),
-      loadAuditFromDatabase(),loadOverviewFromDatabase()
+      loadPlatformSettingsFromDatabase(),
+      loadSchoolsFromDatabase(),
+      loadPlatformUsersFromDatabase(),
+      loadPlansFromDatabase(),
+      loadOverviewFromDatabase()
     ]);
     render();
     applyNavstarTerminology();
-    const status=$('saveState');if(status)status.textContent='Connected · D1 schools, settings, plans, subscriptions, invoices, payments, platform users, announcements, audit and workspace preferences · other workflows still in progress';
+    const status=$('saveState');if(status)status.textContent='Connected · Navstar central database';
+    // Billing, audit history and configuration workspaces are secondary to
+    // first paint. Load them after the dashboard is already usable.
+    Promise.all([
+      loadExtraFromDatabase(),loadTenantWorkspaceFromDatabase(),
+      loadSchoolBillingFromDatabase(),loadBillingRecordsFromDatabase(),
+      loadAnnouncementsFromDatabase(),loadAuditFromDatabase()
+    ]).then(()=>{
+      const current=$('saveState');if(current)current.textContent='Connected · D1 schools, settings, plans, subscriptions, invoices, payments, platform users, announcements and audit';
+    }).catch(error=>{
+      console.warn('Some secondary Super Admin data could not be loaded:',String(error?.message||error));
+      const current=$('saveState');if(current)current.textContent='Dashboard ready · some secondary records could not be loaded';
+    });
   }catch(error){
     console.error("Navstar startup data load failed:",String(error?.message||error));
     overviewLoading=false;const status=$('saveState');if(status)status.textContent='Some data could not be loaded. Open System Health to inspect the connection.';
