@@ -114,7 +114,7 @@ async function loadSchoolBillingFromDatabase(){
       const row=rows[0];
       if(!row)return;
       const assignedPlan=plans.find(p=>p.id===row.plan_id);
-      if(assignedPlan)school.plan=assignedPlan.name;
+      if(assignedPlan){school.plan=assignedPlan.name;const planModules=Array.isArray(assignedPlan.modules)?assignedPlan.modules:String(assignedPlan.modules||"").split(/[,;+]/).map(x=>x.trim()).filter(Boolean);school.modules=[...new Set([...modulesForLevels(school.levels||[]),...planModules])];}
       school.learnerCount=Number(row.learner_count||0);
       school.billing={subscriptionId:row.id,billingModel:row.billing_model_override,rate:row.rate_override_kes,learnerCountBasis:row.learner_count_basis||"active",discount:Number(row.discount_percent||0),cycleStart:row.contract_start_date||"",nextDue:row.next_due_date||"",paymentTerms:row.payment_terms||"",paymentMethod:row.preferred_payment_method||"",status:row.status||"trial"};
     }catch(error){console.warn("Could not load subscription for school",school.id,String(error?.message||error))}
@@ -572,8 +572,8 @@ schoolDetails=function(id){
   const levelField=[...form.querySelectorAll(".form-field")].find(x=>x.textContent.includes("Levels offered by this school"));
   if(levelField){levelField.innerHTML='<label>Levels offered by this school</label><div class="muted small">Choose one or more school categories. Selecting a category reveals its grades; you can adjust individual grades.</div>'+levelGroups.map((g,i)=>'<div style="margin:9px 0"><label><input type="checkbox" class="edit-level-category" data-group="editLevel'+i+'"> <b>'+g.name+'</b></label><div class="county-grid" id="editLevel'+i+'" style="display:none;margin-top:6px">'+g.grades.map(x=>'<label class="county"><input type="checkbox" name="levels" value="'+x+'" '+((school.levels||[]).includes(x)?"checked":"")+'> '+x+'</label>').join("")+'</div></div>').join("");levelGroups.forEach((g,i)=>{const box=$("editLevel"+i),checks=[...box.querySelectorAll('input[name="levels"]')],selected=checks.some(x=>x.checked),category=box.parentElement.querySelector(".edit-level-category");category.checked=selected;box.style.display=selected?"grid":"none";category.addEventListener("change",()=>{box.style.display=category.checked?"grid":"none";checks.forEach(x=>x.checked=category.checked)})})}
   const manualModules=[...form.querySelectorAll(".form-field")].find(x=>x.textContent.includes("Module entitlements"));
-  if(manualModules)manualModules.innerHTML='<label>Automatic module entitlements</label><div class="muted small">Modules are assigned automatically from the school levels selected above. Core modules are available to every school.</div>';
-  const plan=plans.find(p=>p.name===school.plan)||{},allowed=modulesForLevels(school.levels||[]);
+  if(manualModules)manualModules.innerHTML='<label>Automatic module entitlements</label><div class="muted small">Modules are calculated from the selected school levels and the assigned subscription plan. Core modules are included for every school.</div>';
+  const plan=plans.find(p=>p.name===school.plan)||{},planModules=Array.isArray(plan.modules)?plan.modules:String(plan.modules||"").split(/[,;+]/).map(x=>x.trim()).filter(Boolean),allowed=[...new Set([...modulesForLevels(school.levels||[]),...planModules])];
   const panel=document.createElement("section");panel.className="panel";panel.style.cssText="padding:16px;margin-top:16px;border:1px solid #dce5f2;border-radius:12px;background:#f8faff";
   const currentAdmin=school.schoolAdmin||{};
   const editing=!!school.schoolAdmin;
