@@ -5,7 +5,7 @@ export async function onRequestPost({request,env}){
  if(!env.DB)return json({ok:false,error:"Account lookup is temporarily unavailable."},503);
  let body;try{body=await request.json()}catch{return json({ok:false,error:"Enter your username."},400)}
  const username=norm(body.username);
- if(!/^[a-z0-9._@+-]{3,190}$/.test(username))return json({ok:false,error:"Enter a valid username."},400);
+ if(!/^[a-z0-9._-]{3,32}$/.test(username))return json({ok:false,error:"Enter your username (3–32 letters, numbers, dots, underscores or hyphens). Email addresses cannot be used to sign in."},400);
  try{
   await env.DB.prepare("CREATE TABLE IF NOT EXISTS auth_lookup_attempts(identifier TEXT PRIMARY KEY,attempt_count INTEGER NOT NULL DEFAULT 0,window_started TEXT NOT NULL)").run();
   const key=username;
@@ -15,7 +15,7 @@ export async function onRequestPost({request,env}){
   const user=await env.DB.prepare(`SELECT u.id,u.full_name,u.email,u.username,u.status,r.role_name,s.name AS school_name
     FROM users u JOIN user_role_assignments a ON a.user_id=u.id
     JOIN roles r ON r.id=a.role_id LEFT JOIN schools s ON s.id=a.school_id
-    WHERE a.school_id IS NULL AND r.role_key='super_admin' AND (u.username_normalized=? OR u.email_normalized=?) LIMIT 1`).bind(username,username).first();
+    WHERE a.school_id IS NULL AND r.role_key='super_admin' AND u.username_normalized=? LIMIT 1`).bind(username).first();
   if(!user||user.status!=="active")return json({ok:false,error:"We couldn't verify that account. Check the username and try again."},404);
   return json({ok:true,account:{fullName:user.full_name,username:user.username,maskedEmail:maskEmail(user.email),role:user.role_name,workspace:user.school_name||"NAVSTAR Platform"}});
  }catch(error){console.error("NAVSTAR username lookup",error);return json({ok:false,error:"Account lookup is temporarily unavailable."},503)}
