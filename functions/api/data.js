@@ -167,6 +167,7 @@ async function validateConfiguredGrade(db,name,schoolId,values,current={}){
   if(level==="primary")return /^g[1-6]$/.test(stageCode)||/^grade [1-6]$/.test(stageName);
   if(level==="junior school")return /^g[7-9]$/.test(stageCode)||/^grade [7-9]$/.test(stageName);
   if(level==="senior school")return /^g1[0-2]$/.test(stageCode)||/^grade 1[0-2]$/.test(stageName);
+  if(level==="8-4-4 primary")return /^std[1-8]$/.test(stageCode)||/^standard [1-8]$/.test(stageName);
   if(level.includes("8-4-4")||level==="secondary")return /^form[1-4]$/.test(stageCode)||/^form [1-4]$/.test(stageName);
   return allowed.has(stageName)||allowed.has(stageCode);
  });
