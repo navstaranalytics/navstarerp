@@ -90,3 +90,42 @@ export async function onRequestPost({request,env}){
   return json({ok:true,message:"Platform branding saved centrally."});
  }catch{return json({ok:false,error:"Could not save platform branding."},500)}
 }
+
+
+const LOGIN_BACKGROUND_KEY="login-background";
+const R2_LOGIN_BACKGROUND_KEY="platform/login-background";
+const MAX_LOGIN_BACKGROUND_BYTES=4*1024*1024;
+export async function onRequestGetLoginBackground({env}){
+ if(!env.DB)return new Response("Database unavailable.",{status:503});
+ try{
+  await ensureLogoTable(env.DB);
+  const row=await env.DB.prepare("SELECT content_type,image_data,storage_provider,object_key FROM platform_branding_assets WHERE asset_key=?").bind(LOGIN_BACKGROUND_KEY).first();
+  if(!row)return new Response("Login background not configured.",{status:404,headers:{"Cache-Control":"no-store"}});
+  if(row.storage_provider==="r2"){
+   if(!env.R2||!row.object_key)return new Response("Background storage unavailable.",{status:503});
+   const object=await env.R2.get(row.object_key);if(!object)return new Response("Background not found.",{status:404});
+   return new Response(object.body,{headers:{"Content-Type":row.content_type,"Cache-Control":"public, max-age=300","X-Content-Type-Options":"nosniff"}});
+  }
+  const bytes=row.image_data instanceof Uint8Array?row.image_data:new Uint8Array(row.image_data||[]);
+  return new Response(bytes,{headers:{"Content-Type":row.content_type,"Content-Length":String(bytes.byteLength),"Cache-Control":"public, max-age=300","X-Content-Type-Options":"nosniff"}});
+ }catch{return new Response("Could not load login background.",{status:500})}
+}
+export async function onRequestPostLoginBackground({request,env}){
+ if(!env.DB)return json({ok:false,error:"Database unavailable."},503);
+ const actor=await getSuperAdminSession(request,env);if(!actor)return json({ok:false,error:"Only Super Admin can upload the login background."},401);
+ let form;try{form=await request.formData()}catch{return json({ok:false,error:"Choose an image to upload."},400)}
+ const file=form.get("background");
+ if(!file||typeof file.arrayBuffer!=="function")return json({ok:false,error:"Choose a background image."},400);
+ if(!{"image/png":1,"image/jpeg":1,"image/webp":1}[file.type])return json({ok:false,error:"Use a PNG, JPG or WebP image."},400);
+ if(file.size<1||file.size>MAX_LOGIN_BACKGROUND_BYTES)return json({ok:false,error:"Background image must be 4 MB or smaller."},400);
+ try{
+  const bytes=new Uint8Array(await file.arrayBuffer());await ensureLogoTable(env.DB);
+  if(env.R2){
+   await env.R2.put(R2_LOGIN_BACKGROUND_KEY,bytes,{httpMetadata:{contentType:file.type,cacheControl:"public, max-age=300"}});
+   await env.DB.prepare("INSERT INTO platform_branding_assets(asset_key,content_type,image_data,storage_provider,object_key,updated_by,updated_at) VALUES(?,?,X'', 'r2',?,?,strftime('%Y-%m-%dT%H:%M:%fZ','now')) ON CONFLICT(asset_key) DO UPDATE SET content_type=excluded.content_type,image_data=X'',storage_provider='r2',object_key=excluded.object_key,updated_by=excluded.updated_by,updated_at=excluded.updated_at").bind(LOGIN_BACKGROUND_KEY,file.type,R2_LOGIN_BACKGROUND_KEY,actor.id).run();
+   return json({ok:true,backgroundUrl:"/api/branding/login-background",storage:"R2",message:"Login background saved to R2."});
+  }
+  await env.DB.prepare("INSERT INTO platform_branding_assets(asset_key,content_type,image_data,storage_provider,object_key,updated_by,updated_at) VALUES(?,?,?,'d1',NULL,?,strftime('%Y-%m-%dT%H:%M:%fZ','now')) ON CONFLICT(asset_key) DO UPDATE SET content_type=excluded.content_type,image_data=excluded.image_data,storage_provider='d1',object_key=NULL,updated_by=excluded.updated_by,updated_at=excluded.updated_at").bind(LOGIN_BACKGROUND_KEY,file.type,bytes,actor.id).run();
+  return json({ok:true,backgroundUrl:"/api/branding/login-background",storage:"D1",message:"Login background saved centrally in D1."});
+ }catch{return json({ok:false,error:"Background upload failed. Please try again."},500)}
+}
