@@ -55,13 +55,17 @@ function configuredGradeSpecs(levels){
 }
 async function syncSchoolGradeLevels(db,schoolId,curriculum,levels){
  const specs=configuredGradeSpecs(levels);
- await db.prepare("UPDATE grade_levels SET is_active=0 WHERE school_id=?").bind(schoolId).run();
- if(!specs.length)return;
+ const existing=await db.prepare("SELECT id,stage_code,is_active FROM grade_levels WHERE school_id=? AND curriculum=?").bind(schoolId,curriculum).all();
+ const byCode=new Map((existing.results||[]).map(x=>[x.stage_code,x]));
+ const wanted=new Set(specs.map(x=>x[0]));
  const statements=[];
  for(const [code,name,order,level] of specs){
-  statements.push(db.prepare("INSERT INTO grade_levels(id,school_id,curriculum,stage_code,stage_name,stage_order,school_level,is_active) VALUES(?,?,?,?,?,?,?,1) ON CONFLICT(school_id,curriculum,stage_code) DO UPDATE SET stage_name=excluded.stage_name,stage_order=excluded.stage_order,school_level=excluded.school_level,is_active=1").bind(makeId(),schoolId,curriculum,code,name,order,level));
+  const current=byCode.get(code);
+  if(current)statements.push(db.prepare("UPDATE grade_levels SET stage_name=?,stage_order=?,school_level=? WHERE id=? AND school_id=?").bind(name,order,level,current.id,schoolId));
+  else statements.push(db.prepare("INSERT INTO grade_levels(id,school_id,curriculum,stage_code,stage_name,stage_order,school_level,is_active) VALUES(?,?,?,?,?,?,?,1)").bind(makeId(),schoolId,curriculum,code,name,order,level));
  }
- await db.batch(statements);
+ for(const row of existing.results||[])if(!wanted.has(row.stage_code))statements.push(db.prepare("UPDATE grade_levels SET is_active=0 WHERE id=? AND school_id=?").bind(row.id,schoolId));
+ if(statements.length)await db.batch(statements);
 }
 function curriculumLearningAreas(curriculum,levels){
  const cbe=/cbe|cbc|competenc/i.test(String(curriculum||""));
