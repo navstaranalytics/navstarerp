@@ -14,9 +14,10 @@ export async function onRequestPost({request,env}){
   const row=await env.DB.prepare("SELECT attempt_count,window_started FROM auth_lookup_attempts WHERE identifier=?").bind(key).first();
   if(row&&row.window_started>new Date(Date.now()-60*60*1000).toISOString()&&Number(row.attempt_count)>=12)return json({ok:false,error:"Too many account lookups. Wait before trying again."},429);
   await env.DB.prepare("INSERT INTO auth_lookup_attempts(identifier,attempt_count,window_started) VALUES(?,1,strftime('%Y-%m-%dT%H:%M:%fZ','now')) ON CONFLICT(identifier) DO UPDATE SET attempt_count=CASE WHEN window_started < datetime('now','-1 hour') THEN 1 ELSE attempt_count+1 END,window_started=CASE WHEN window_started < datetime('now','-1 hour') THEN strftime('%Y-%m-%dT%H:%M:%fZ','now') ELSE window_started END").bind(key).run();
+  const columns=await env.DB.prepare("PRAGMA table_info(users)").all();if(!(columns.results||[]).some(x=>x.name==="profile_photo_url"))await env.DB.prepare("ALTER TABLE users ADD COLUMN profile_photo_url TEXT").run();
   const user=await env.DB.prepare(`SELECT u.id,u.full_name,u.email,u.phone,u.username,u.status,r.role_name,r.role_key,
       s.id AS school_id,s.name AS school_name,s.contact_email AS school_email,s.contact_phone AS school_phone,
-      ss.settings_json,p.profile_photo_url
+      ss.settings_json,COALESCE(u.profile_photo_url,p.profile_photo_url) AS profile_photo_url
     FROM users u JOIN user_role_assignments a ON a.user_id=u.id
     JOIN roles r ON r.id=a.role_id LEFT JOIN schools s ON s.id=a.school_id
     LEFT JOIN school_settings ss ON ss.school_id=s.id
@@ -33,7 +34,7 @@ export async function onRequestPost({request,env}){
   return json({ok:true,account:{fullName:user.full_name,username:user.username,maskedEmail:maskEmail(user.email),maskedPhone:maskPhone(user.phone),
     role:user.role_name,workspace:user.school_name||"NAVSTAR Platform",schoolName:user.school_name||"NAVSTAR Analytics",
     maskedSchoolEmail:maskEmail(user.school_email),maskedSchoolPhone:maskPhone(user.school_phone),
-    profilePhotoUrl:isSuperAdmin?safeImage(user.profile_photo_url):"",schoolLogoUrl:isSuperAdmin?"":schoolLogo||"/api/branding/logo",
+    profilePhotoUrl:safeImage(user.profile_photo_url),schoolLogoUrl:isSuperAdmin?"":schoolLogo||"/api/branding/logo",
     identityType:isSuperAdmin?"platform":"school"}});
  }catch(error){console.error("NAVSTAR username lookup",error);return json({ok:false,error:"Account lookup is temporarily unavailable."},503)}
 }
