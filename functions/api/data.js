@@ -225,10 +225,11 @@ export async function onRequestPost({request,env}){
   const gradeError=await validateConfiguredGrade(env.DB,name,schoolId,values);if(gradeError)return json({ok:false,error:gradeError},403);
   if(name==="announcements")values.created_by=a.user.id;
   const refError=await validateRefs(env.DB,cfg,values,schoolId);if(refError)return json({ok:false,error:refError},400);
-  if(name==="payments"){values.recorded_by=a.user.id;values.currency=values.currency||"KES";}
+  if(name==="payments"){if(values.status&&!["pending","confirmed","failed"].includes(values.status))return json({ok:false,error:"New payment status must be Pending, Confirmed or Failed. Reversals require a separate audited workflow."},400);values.recorded_by=a.user.id;values.currency=values.currency||"KES";}
   if(name==="invoices"){
     const subtotal=Number(values.subtotal??0),discount=Number(values.discount??0),tax=Number(values.tax??0),total=Number(values.total??0);
     if(![subtotal,discount,tax,total].every(Number.isFinite)||subtotal<0||discount<0||tax<0||total<0||discount>subtotal||Math.abs(total-(subtotal-discount+tax))>0.01)return json({ok:false,error:"Invoice total must equal subtotal minus discount plus tax."},400);
+    if(values.status&&!["draft","issued"].includes(values.status))return json({ok:false,error:"New invoices must be Draft or Issued. Settlement status is calculated from confirmed payments."},400);
     values.amount_paid=0;values.currency=values.currency||"KES";
   }
   const teacherError=await validateTeacherWrite(env.DB,a.user,name,values);if(teacherError)return json({ok:false,error:teacherError},403);
@@ -277,6 +278,7 @@ export async function onRequestPatch({request,env}){
   if(name==="payments")return json({ok:false,error:"Payment records are immutable. Record a separate reversal or correction instead."},405);
   let body;try{body=await request.json()}catch{return json({ok:false,error:"Invalid record update."},400)}
   if(name==="invoices"&&body.amount_paid!==undefined)return json({ok:false,error:"Invoice payments must be recorded through the payment register."},403);
+  if(name==="invoices"&&["paid","part_paid"].includes(String(body.status||"")))return json({ok:false,error:"Invoice settlement status is calculated from confirmed payments."},403);
   const values=bodyFields(body,cfg);delete values.school_id;
   if(!Object.keys(values).length)return json({ok:false,error:"No editable fields were supplied."},400);
   try{
