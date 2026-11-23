@@ -13,7 +13,7 @@ const resources={
   grades:{table:"grade_levels",scope:true,fields:["curriculum","stage_code","stage_name","stage_order","school_level","is_active"],required:["school_id","stage_code","stage_name"]},
   streams:{table:"streams",scope:true,fields:["grade_level_id","name","capacity","classroom","status"],required:["school_id","grade_level_id","name"],refs:{grade_level_id:"grade_levels"}},
   "learning-areas":{table:"learning_areas",scope:true,fields:["curriculum","code","name","stage_code","pathway","is_active","subject_type","is_mandatory","source_template"],required:["school_id","name"]},
-  "learner-learning-areas":{table:"learner_learning_areas",scope:true,fields:["enrollment_id","learner_id","learning_area_id","selection_type","status"],required:["school_id","enrollment_id","learner_id","learning_area_id"],refs:{enrollment_id:"learner_enrollments",learner_id:"learners",learning_area_id:"learning_areas"}},
+  "learner-learning-areas":{table:"learner_learning_areas",scope:true,fields:["enrollment_id","learner_id","learning_area_id","selection_type","selected_by","status"],required:["school_id","enrollment_id","learner_id","learning_area_id"],refs:{enrollment_id:"learner_enrollments",learner_id:"learners",learning_area_id:"learning_areas"}},
   staff:{table:"staff_profiles",scope:true,fields:["user_id","staff_number","department","employment_type","employment_status","hire_date","profile_json"],required:["school_id"],refs:{user_id:"users"}},
   classes:{table:"classes",scope:true,fields:["academic_year_id","grade_level_id","stream_id","class_teacher_staff_id","capacity","room","status"],required:["school_id","academic_year_id","grade_level_id","stream_id"],refs:{academic_year_id:"academic_years",grade_level_id:"grade_levels",stream_id:"streams",class_teacher_staff_id:"staff_profiles"}},
   learners:{table:"learners",scope:true,fields:["admission_number","first_name","middle_name","last_name","gender","date_of_birth","status","pathway","profile_json"],required:["school_id","admission_number","first_name","last_name"]},
@@ -312,6 +312,7 @@ export async function onRequestPost({request,env}){
   }
   if(name==="grade-boundaries"){const issue=await validateGradeBoundary(env.DB,schoolId,values);if(issue)return json({ok:false,error:issue},400)}
   const teacherError=await validateTeacherWrite(env.DB,a.user,name,values);if(teacherError)return json({ok:false,error:teacherError},403);
+  if(name==="learner-learning-areas"){values.selection_type="elective";values.selected_by=a.user.id;}
   const recordId=id();
   if(name==="learner-learning-areas"){
     const enrol=await env.DB.prepare("SELECT le.id,le.learner_id,le.grade_level_id,l.pathway,gl.stage_code FROM learner_enrollments le JOIN learners l ON l.id=le.learner_id AND l.school_id=le.school_id JOIN grade_levels gl ON gl.id=le.grade_level_id AND gl.school_id=le.school_id WHERE le.id=? AND le.school_id=? AND le.learner_id=? AND le.status='active'").bind(values.enrollment_id,schoolId,values.learner_id).first();
@@ -355,7 +356,6 @@ export async function onRequestPost({request,env}){
         if((mandatory.results||[]).length)await env.DB.batch(mandatory.results.map(x=>env.DB.prepare("INSERT OR IGNORE INTO learner_learning_areas(id,school_id,enrollment_id,learner_id,learning_area_id,selection_type,status) VALUES(?,?,?,?,?,'mandatory','active')").bind(id(),schoolId,recordId,values.learner_id,x.id)));
       }
     }
-    if(name==="learner-learning-areas")values.selected_by=a.user.id;
     const record=await env.DB.prepare("SELECT * FROM "+cfg.table+" WHERE id=?").bind(recordId).first();
     await audit(env.DB,a.user,schoolId,"record.created",name,recordId);
     return json({ok:true,record},201);
