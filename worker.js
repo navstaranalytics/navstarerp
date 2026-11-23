@@ -57,6 +57,10 @@ export default {
   },
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
+    // Resolve clean portal URLs internally instead of redirecting between
+    // extensionless and .html paths (which can loop behind the Assets binding).
+    if (url.pathname === "/school-portal") url.pathname = "/school-portal.html";
+    if (url.pathname === "/super-admin") url.pathname = "/super-admin.html";
     const route = url.pathname;
     if (route.startsWith("/api/") && !["/api/auth/login","/api/auth/me","/api/auth/logout","/api/health","/api/setup-status","/api/setup-database"].includes(route)) {
       const policySession = await getAuthenticatedSession(request, env);
@@ -322,7 +326,10 @@ export default {
       if (route === "/school-portal.html" && session.is_super_admin)
         return Response.redirect(new URL("/super-admin.html", url), 302);
     }
-    if (env.ASSETS) return env.ASSETS.fetch(request);
+    if (env.ASSETS) {
+      const assetRequest = url.href !== request.url ? new Request(url.toString(), request) : request;
+      return env.ASSETS.fetch(assetRequest);
+    }
     return jsonNotFound();
   }
 };
