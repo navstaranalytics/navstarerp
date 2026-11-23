@@ -46,7 +46,9 @@ export async function onRequestPost({request,env}) {
   if(roleKey==="student"&&learnerNumbers.length!==1)return json({ok:false,error:"A learner account must be linked to exactly one learner."},400);
   const linkedLearners=[];
   for(const admission of learnerNumbers){const learner=await env.DB.prepare("SELECT id FROM learners WHERE school_id=? AND admission_number=?").bind(schoolId,admission).first();if(!learner)return json({ok:false,error:"Learner admission number "+admission+" was not found in this school."},404);linkedLearners.push(learner.id);}
-  const userId=id(),membershipId=id(),assignmentId=id();\n  const bootstrapPassword=Array.from(crypto.getRandomValues(new Uint8Array(32)),b=>b.toString(16).padStart(2,"0")).join("");\n  const passwordHash=await hashPassword(bootstrapPassword);
+  const userId=id(),membershipId=id(),assignmentId=id();
+  const bootstrapPassword=Array.from(crypto.getRandomValues(new Uint8Array(32)),b=>b.toString(16).padStart(2,"0")).join("");
+  const passwordHash=await hashPassword(bootstrapPassword);
   const statements=[
    env.DB.prepare("INSERT INTO users(id,email,email_normalized,username,username_normalized,phone,full_name,password_hash,status,password_changed_at) VALUES(?,?,?,?,?,?,?,?,'active',strftime('%Y-%m-%dT%H:%M:%fZ','now'))").bind(userId,email,email,username,username,phone||null,fullName,passwordHash),
    env.DB.prepare("INSERT INTO school_memberships(id,school_id,user_id,membership_status,job_title,joined_at) VALUES(?,?,?,'active',?,strftime('%Y-%m-%dT%H:%M:%fZ','now'))").bind(membershipId,schoolId,userId,role.role_name),
