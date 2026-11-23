@@ -105,8 +105,8 @@ function mapSchool(row){
   return {id:row.id,name:row.name,code:row.school_code,registrationNumber:row.registration_number||"",emisCode:row.emis_code||"",
     category:meta.category||row.institution_type||"",level:meta.level||"",ownership:row.ownership||"",county:row.county||"",
     subCounty:row.sub_county||"",town:row.town||"",contact:row.contact_person||"",email:row.contact_email||"",
-    phone:row.contact_phone||"",address:row.physical_address||"",curriculum:row.curriculum||"CBC",
-    curriculumLabel:meta.curriculumLabel||row.curriculum||"CBC",levels,plan:meta.plan||"Starter",
+    phone:row.contact_phone||"",address:row.physical_address||"",curriculum:row.curriculum||"Kenyan CBE",
+    curriculumLabel:meta.curriculumLabel||row.curriculum||"Kenyan CBE",levels,plan:meta.plan||"Starter",
     status:displayStatus(row.status),expiry:meta.expiry||"",modules:modulesForLevels(levels),
     learnerCount:Number(meta.learnerCount||0),teacherCount:Number(meta.teacherCount||0),created:row.created_at,schoolAdmin:row.admin_user_id?{id:row.admin_user_id,fullName:row.admin_full_name,username:row.admin_username,email:row.admin_email,phone:row.admin_phone,status:row.admin_status,role:"School Administrator"}:null};
 }
@@ -138,7 +138,7 @@ export async function onRequestPost({request,env}){
   if(!/^\S+@\S+\.\S+$/.test(email)||email.length>190)return json({ok:false,error:"Enter the school's official email address so Navstar can send its welcome information."},400);
   if(phone.length>40||contact.length>120)return json({ok:false,error:"Check the school contact name and phone number."},400);
   const id=makeId(),code=clean(body.code)||("NS-"+crypto.randomUUID().slice(0,8).toUpperCase());
-  const status=normStatus(body.status),curriculum=clean(body.curriculum)||"CBC";
+  const status=normStatus(body.status),curriculum=clean(body.curriculum)||"Kenyan CBE";
   const levels=Array.isArray(body.levels)?[...new Set(body.levels.map(clean).filter(Boolean))]:[];
   if(!levels.length)return json({ok:false,error:"Select at least one school level in Super Admin before registering this school."},400);
   const meta={category:clean(body.category),level:clean(body.level),plan:clean(body.plan)||"Starter",expiry:clean(body.expiry),modules:modulesForLevels(levels),learnerCount:0,teacherCount:0};
