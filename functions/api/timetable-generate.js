@@ -30,10 +30,10 @@ export async function onRequestPost({request,env}){
   const allocationRows=await env.DB.prepare("SELECT ta.staff_id,ta.academic_year_id,ta.term_id,ta.grade_level_id,ta.stream_id,ta.learning_area_id,ta.pathway,sp.user_id,sp.employment_status,la.name AS area_name,gl.stage_name AS grade_name,st.name AS stream_name FROM teacher_allocations ta JOIN staff_profiles sp ON sp.id=ta.staff_id AND sp.school_id=ta.school_id JOIN learning_areas la ON la.id=ta.learning_area_id AND la.school_id=ta.school_id JOIN grade_levels gl ON gl.id=ta.grade_level_id AND gl.school_id=ta.school_id LEFT JOIN streams st ON st.id=ta.stream_id AND st.school_id=ta.school_id WHERE ta.school_id=? AND ta.academic_year_id=? AND (ta.term_id IS NULL OR ta.term_id IS ?) AND sp.employment_status='active' ORDER BY gl.stage_order,gl.stage_name,st.name,la.name").bind(schoolId,yearId,termId).all();
   const allocations=allocationRows.results||[];
   if(!allocations.length)return json({ok:false,error:"No active teacher allocations were found for this academic year and term. Set up teacher allocations first."},409);
-  const existingRows=await env.DB.prepare("SELECT grade_level_id,stream_id,staff_id,weekday,start_time,end_time,room FROM timetable_entries WHERE school_id=? AND academic_year_id=? AND (term_id IS ? OR term_id IS NULL)").bind(schoolId,termId).all();
+  const existingRows=await env.DB.prepare("SELECT grade_level_id,stream_id,staff_id,weekday,start_time,end_time,room FROM timetable_entries WHERE school_id=? AND academic_year_id=? AND (term_id IS ? OR term_id IS NULL)").bind(schoolId,yearId,termId).all();
   const occupied=(existingRows.results||[]).map(x=>({...x,start:timeToMinutes(x.start_time),end:timeToMinutes(x.end_time)}));
   const slots=[];
-  for(const day of days)for(let p=0;p<periods;p++){const mins=timeToMinutes(startTime)+p*duration+(p>=breakAfter&&breakAfter>0?breakMinutes:0);slots.push({weekday:day,start_time:toTime(mins),end_time:toTime(mins+duration),start:mins,end:mins+duration,period:p+1})}
+  for(const day of days)for(let p=0;p<periods;p++){const mins=timeToMinutes(startTime)+p*duration+(p>=breakAfter&&breakAfter>0?breakMinutes:0);if(mins+duration>1439)return json({ok:false,error:"The selected school day extends beyond midnight. Reduce periods or adjust the start time."},400);slots.push({weekday:day,start_time:toTime(mins),end_time:toTime(mins+duration),start:mins,end:mins+duration,period:p+1})}
   const planned=[],unplaced=[];
   for(const allocation of allocations){
    const alreadyDays=new Set();
