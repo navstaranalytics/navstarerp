@@ -90,7 +90,9 @@ async function ensureUserProfilePhotoColumn(db){
 export async function getAuthenticatedSession(request, env) {
   if (!env?.DB) return null;
   try{await ensureUserProfilePhotoColumn(env.DB)}catch(error){console.error("Profile photo column setup failed:",String(error?.message||error));return null;}
-  const token=String(request.headers.get("X-Navstar-Session")||cookieValue(request,COOKIE)).trim();
+  // Navstar browser sessions are tab-scoped. Never fall back to a shared
+  // browser cookie, which could silently reopen a session in a newly opened tab.
+  const token=String(request.headers.get("X-Navstar-Session")||"").trim();
   if(!token||token.length<40)return null;
   const tokenHash=await digest(token);
   const row=await env.DB.prepare(`
