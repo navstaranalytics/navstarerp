@@ -112,16 +112,25 @@ async function syncSchoolLearningAreas(db,schoolId,curriculum,levels){
  const {template,rows}=curriculumLearningAreas(curriculum,levels);
  const wanted=new Set(rows.map(x=>x.stage));
  await db.prepare("UPDATE learning_areas SET is_active=0 WHERE school_id=? AND curriculum<>?").bind(schoolId,curriculum).run();
- const existing=await db.prepare("SELECT id,stage_code,code FROM learning_areas WHERE school_id=?").bind(schoolId).all();
- const byKey=new Map((existing.results||[]).map(x=>[String(x.stage_code||"")+"|"+String(x.code||""),x.id]));
- const wantedKeys=new Set(rows.map(x=>x.stage+"|"+x.code));
- const statements=[];
- for(const x of existing.results||[])if(!wanted.has(x.stage_code)||!wantedKeys.has(String(x.stage_code||"")+"|"+String(x.code||"")))statements.push(db.prepare("UPDATE learning_areas SET is_active=0 WHERE id=? AND school_id=?").bind(x.id,schoolId));
- for(const x of rows){
-  const found=byKey.get(x.stage+"|"+x.code);
-  if(found)statements.push(db.prepare("UPDATE learning_areas SET name=?,pathway=?,subject_type=?,is_mandatory=?,source_template=?,is_active=CASE WHEN ?=1 THEN 1 ELSE is_active END WHERE id=? AND school_id=?").bind(x.name,x.pathway,x.type,x.mandatory,template,x.mandatory,found,schoolId));
-  else statements.push(db.prepare("INSERT INTO learning_areas(id,school_id,curriculum,code,name,stage_code,pathway,is_active,subject_type,is_mandatory,source_template) VALUES(?,?,?,?,?,?,?, ?,?,?,?)").bind(makeId(),schoolId,curriculum,x.code,x.name,x.stage,x.pathway,x.mandatory,x.type,x.mandatory,template));
+ const existing=await db.prepare("SELECT id,stage_code,code,name,catalogue_code,school_customized FROM learning_areas WHERE school_id=?").bind(schoolId).all();
+ const byKey=new Map();
+ for(const row of existing.results||[]){
+  const stable=row.catalogue_code||row.code;
+  byKey.set(String(row.stage_code||"")+"|"+String(stable||""),row);
+  byKey.set(String(row.stage_code||"")+"|name:"+String(row.name||"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim(),row);
  }
+ const statements=[],matched=new Set();
+ for(const x of rows){
+  const nameKey=x.stage+"|name:"+String(x.name||"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim();
+  const found=byKey.get(x.stage+"|"+x.code)||byKey.get(nameKey);
+  if(found){
+   matched.add(found.id);
+   statements.push(db.prepare("UPDATE learning_areas SET catalogue_code=COALESCE(catalogue_code,?),name=CASE WHEN school_customized=1 THEN name ELSE ? END,code=CASE WHEN school_customized=1 THEN code ELSE ? END,pathway=?,subject_type=?,is_mandatory=?,source_template=?,is_active=CASE WHEN ?=1 THEN 1 ELSE is_active END WHERE id=? AND school_id=?").bind(x.code,x.name,x.code,x.pathway,x.type,x.mandatory,template,x.mandatory,found.id,schoolId));
+  }else{
+   statements.push(db.prepare("INSERT INTO learning_areas(id,school_id,curriculum,code,catalogue_code,name,stage_code,pathway,is_active,subject_type,is_mandatory,source_template,school_customized) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,0)").bind(makeId(),schoolId,curriculum,x.code,x.code,x.name,x.stage,x.pathway,x.mandatory,x.type,x.mandatory,template));
+  }
+ }
+ for(const row of existing.results||[])if(!matched.has(row.id)&&!rows.some(x=>x.stage===row.stage_code&&(x.code===(row.catalogue_code||row.code)||String(x.name||"").toLowerCase()===String(row.name||"").toLowerCase())))statements.push(db.prepare("UPDATE learning_areas SET is_active=0 WHERE id=? AND school_id=?").bind(row.id,schoolId));
  if(statements.length)await db.batch(statements);
 }
 function mapSchool(row){
