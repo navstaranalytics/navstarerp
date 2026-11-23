@@ -199,7 +199,7 @@ export async function onRequestPostSetupAdmin({ request, env }) {
       env.DB.prepare("INSERT INTO audit_logs (id, actor_user_id, action, resource_type, resource_id, outcome, details_json) VALUES (?, ?, 'super_admin.initial_setup', 'user', ?, 'success', ?)").bind(id(), userId, userId, JSON.stringify({ username, email }))
     ];
     await env.DB.batch(statements);
-    return json({ ok: true, setupRequired: false, message: "Your Navstar Super Admin account has been created. Please sign in using your username or email and password." }, 201);
+    return json({ ok: true, setupRequired: false, message: "Your Navstar Super Admin account has been created. Please sign in using your username and password." }, 201);
   } catch (error) {
     const message = String(error?.message || "Unknown database error");
     console.error("Navstar initial Super Admin setup failed:", message);
@@ -350,7 +350,7 @@ async function ensurePasswordResetTable(db) {
 export async function onRequestPostPasswordResetRequest({ request, env }) {
   if (!env.DB) return json({ ok:false, error:"Database connection is unavailable." },503);
   if (!env.RESEND_API_KEY) return json({ ok:false, error:"Email delivery is not configured yet. The platform administrator must configure the email service before password resets can be used." },503);
-  let body; try { body=await request.json(); } catch { return json({ok:false,error:"Enter your username or email address."},400); }
+  let body; try { body=await request.json(); } catch { return json({ok:false,error:"Enter your username."},400); }
   const identifier=normalize(body.identifier);
   if (!/^[a-z0-9._-]{3,32}$/.test(identifier)) return json({ok:false,error:"Enter your username (not your email address)."},400);
   try {
