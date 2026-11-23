@@ -15,6 +15,38 @@ function modulesForLevels(levels){
   if(selected.length)modules.add("Attendance");
   return [...modules];
 }
+async function seedSchoolSampleData(db,schoolId,curriculum,levels){
+ const year=new Date().getUTCFullYear(),yearId=makeId(),termIds=[makeId(),makeId(),makeId()];
+ const gradeSpecs=[];
+ const selected=Array.isArray(levels)?levels:[];
+ if(selected.some(x=>/primary/i.test(x))){gradeSpecs.push(["PP1","PP1",0],["PP2","PP2",1],...Array.from({length:6},(_,i)=>["G"+(i+1),"Grade "+(i+1),i+2]));}
+ if(selected.some(x=>/junior/i.test(x))||selected.some(x=>/^Grade (7|8|9)$/.test(x)))gradeSpecs.push(...[7,8,9].map(n=>["G"+n,"Grade "+n,n+1]));
+ if(selected.some(x=>/senior/i.test(x))||selected.some(x=>/^Grade (10|11|12)$/.test(x)))gradeSpecs.push(...[10,11,12].map(n=>["G"+n,"Grade "+n,n+1]));
+ for(const x of selected){const m=x.match(/^(Grade (?:[1-9]|1[0-2])|Form [1-4]|PP[12])$/i);if(m&&!gradeSpecs.some(g=>g[1].toLowerCase()===m[1].toLowerCase()))gradeSpecs.push([m[1].replace(/\s/g,"").toUpperCase(),m[1],gradeSpecs.length+1]);}
+ if(!gradeSpecs.length)gradeSpecs.push(["G7","Grade 7",7]);
+ const first=gradeSpecs[0],gradeId=makeId(),streamId=makeId(),classId=makeId();
+ const learnerIds=[makeId(),makeId()],admissions=["DEMO-"+year+"-001","DEMO-"+year+"-002"];
+ const termRows=[
+  {id:termIds[0],name:"Term 1",start:year+"-01-01",end:year+"-04-30",status:"completed"},
+  {id:termIds[1],name:"Term 2",start:year+"-05-01",end:year+"-08-31",status:"completed"},
+  {id:termIds[2],name:"Term 3",start:year+"-09-01",end:year+"-12-31",status:"active"}
+ ];
+ const q=[];
+ q.push(db.prepare("INSERT INTO academic_years(id,school_id,name,start_date,end_date,status) VALUES(?,?,?,?,?,'active')").bind(yearId,schoolId,String(year),year+"-01-01",year+"-12-31"));
+ for(const t of termRows)q.push(db.prepare("INSERT INTO terms(id,school_id,academic_year_id,name,start_date,end_date,status) VALUES(?,?,?,?,?,?,?)").bind(t.id,schoolId,yearId,t.name,t.start,t.end,t.status));
+ for(const [code,name,order] of gradeSpecs){const gid=code===first[0]?gradeId:makeId();q.push(db.prepare("INSERT INTO grade_levels(id,school_id,curriculum,stage_code,stage_name,stage_order,school_level,is_active) VALUES(?,?,?,?,?,?,?,1)").bind(gid,schoolId,curriculum,code,name,order,/PP/.test(code)||/^Grade [1-6]$/.test(name)?"Primary":/^Grade [7-9]$/.test(name)?"Junior":"Senior"));if(code===first[0]){q.push(db.prepare("INSERT INTO streams(id,school_id,grade_level_id,name,capacity,status) VALUES(?,?,?,'Demo Stream',40,'active')").bind(streamId,schoolId,gid));q.push(db.prepare("INSERT INTO classes(id,school_id,academic_year_id,grade_level_id,stream_id,capacity,room,status) VALUES(?,?,?,?,?,40,'Demo Room','active')").bind(classId,schoolId,yearId,gid,streamId));}}
+ const areas=[["ENG","English"],["KIS","Kiswahili"],["MATH","Mathematics"],["SCI","Integrated Science"],["CRE","Christian Religious Education"]];
+ const areaIds=[];for(const [code,name] of areas){const aid=makeId();areaIds.push(aid);q.push(db.prepare("INSERT INTO learning_areas(id,school_id,curriculum,code,name,stage_code,is_active) VALUES(?,?,?,?,?,?,1)").bind(aid,schoolId,curriculum,code,name,first[0]));}
+ q.push(db.prepare("INSERT INTO learners(id,school_id,admission_number,first_name,last_name,gender,status,profile_json) VALUES(?,?,?,'Amina','Demo','Female','active',?)").bind(learnerIds[0],schoolId,admissions[0],JSON.stringify({sample_data:true})));
+ q.push(db.prepare("INSERT INTO learners(id,school_id,admission_number,first_name,last_name,gender,status,profile_json) VALUES(?,?,?,'Brian','Sample','Male','active',?)").bind(learnerIds[1],schoolId,admissions[1],JSON.stringify({sample_data:true})));
+ for(const lid of learnerIds)q.push(db.prepare("INSERT INTO learner_enrollments(id,school_id,learner_id,academic_year_id,grade_level_id,stream_id,status) VALUES(?,?,?,?,?,?,'active')").bind(makeId(),schoolId,lid,yearId,gradeId,streamId));
+ await db.batch(q);
+ const tracked=[["academic_years",yearId],...termIds.map(x=>["terms",x]),...gradeSpecs.map((g,i)=>["grade_levels",i===0?gradeId:null]).filter(x=>x[1]),["streams",streamId],["classes",classId],...areaIds.map(x=>["learning_areas",x]),...learnerIds.map(x=>["learners",x])];
+ const enroll=(await db.prepare("SELECT id FROM learner_enrollments WHERE school_id=? AND learner_id IN (?,?) AND academic_year_id=?").bind(schoolId,...learnerIds,yearId).all()).results||[];
+ for(const x of enroll)tracked.push(["learner_enrollments",x.id]);
+ await db.batch(tracked.map(([table,record])=>db.prepare("INSERT OR IGNORE INTO sample_data_records(id,school_id,table_name,record_id) VALUES(?,?,?,?)").bind(makeId(),schoolId,table,record)));
+ return {academicYear:String(year),terms:3,gradeLevels:gradeSpecs.length,streams:1,learningAreas:areas.length,sampleLearners:2};
+}
 function mapSchool(row){
   let meta={};
   try{meta=JSON.parse(row.settings_json||"{}").navstar_school_meta||{}}catch{}
@@ -66,6 +98,11 @@ export async function onRequestPost({request,env}){
       env.DB.prepare("INSERT INTO school_settings (school_id,timezone,currency,settings_json) VALUES (?,'Africa/Nairobi','KES',?)").bind(id,JSON.stringify({navstar_school_meta:meta})),
       env.DB.prepare("INSERT INTO audit_logs (id,actor_user_id,school_id,action,resource_type,resource_id,outcome,details_json) VALUES (?,?,?,'school.created','school',?,'success',?)").bind(makeId(),auth.user.id,id,id,JSON.stringify({name,schoolCode:code,levels}))
     ]);
+    let sampleData={created:false};
+    if(body.includeSampleData!==false){
+      try{sampleData={created:true,...await seedSchoolSampleData(env.DB,id,curriculum,levels)};}
+      catch(error){console.error("Navstar sample data seed failed",error);return json({ok:false,error:"School was registered, but sample data could not be created. Please retry sample setup from the school workspace."},500)}
+    }
     let emailDelivery="not_configured";
     if(env.RESEND_API_KEY && body.suppressWelcomeEmail!==true){
       const from=env.MAIL_FROM||"Navstar Analytics <no-reply@mail.navstardigitalhub.co.ke>",loginUrl=new URL("/login.html",new URL(request.url).origin).toString();
