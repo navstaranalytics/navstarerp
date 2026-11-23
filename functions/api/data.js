@@ -426,16 +426,8 @@ export async function onRequestPatch({request,env}){
     if(cfg.scope&&!a.user.is_super_admin&&requested&&requested!==a.user.school_id)return json({ok:false,error:"You cannot update records in another school."},403);
     const current=await env.DB.prepare("SELECT * FROM "+cfg.table+" WHERE "+where).bind(...(cfg.scope?[recordId,schoolId]:[recordId])).first();
     if(!current)return json({ok:false,error:"Record not found in the selected school."},404);
-    if(name==="grades"&&!a.user.is_super_admin&&Number(values.is_active)===0){
-      const hasLearners=await env.DB.prepare("SELECT 1 FROM learner_enrollments WHERE school_id=? AND grade_level_id=? AND status='active' LIMIT 1").bind(schoolId,recordId).first();
-      if(hasLearners)return json({ok:false,error:"This grade has active learner enrollments. Keep it active or complete/transfer those enrollments first."},409);
-    }
     if(name==="learning-areas"&&!a.user.is_super_admin){
       if(Number(current.is_mandatory)===1)return json({ok:false,error:"Mandatory learning areas cannot be deactivated."},403);
-      if(Number(values.is_active)===0){
-        const assigned=await env.DB.prepare("SELECT 1 FROM learner_learning_areas WHERE school_id=? AND learning_area_id=? AND status='active' LIMIT 1").bind(schoolId,recordId).first();
-        if(assigned)return json({ok:false,error:"This learning area is assigned to learners. Preserve existing learner records and deactivate it only after their selections are reviewed."},409);
-      }
     }
     const gradeError=await validateConfiguredGrade(env.DB,name,schoolId,values,current);if(gradeError)return json({ok:false,error:gradeError},403);
     const refError=await validateRefs(env.DB,cfg,values,schoolId);if(refError)return json({ok:false,error:refError},400);
