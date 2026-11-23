@@ -762,7 +762,7 @@ editPlan=function(name){
   });
 };
 /* Legacy browser-data recovery: read-only scan, immutable D1 archive, then safe migration of supported records. */
-let legacyRecoveryRecords=[],legacyRecoveryScanDone=false;
+let legacyRecoveryRecords=[],legacyRecoveryScanDone=false,legacyRecoveryArchived=false;
 function recoveryPage(){
  return head('BUSINESS CONTINUITY','Backup & recovery','Capture legacy browser records, preserve them in central D1, and safely migrate supported records.')+
  panel('Step 1 · Scan this browser','Read old Navstar local records without changing or deleting them','<div class="panel-pad"><p class="muted">This scans the browser profile and current Navstar site origin for older prototype records. Authentication tokens, passwords, OTPs and secret-like keys are excluded.</p><button class="btn" data-action="recovery-scan">Scan browser records</button> <button class="btn light" data-action="recovery-download" '+(legacyRecoveryScanDone?'':'disabled')+'>Download recovery JSON</button><div id="recoveryScanResult" class="notice">Not scanned yet. Use the same browser and profile where the old Navstar records were created.</div></div>')+
@@ -781,7 +781,7 @@ async function scanLegacyBrowser(){
   let value=raw,encoding='text';try{value=JSON.parse(raw);encoding='json'}catch{}
   records.push({key,encoding,value,characterCount:raw.length});
  }
- legacyRecoveryRecords=records;legacyRecoveryScanDone=true;
+ legacyRecoveryRecords=records;legacyRecoveryScanDone=true;legacyRecoveryArchived=false;
  const result=$('recoveryScanResult');if(result)result.textContent='Found '+records.length+' browser record(s) ('+records.reduce((n,r)=>n+r.characterCount,0).toLocaleString()+' characters). '+excluded.length+' sensitive/authentication-like key(s) excluded. Original browser data was not changed.';
  const archive=$('recoveryArchiveStatus');if(archive)archive.textContent='Ready to create a D1 snapshot.';
  const download=$('view').querySelector('[data-action="recovery-download"]'),save=$('view').querySelector('[data-action="recovery-archive"]'),migrate=$('view').querySelector('[data-action="recovery-migrate"]');
@@ -799,6 +799,7 @@ async function refreshRecoveryArchives(){
 async function archiveRecoveryRecords(records,source){
  const result=await schoolApi('/api/recovery',{method:'POST',body:JSON.stringify({source,records})});
  const status=$('recoveryArchiveStatus');if(status)status.textContent=result.message+' Archive ID: '+result.archive.id;
+ legacyRecoveryArchived=true;const migrate=$('view').querySelector('[data-action="recovery-migrate"]');if(migrate)migrate.disabled=false;
  await refreshRecoveryArchives();return result;
 }
 async function migrateLegacyRecords(){
@@ -851,7 +852,7 @@ $('view').addEventListener('click',async e=>{
   if(action==='recovery-scan')await scanLegacyBrowser();
   if(action==='recovery-download'){if(legacyRecoveryRecords.length)downloadRecoveryFile('navstar-browser-recovery-'+new Date().toISOString().slice(0,10)+'.json',{format:'navstar-recovery-v1',capturedAt:new Date().toISOString(),records:legacyRecoveryRecords})}
   if(action==='recovery-archive'){await archiveRecoveryRecords(legacyRecoveryRecords,'browser-local-storage')}
-  if(action==='recovery-migrate'){if(!confirm('First archive was recommended. Migrate only supported schools, plans and settings to D1? Existing matching school codes and plan names will be skipped.'))return;await migrateLegacyRecords()}
+  if(action==='recovery-migrate'){if(!legacyRecoveryArchived){toast('Save the recovery snapshot to D1 before migrating.');return}if(!confirm('Migrate supported schools, plans and settings to D1? Existing matching school codes and plan names will be skipped.'))return;await migrateLegacyRecords()}
   if(action==='recovery-refresh')await refreshRecoveryArchives();
   if(action==='recovery-download-archive'){const d=await schoolApi('/api/recovery/'+encodeURIComponent(b.dataset.id));downloadRecoveryFile('navstar-recovery-archive-'+b.dataset.id+'.json',d.archive.data)}
  }catch(error){toast(error.message||'Recovery action failed. Original browser records have not been deleted.')}
