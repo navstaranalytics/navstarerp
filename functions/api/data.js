@@ -225,8 +225,11 @@ export async function onRequestPost({request,env}){
   if(cfg.scope)values.school_id=schoolId;
   const gradeError=await validateConfiguredGrade(env.DB,name,schoolId,values);if(gradeError)return json({ok:false,error:gradeError},403);
   if(name==="announcements")values.created_by=a.user.id;
+  if(name==="attendance-sessions")values.taken_by=a.user.id;
+  if(name==="attendance-records")values.marked_by=a.user.id;
   const refError=await validateRefs(env.DB,cfg,values,schoolId);if(refError)return json({ok:false,error:refError},400);
-    if(name==="classes"){const grade=values.grade_level_id??current.grade_level_id,streamId=values.stream_id??current.stream_id;const stream=await env.DB.prepare("SELECT grade_level_id FROM streams WHERE id=? AND school_id=?").bind(streamId,schoolId).first();if(!stream||stream.grade_level_id!==grade)return json({ok:false,error:"The selected stream must belong to the selected grade."},400);const teacherId=values.class_teacher_staff_id??current.class_teacher_staff_id;if(teacherId){const teacher=await env.DB.prepare("SELECT 1 FROM staff_profiles WHERE id=? AND school_id=? AND employment_status='active'").bind(teacherId,schoolId).first();if(!teacher)return json({ok:false,error:"Select an active staff member as class teacher."},400);}}
+  if(name==="attendance-records"){const pair=await env.DB.prepare("SELECT s.grade_level_id,s.stream_id,e.grade_level_id AS enrolled_grade,e.stream_id AS enrolled_stream,e.status FROM attendance_sessions s JOIN learner_enrollments e ON e.learner_id=? AND e.school_id=s.school_id AND e.academic_year_id=s.academic_year_id WHERE s.id=? AND s.school_id=?").bind(values.learner_id,values.session_id,schoolId).first();if(!pair||pair.status!=="active"||pair.grade_level_id!==pair.enrolled_grade||(pair.stream_id&&pair.stream_id!==pair.enrolled_stream))return json({ok:false,error:"This learner is not actively enrolled in the selected attendance class."},400);}
+  if(name==="classes"){const stream=await env.DB.prepare("SELECT grade_level_id FROM streams WHERE id=? AND school_id=?").bind(values.stream_id,schoolId).first();if(!stream||stream.grade_level_id!==values.grade_level_id)return json({ok:false,error:"The selected stream must belong to the selected grade."},400);if(values.class_teacher_staff_id){const teacher=await env.DB.prepare("SELECT 1 FROM staff_profiles WHERE id=? AND school_id=? AND employment_status='active'").bind(values.class_teacher_staff_id,schoolId).first();if(!teacher)return json({ok:false,error:"Select an active staff member as class teacher."},400);}}
   if(name==="classes"){const stream=await env.DB.prepare("SELECT grade_level_id FROM streams WHERE id=? AND school_id=?").bind(values.stream_id,schoolId).first();if(!stream||stream.grade_level_id!==values.grade_level_id)return json({ok:false,error:"The selected stream must belong to the selected grade."},400);if(values.class_teacher_staff_id){const teacher=await env.DB.prepare("SELECT 1 FROM staff_profiles WHERE id=? AND school_id=? AND employment_status='active'").bind(values.class_teacher_staff_id,schoolId).first();if(!teacher)return json({ok:false,error:"Select an active staff member as class teacher."},400);}}
   if(name==="payments"){if(values.status&&!["pending","confirmed","failed"].includes(values.status))return json({ok:false,error:"New payment status must be Pending, Confirmed or Failed. Reversals require a separate audited workflow."},400);values.recorded_by=a.user.id;values.currency=values.currency||"KES";}
   if(name==="invoices"){
@@ -246,7 +249,7 @@ export async function onRequestPost({request,env}){
     }
     const columns=["id",...(cfg.scope?["school_id"]:[]),...Object.keys(values).filter(k=>k!=="school_id")];
     const vals=[recordId,...(cfg.scope?[schoolId]:[]),...Object.entries(values).filter(([k])=>k!=="school_id").map(([,v])=>v)];
-    const sql="INSERT INTO "+cfg.table+" ("+columns.join(",")+") VALUES ("+columns.map(()=>"?").join(",")+")";
+    const sql="INSERT INTO "+cfg.table+" ("+columns.join(",")+") VALUES ("+columns.map(()=>"?").join(",")+")"+(name==="attendance-records"?" ON CONFLICT(session_id,learner_id) DO UPDATE SET attendance_status=excluded.attendance_status,notes=excluded.notes,marked_by=excluded.marked_by":"");
     if(name==="payments"){
       const invoiceId=values.invoice_id||null;
       if(invoiceId){
