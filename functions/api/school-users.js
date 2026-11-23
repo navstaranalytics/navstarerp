@@ -4,6 +4,7 @@ const id=()=>crypto.randomUUID();
 const norm=v=>String(v||"").trim().toLowerCase();
 const clean=v=>String(v||"").trim();
 const allowedRoles=new Set(["school_owner","principal","deputy_principal","director_of_studies","deputy_director_of_studies","head_of_department","examinations_officer","class_teacher","teacher","bursar_accountant","hr_administrator","admissions_registrar","librarian","parent","student"]);
+const ensureLearnerLinkTable=db=>db.prepare("CREATE TABLE IF NOT EXISTS learner_user_links (id TEXT PRIMARY KEY,school_id TEXT NOT NULL REFERENCES schools(id) ON DELETE CASCADE,learner_id TEXT NOT NULL REFERENCES learners(id) ON DELETE CASCADE,user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,created_by TEXT REFERENCES users(id) ON DELETE SET NULL,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,UNIQUE(school_id,learner_id),UNIQUE(school_id,user_id))").run();
 const staffRoles=new Set(["school_owner","principal","deputy_principal","director_of_studies","deputy_director_of_studies","head_of_department","examinations_officer","class_teacher","teacher","bursar_accountant","hr_administrator","admissions_registrar","librarian"]);
 export async function onRequestGet({request,env}) {
  if(!env.DB)return json({ok:false,error:"Database connection is unavailable."},503);
@@ -35,6 +36,7 @@ export async function onRequestPost({request,env}) {
   if(!school||school.status!=="active")return json({ok:false,error:"The school workspace is not active."},409);
   const role=await env.DB.prepare("SELECT id,role_name FROM roles WHERE role_key=? AND school_id IS NULL").bind(roleKey).first();
   if(!role)return json({ok:false,error:"The selected role is not installed. Run the latest access-control upgrade."},503);
+  if(roleKey==="student")await ensureLearnerLinkTable(env.DB);
   const learnerNumbers=Array.isArray(body.learnerAdmissionNumbers)?body.learnerAdmissionNumbers.map(clean).filter(Boolean):String(body.learnerAdmissionNumbers||"").split(",").map(clean).filter(Boolean);
   if(["parent","student"].includes(roleKey)&&!learnerNumbers.length)return json({ok:false,error:"Enter at least one linked learner admission number."},400);
   if(roleKey==="student"&&learnerNumbers.length!==1)return json({ok:false,error:"A learner account must be linked to exactly one learner."},400);
