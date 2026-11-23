@@ -347,8 +347,8 @@ export async function onRequestPatch({request,env}){
   const a=await auth(request,env);if(a.error)return a.error;
   const parts=new URL(request.url).pathname.split("/"),name=parts[parts.length-2],recordId=decodeURIComponent(parts[parts.length-1]||""),cfg=resources[name];
   if(!cfg||!recordId)return json({ok:false,error:"Unknown resource or record."},404);
-  if(name==="grade-boundaries")await ensureGradeBoundaryScope(env.DB);
   if(!allowed(a.user,permissionFor(name,true)))return json({ok:false,error:"Your role does not have permission to change this resource."},403);
+  if(name==="grade-boundaries")await ensureGradeBoundaryScope(env.DB);
   if(cfg.readOnly)return json({ok:false,error:"This resource is read-only."},405);
   if(name==="assessment-results")return json({ok:false,error:"Update assessment scores through the assessment marking workspace so score limits and enrolment are checked."},405);
   if(name==="learner-fee-accounts")return json({ok:false,error:"Fee account balances cannot be edited directly. They must be updated through a verified fee receipt workflow."},405);
