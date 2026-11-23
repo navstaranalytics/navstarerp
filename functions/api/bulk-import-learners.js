@@ -15,7 +15,7 @@ function parseCsv(text){
  if(!rows.length)return [];
  const headers=rows.shift().map(x=>x.replace(/^\uFEFF/,"").trim().toLowerCase());
  if(new Set(headers).size!==headers.length)throw new Error("The CSV contains duplicate column headings.");
- return rows.map((values,index)=>Object.fromEntries(headers.map((h,i)=>[h,String(values[i]??"").trim()])).map(([k,v])=>[k,v]));
+ return rows.map(values=>Object.fromEntries(headers.map((h,i)=>[h,String(values[i]??"").trim()])));
 }
 export async function onRequestPost({request,env}){
  if(!env.DB)return json({ok:false,error:"Database unavailable."},503);
