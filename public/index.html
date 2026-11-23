@@ -7,7 +7,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#101d35">
-<title>NAVSTAR ERP | School Management Platform</title>
+<title>Navstar ERP | School Management Platform</title>
 <style>
 :root{--navy:#101d35;--navy2:#172846;--blue:#3978f6;--teal:#20b8a5;--ink:#17243a;--muted:#718096;--line:#e7ecf3;--bg:#f4f7fb;--white:#fff}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 Inter,ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif}
@@ -30,7 +30,7 @@
 <body>
 <div class="app">
 <aside class="side">
- <div class="brand"><div class="logo"><img src="/api/branding/logo" alt="NAVSTAR Analytics logo" onerror="this.style.display='none'"></div><div><strong>NAVSTAR</strong><small>ANALYTICS & ERP</small></div></div>
+ <div class="brand"><div class="logo"><img src="/api/branding/logo" alt="Navstar Analytics logo" onerror="this.style.display='none'"></div><div><strong>Navstar</strong><small>ANALYTICS & ERP</small></div></div>
  <nav class="nav">
   <div class="group">Workspace</div>
   <button class="active" data-page="Overview"><span class="ico">◫</span>Overview</button>
@@ -53,10 +53,10 @@
  <div class="side-foot">Multi-school management platform<br>Kenya · CBC-ready architecture</div>
 </aside>
 <main class="main">
- <header class="top"><div class="crumb"><span class="mobile">☰ &nbsp;</span>NAVSTAR <span style="color:#9aa8ba;font-weight:400">/</span> <span id="crumb">Overview</span></div><div class="top-right"><input class="search" placeholder="Search this workspace…"><div class="avatar">NA</div></div></header>
+ <header class="top"><div class="crumb"><span class="mobile">☰ &nbsp;</span>Navstar <span style="color:#9aa8ba;font-weight:400">/</span> <span id="crumb">Overview</span></div><div class="top-right"><input class="search" placeholder="Search this workspace…"><div class="avatar">NA</div></div></header>
  <section class="content" id="view">
   <div class="heading"><div><div class="eyebrow">Platform command centre</div><h1>Good afternoon.</h1><div class="sub">Your central workspace for managing schools, learning and operations.</div></div><button class="btn" id="addSchool">＋ Register a school</button></div>
-  <section class="visual-hero" aria-label="NAVSTAR education platform introduction"><div class="visual-copy"><div class="eyebrow">One connected education ecosystem</div><h2>Better school management.<br>Clearer learner outcomes.</h2><p>Bring school operations, CBC learning, assessment and performance insight into one connected platform.</p></div></section>
+  <section class="visual-hero" aria-label="Navstar education platform introduction"><div class="visual-copy"><div class="eyebrow">One connected education ecosystem</div><h2>Better school management.<br>Clearer learner outcomes.</h2><p>Bring school operations, CBC learning, assessment and performance insight into one connected platform.</p></div></section>
   <div class="stats">
    <div class="stat"><div class="stat-top">Registered schools <span class="stat-icon">▦</span></div><strong>—</strong><small>Connect your school directory</small></div>
    <div class="stat"><div class="stat-top">Active learners <span class="stat-icon">♙</span></div><strong>—</strong><small>Live enrolment data</small></div>
@@ -75,7 +75,7 @@
 <script>
 const view=document.getElementById('view'),crumb=document.getElementById('crumb');
 const pages={
-'School Directory':['School network','Register, review and manage schools connected to NAVSTAR.','School onboarding, subscription status, tenant workspace and school configuration will be built here.'],
+'School Directory':['School network','Register, review and manage schools connected to Navstar.','School onboarding, subscription status, tenant workspace and school configuration will be built here.'],
 'Learners':['Learner management','A central, secure record for every learner in each school.','Enrolment, admission numbers, guardians, grade, stream, learner imports and learner history.'],
 'Staff':['Staff & HR','Manage school teams and their responsibilities.','Staff profiles, teacher assignments, HR records, leave and payroll workflows.'],
 'CBC Academics':['Learning Areas & Grades','Configure the Kenyan CBC structure for each school.','PP1–PP2, Grades 1–9 and configurable senior school learning areas, grade structures and assessment settings.'],
@@ -85,9 +85,9 @@ const pages={
 'Finance':['Finance & fees','Manage school billing and financial operations.','Fee structures, invoices, receipts, M-Pesa, bank reconciliation, budgets and financial reports.'],
 'Reports':['Reports & insights','Access operational and academic reporting.','School-level and platform-level reports with controlled exports.'],
 'Users & Access':['Users & access control','Manage who can access each school and platform function.','Super Admin, school leadership, teachers, parents, learners and role-based permissions.'],
-'Settings':['Platform settings','Configure NAVSTAR and individual school workspaces.','Branding, academic years, terms, integrations, security, audit history and platform preferences.']
+'Settings':['Platform settings','Configure Navstar and individual school workspaces.','Branding, academic years, terms, integrations, security, audit history and platform preferences.']
 };
-function openPage(name){crumb.textContent=name;document.querySelectorAll('.nav button').forEach(b=>b.classList.toggle('active',b.dataset.page===name));if(name==='Overview'){location.reload();return}const p=pages[name]||[name,'',''];view.innerHTML='<div class="heading"><div><div class="eyebrow">NAVSTAR workspace</div><h1>'+p[0]+'</h1><div class="sub">'+p[1]+'</div></div><button class="btn secondary" onclick="openPage(\'Overview\')">← Overview</button></div><div class="panel"><h2>Module workspace</h2><p class="sub">'+p[2]+'</p><div class="empty" style="margin-top:18px">This module is being developed as part of the NAVSTAR ERP build.<b>Next: connect secure data, workflows and permissions.</b></div></div>'}
+function openPage(name){crumb.textContent=name;document.querySelectorAll('.nav button').forEach(b=>b.classList.toggle('active',b.dataset.page===name));if(name==='Overview'){location.reload();return}const p=pages[name]||[name,'',''];view.innerHTML='<div class="heading"><div><div class="eyebrow">Navstar workspace</div><h1>'+p[0]+'</h1><div class="sub">'+p[1]+'</div></div><button class="btn secondary" onclick="openPage(\'Overview\')">← Overview</button></div><div class="panel"><h2>Module workspace</h2><p class="sub">'+p[2]+'</p><div class="empty" style="margin-top:18px">This module is being developed as part of the Navstar ERP build.<b>Next: connect secure data, workflows and permissions.</b></div></div>'}
 document.querySelectorAll('[data-page]').forEach(b=>b.addEventListener('click',()=>openPage(b.dataset.page)));
 document.querySelectorAll('[data-go]').forEach(b=>b.addEventListener('click',()=>openPage(b.dataset.go)));
 document.getElementById('addSchool').addEventListener('click',()=>openPage('School Directory'));
