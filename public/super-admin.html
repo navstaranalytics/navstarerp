@@ -794,7 +794,7 @@ async function migrateLegacyRecords(){
   if(!name||!county||!/^\S+@\S+\.\S+$/.test(email)){skipped++;continue}
   if(code&&existingCodes.has(code.toLowerCase())){skipped++;continue}
   try{
-   const d=await schoolApi('/api/schools',{method:'POST',body:JSON.stringify({name,county,email,code:code||undefined,contact:old.contact||old.contactPerson||'',phone:old.phone||old.contactPhone||'',address:old.address||old.physicalAddress||'',registrationNumber:old.registrationNumber||'',subCounty:old.subCounty||'',town:old.town||'',category:old.category||old.type||'',level:old.level||'',ownership:old.ownership||'',curriculum:old.curriculum||'CBC',levels:Array.isArray(old.levels)?old.levels:[],plan:old.plan||'Starter',status:old.status||'Pending'})});
+   const d=await schoolApi('/api/schools',{method:'POST',body:JSON.stringify({name,county,email,code:code||undefined,contact:old.contact||old.contactPerson||'',phone:old.phone||old.contactPhone||'',address:old.address||old.physicalAddress||'',registrationNumber:old.registrationNumber||'',subCounty:old.subCounty||'',town:old.town||'',category:old.category||old.type||'',level:old.level||'',ownership:old.ownership||'',curriculum:old.curriculum||'CBC',levels:Array.isArray(old.levels)?old.levels:[],plan:old.plan||'Starter',status:old.status||'Pending',suppressWelcomeEmail:true})});
    imported++;existingCodes.add(String(d.school?.code||code).toLowerCase());
   }catch(error){skipped++;errors.push(name+': '+(error.message||'not imported'))}
  }
