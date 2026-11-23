@@ -28,8 +28,11 @@ const resources={
   "attendance-sessions":{table:"attendance_sessions",scope:true,fields:["academic_year_id","term_id","grade_level_id","stream_id","attendance_date","session_name","status"],required:["school_id","academic_year_id","grade_level_id","attendance_date"],refs:{academic_year_id:"academic_years",term_id:"terms",grade_level_id:"grade_levels",stream_id:"streams"}},
   "attendance-records":{table:"attendance_records",scope:true,fields:["session_id","learner_id","attendance_status","notes"],required:["school_id","session_id","learner_id","attendance_status"],refs:{session_id:"attendance_sessions",learner_id:"learners"}},
   timetable:{table:"timetable_entries",scope:true,fields:["academic_year_id","term_id","grade_level_id","stream_id","learning_area_id","staff_id","weekday","start_time","end_time","room"],required:["school_id","academic_year_id","grade_level_id","learning_area_id","weekday","start_time","end_time"],refs:{academic_year_id:"academic_years",term_id:"terms",grade_level_id:"grade_levels",stream_id:"streams",learning_area_id:"learning_areas",staff_id:"staff_profiles"}},
-  "fee-structures":{table:"fee_structures",scope:true,fields:["name","grade_level_id","amount","currency","frequency","due_date","is_active"],required:["school_id","name","amount"],refs:{grade_level_id:"grade_levels"}},
-  "learner-fee-accounts":{table:"learner_fee_accounts",scope:true,fields:["learner_id","fee_structure_id","academic_year_id","amount_due","amount_paid","balance","status"],required:["school_id","learner_id","fee_structure_id"],refs:{learner_id:"learners",fee_structure_id:"fee_structures",academic_year_id:"academic_years"}},
+  "fee-structures":{table:"fee_structures",scope:true,fields:["name","grade_level_id","amount","currency","frequency","due_date","is_active","learner_category","payment_timing","allow_partial_payments"],required:["school_id","name","amount"],refs:{grade_level_id:"grade_levels"}},
+  "learner-fee-accounts":{table:"learner_fee_accounts",scope:true,fields:["learner_id","fee_structure_id","academic_year_id","amount_due","amount_paid","balance","status","adjustment_total","adjustment_note","last_adjusted_by"],required:["school_id","learner_id","fee_structure_id"],refs:{learner_id:"learners",fee_structure_id:"fee_structures",academic_year_id:"academic_years"}},
+  "fee-adjustments":{table:"fee_adjustments",scope:true,fields:["learner_fee_account_id","adjustment_type","amount","reason","adjusted_by"],required:["school_id","learner_fee_account_id","adjustment_type","amount","reason"],refs:{learner_fee_account_id:"learner_fee_accounts"}},
+  "promotion-policies":{table:"learner_promotion_policies",scope:true,fields:["from_grade_id","to_grade_id","minimum_average","require_all_subjects_passed","is_active","updated_by"],required:["school_id","from_grade_id","to_grade_id","minimum_average"],refs:{from_grade_id:"grade_levels",to_grade_id:"grade_levels"}},
+  "promotion-history":{table:"learner_promotion_history",scope:true,readOnly:true,fields:[]},
   "finance-transactions":{table:"finance_transactions",scope:true,fields:["transaction_type","category","description","amount","transaction_date","payment_method","reference"],required:["school_id","transaction_type","category","amount","transaction_date"]},
   inventory:{table:"inventory_items",scope:true,fields:["sku","name","category","unit","quantity","reorder_level","unit_cost","status"],required:["school_id","name"]},
   "inventory-movements":{table:"inventory_movements",scope:true,fields:["item_id","movement_type","quantity","reason","reference"],required:["school_id","item_id","movement_type","quantity"],refs:{item_id:"inventory_items"}},
@@ -69,7 +72,9 @@ const permissionFor=(name,write=false)=>{
   if(["assessments","assessment-results"].includes(name))return write?"assessments.manage":"assessments.view";
   if(["attendance-sessions","attendance-records"].includes(name))return write?"attendance.manage":"attendance.view";
   if(name==="timetable")return write?"academics.manage":"timetable.view";
-  if(["fee-structures","learner-fee-accounts","finance-transactions"].includes(name))return write?"finance.manage":"finance.view";
+  if(["fee-structures","learner-fee-accounts","finance-transactions","fee-adjustments"].includes(name))return write?"finance.manage":"finance.view";
+  if(name==="promotion-policies")return write?"learners.manage":"learners.view";
+  if(name==="promotion-history")return "learners.view";
   if(["inventory","inventory-movements"].includes(name))return "inventory.manage";
   if(["library-books","library-loans"].includes(name))return "library.manage";
   if(["transport-routes","transport-assignments","boarding-houses","boarding-allocations"].includes(name))return "school.settings.manage";
@@ -298,6 +303,8 @@ export async function onRequestPost({request,env}){
   if(name==="attendance-sessions")values.taken_by=a.user.id;
   if(name==="attendance-records")values.marked_by=a.user.id;
   if(name==="finance-transactions")values.recorded_by=a.user.id;
+  if(name==="fee-adjustments")values.adjusted_by=a.user.id;
+  if(name==="promotion-policies")values.updated_by=a.user.id;
   if(name==="assessments")values.created_by=a.user.id;
   if(name==="assessment-results")values.entered_by=a.user.id;
   const refError=await validateRefs(env.DB,cfg,values,schoolId);if(refError)return json({ok:false,error:refError},400);
