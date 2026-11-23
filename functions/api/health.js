@@ -1,20 +1,36 @@
+const REQUIRED_TABLES=[
+  "users","schools","school_memberships","roles","permissions","role_permissions",
+  "subscription_plans","school_subscriptions","invoices","payments",
+  "academic_years","terms","grade_levels","teacher_allocations","learners",
+  "learner_enrollments","audit_logs","platform_settings"
+];
 export async function onRequestGet({ env }) {
   try {
     if (!env.DB) {
       return Response.json(
-        { ok: false, service: "NAVSTAR ERP API", error: "D1 binding DB is not configured" },
-        { status: 503, headers: { "Cache-Control": "no-store" } }
+        { ok:false, service:"Navstar Analytics API", error:"D1 binding DB is not configured" },
+        { status:503, headers:{ "Cache-Control":"no-store" } }
       );
     }
     await env.DB.prepare("SELECT 1 AS ok").first();
+    const placeholders=REQUIRED_TABLES.map(()=>"?").join(",");
+    const result=await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name IN ("+placeholders+")").bind(...REQUIRED_TABLES).all();
+    const present=new Set((result.results||[]).map(x=>x.name));
+    const missing=REQUIRED_TABLES.filter(name=>!present.has(name));
+    if(missing.length){
+      return Response.json(
+        { ok:false, service:"Navstar Analytics API", database:"connected", schema:"incomplete", missingTableCount:missing.length, error:"The database is reachable, but the required Navstar schema is incomplete." },
+        { status:503, headers:{ "Cache-Control":"no-store" } }
+      );
+    }
     return Response.json(
-      { ok: true, service: "NAVSTAR ERP API", database: "connected" },
-      { headers: { "Cache-Control": "no-store" } }
+      { ok:true, service:"Navstar Analytics API", database:"connected", schema:"ready" },
+      { headers:{ "Cache-Control":"no-store" } }
     );
   } catch (error) {
     return Response.json(
-      { ok: false, service: "NAVSTAR ERP API", error: "Database health check failed" },
-      { status: 503, headers: { "Cache-Control": "no-store" } }
+      { ok:false, service:"Navstar Analytics API", error:"Database health check failed" },
+      { status:503, headers:{ "Cache-Control":"no-store" } }
     );
   }
 }
