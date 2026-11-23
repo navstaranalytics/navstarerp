@@ -5,7 +5,7 @@ import { onRequestGet as schoolsGet, onRequestPost as schoolsPost, onRequestPatc
 import { onRequestGet as dataGet, onRequestPost as dataPost, onRequestPatch as dataPatch } from "./functions/api/data.js";
 import { onRequestPost as upgradePost } from "./functions/api/upgrade.js";
 import { onRequestPost as accessUpgradePost } from "./functions/api/access-upgrade.js";
-import { onRequestPost as schoolAdminPost } from "./functions/api/school-admin.js";
+import { onRequestPost as schoolAdminPost, onRequestPatch as schoolAdminPatch } from "./functions/api/school-admin.js";
 import { onRequestGet as schoolUsersGet, onRequestPost as schoolUsersPost } from "./functions/api/school-users.js";
 import { onRequestGet as portalGet } from "./functions/api/portal.js";
 import { onRequestGet as brandingGet, onRequestPost as brandingPost, onRequestGetLogo as brandingLogoGet, onRequestPostLogo as brandingLogoPost, onRequestGetStorageStatus as storageStatusGet, onRequestGetLoginBackground as loginBackgroundGet, onRequestPostLoginBackground as loginBackgroundPost, onRequestPostProfilePhoto as profilePhotoPost, onRequestGetProfilePhoto as profilePhotoGet } from "./functions/api/branding.js";
@@ -70,8 +70,9 @@ export default {
       return new Response("Method not allowed", { status: 405, headers: { Allow: "GET, POST" } });
     }
     if (route.startsWith("/api/schools/") && route.endsWith("/admin")) {
-      if (request.method !== "POST") return new Response("Method not allowed", { status: 405, headers: { Allow: "POST" } });
-      return schoolAdminPost({ request, env });
+      if (request.method === "POST") return schoolAdminPost({ request, env });
+      if (request.method === "PATCH") return schoolAdminPatch({ request, env });
+      return new Response("Method not allowed", { status: 405, headers: { Allow: "POST, PATCH" } });
     }
     if (route.startsWith("/api/schools/")) {
       if (request.method === "PATCH") return schoolsPatch({ request, env });
