@@ -2,6 +2,7 @@ import { onRequestGet as supportGet, onRequestPost as supportPost } from "./func
 import { onRequestPost as supportUpgradePost } from "./functions/api/support-upgrade.js";
 import { onRequestPost as aiDiagnosticsPost } from "./functions/api/ai-diagnostics.js";
 import { onRequestGet as feeReceiptsGet, onRequestPost as feeReceiptsPost } from "./functions/api/fee-receipts.js";
+import { onRequestGetSettings as admissionSettingsGet, onRequestPostSettings as admissionSettingsPost, onRequestPostNextAdmissionNumber as nextAdmissionNumberPost, onRequestPostPhotos as learnerPhotosPost, onRequestGetPhoto as learnerPhotoGet } from "./functions/api/learner-photos.js";
 import { onRequestGet as recoveryGet, onRequestPost as recoveryPost } from "./functions/api/recovery.js";
 import { onRequestGet as healthGet } from "./functions/api/health.js";
 import { onRequestGet as setupStatusGet } from "./functions/api/setup-status.js";
@@ -52,6 +53,20 @@ export default {
       if (request.method !== "POST") return new Response("Method not allowed", { status: 405, headers: { Allow: "POST" } });
       return setupDatabasePost({ request, env, params: {}, data: {}, waitUntil: promise => ctx.waitUntil(promise) });
     }
+    if (route === "/api/admission-settings") {
+      if (request.method === "GET") return admissionSettingsGet({ request, env });
+      if (request.method === "POST") return admissionSettingsPost({ request, env });
+      return new Response("Method not allowed", { status: 405, headers: { Allow: "GET, POST" } });
+    }
+    if (route === "/api/admission-numbers/next") {
+      if (request.method !== "POST") return new Response("Method not allowed", { status: 405, headers: { Allow: "POST" } });
+      return nextAdmissionNumberPost({ request, env });
+    }
+    if (route === "/api/learner-photos") {
+      if (request.method !== "POST") return new Response("Method not allowed", { status: 405, headers: { Allow: "POST" } });
+      return learnerPhotosPost({ request, env });
+    }
+    if (route.startsWith("/api/learner-photos/") && request.method === "GET") return learnerPhotoGet({ request, env });
     if (route === "/api/fee-receipts") {
       if (request.method === "GET") return feeReceiptsGet({ request, env });
       if (request.method === "POST") return feeReceiptsPost({ request, env });
