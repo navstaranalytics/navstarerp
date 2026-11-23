@@ -48,6 +48,7 @@ function configuredGradeSpecs(levels){
  if(selected.some(x=>/^primary$/i.test(x)))specs.push(...Array.from({length:6},(_,i)=>["G"+(i+1),"Grade "+(i+1),i+1,"Primary"]));
  if(selected.some(x=>/junior/i.test(x))||selected.some(x=>/^Grade (7|8|9)$/.test(x)))specs.push(...[7,8,9].map(n=>["G"+n,"Grade "+n,n+1,"Junior School"]));
  if(selected.some(x=>/senior/i.test(x))||selected.some(x=>/^Grade (10|11|12)$/.test(x)))specs.push(...[10,11,12].map(n=>["G"+n,"Grade "+n,n+1,"Senior School"]));
+ if(selected.some(x=>/8-4-4|secondary/i.test(x)))specs.push(...[1,2,3,4].map(n=>["FORM"+n,"Form "+n,20+n,"Secondary"]));
  for(const value of selected){const m=String(value).match(/^(Grade (?:[1-9]|1[0-2])|Form [1-4]|PP[12])$/i);if(m&&!specs.some(x=>x[0].toLowerCase()===m[1].replace(/\s/g,"").toLowerCase())){const name=m[1],code=name.replace(/\s/g,"").toUpperCase(),level=/^PP/.test(code)||/^Grade [1-6]$/i.test(name)?"Primary":/^Grade [7-9]$/i.test(name)?"Junior School":/^Grade 1[0-2]$/i.test(name)?"Senior School":"Secondary";specs.push([code,name,specs.length+1,level]);}}
  return specs;
 }
@@ -103,6 +104,15 @@ function mapSchool(row){
   let meta={};
   try{meta=JSON.parse(row.settings_json||"{}").navstar_school_meta||{}}catch{}
   let levels=[];try{levels=JSON.parse(row.school_levels_json||"[]")}catch{}
+  if(Array.isArray(levels)&&levels.some(x=>/^Grade |^Form |^PP[12]$/i.test(String(x)))){
+    const legacy=levels.map(String),groups=[];
+    if(legacy.some(x=>/^PP[12]$/i.test(x)))groups.push("Pre-Primary");
+    if(legacy.some(x=>/^Grade [1-6]$/i.test(x)))groups.push("Primary");
+    if(legacy.some(x=>/^Grade [7-9]$/i.test(x)))groups.push("Junior School");
+    if(legacy.some(x=>/^Grade 1[0-2]$/i.test(x)))groups.push("Senior School");
+    if(legacy.some(x=>/^Form [1-4]$/i.test(x)))groups.push("8-4-4 Secondary");
+    levels=groups;
+  }
   return {id:row.id,name:row.name,code:row.school_code,registrationNumber:row.registration_number||"",emisCode:row.emis_code||"",
     category:meta.category||row.institution_type||"",level:meta.level||"",ownership:row.ownership||"",county:row.county||"",
     subCounty:row.sub_county||"",town:row.town||"",contact:row.contact_person||"",email:row.contact_email||"",
