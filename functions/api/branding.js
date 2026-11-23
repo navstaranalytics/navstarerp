@@ -23,10 +23,10 @@ export async function onRequestGet({env}){
  if(!env.DB)return json({ok:false,error:"Database unavailable."},503);
  try{
   await ensureLogoTable(env.DB);
-  const rows=await env.DB.prepare("SELECT setting_key,setting_value FROM platform_settings WHERE setting_key IN ('platform_name','platform_tagline')").all();
+  const rows=await env.DB.prepare("SELECT setting_key,setting_value FROM platform_settings WHERE setting_key IN ('platform_name','platform_tagline','platform_address','platform_city','platform_county','platform_phone','platform_website','platform_support_email','platform_registered_domain')").all();
   const settings=Object.fromEntries((rows.results||[]).map(x=>[x.setting_key,x.setting_value]));
   const logo=await env.DB.prepare("SELECT 1 AS present FROM platform_branding_assets WHERE asset_key=?").bind(LOGO_KEY).first();
-  return json({ok:true,branding:{logoUrl:logo?"/api/branding/logo":"",name:settings.platform_name||"NAVSTAR Analytics",tagline:settings.platform_tagline||"Education management platform"}});
+  return json({ok:true,branding:{logoUrl:logo?"/api/branding/logo":"",name:settings.platform_name||"NAVSTAR Analytics",tagline:settings.platform_tagline||"Education management platform",address:settings.platform_address||"",city:settings.platform_city||"",county:settings.platform_county||"",phone:settings.platform_phone||"",website:settings.platform_website||"",supportEmail:settings.platform_support_email||"",registeredDomain:settings.platform_registered_domain||""}});
  }catch{return json({ok:true,branding:{logoUrl:"",name:"NAVSTAR Analytics",tagline:"Education management platform"}})}
 }
 export async function onRequestGetStorageStatus({request,env}){
@@ -81,11 +81,16 @@ export async function onRequestPost({request,env}){
  const actor=await getSuperAdminSession(request,env);if(!actor)return json({ok:false,error:"Only Super Admin can change platform branding."},401);
  let b;try{b=await request.json()}catch{return json({ok:false,error:"Invalid branding details."},400)}
  const name=String(b.name||"").trim(),tagline=String(b.tagline||"").trim();
+ const details={platform_address:String(b.address||"").trim(),platform_city:String(b.city||"").trim(),platform_county:String(b.county||"").trim(),platform_phone:String(b.phone||"").trim(),platform_website:String(b.website||"").trim(),platform_support_email:String(b.supportEmail||"").trim(),platform_registered_domain:String(b.registeredDomain||"").trim()};
+ if(Object.values(details).some(v=>v.length>240))return json({ok:false,error:"One or more platform details are too long."},400);
+ if(details.platform_support_email&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(details.platform_support_email))return json({ok:false,error:"Enter a valid support email."},400);
+ if(details.platform_website&&!/^https?:\/\//i.test(details.platform_website))return json({ok:false,error:"Website must start with https:// or http://."},400);
  if(!name||name.length>100||tagline.length>160)return json({ok:false,error:"Enter a valid platform name and tagline."},400);
  try{
   await env.DB.batch([
    env.DB.prepare("INSERT INTO platform_settings(setting_key,setting_value,updated_by) VALUES('platform_name',?,?) ON CONFLICT(setting_key) DO UPDATE SET setting_value=excluded.setting_value,updated_by=excluded.updated_by,updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now')").bind(name,actor.id),
-   env.DB.prepare("INSERT INTO platform_settings(setting_key,setting_value,updated_by) VALUES('platform_tagline',?,?) ON CONFLICT(setting_key) DO UPDATE SET setting_value=excluded.setting_value,updated_by=excluded.updated_by,updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now')").bind(tagline,actor.id)
+   env.DB.prepare("INSERT INTO platform_settings(setting_key,setting_value,updated_by) VALUES('platform_tagline',?,?) ON CONFLICT(setting_key) DO UPDATE SET setting_value=excluded.setting_value,updated_by=excluded.updated_by,updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now')").bind(tagline,actor.id),
+   ...Object.entries(details).map(([key,value])=>env.DB.prepare("INSERT INTO platform_settings(setting_key,setting_value,updated_by) VALUES(?,?,?) ON CONFLICT(setting_key) DO UPDATE SET setting_value=excluded.setting_value,updated_by=excluded.updated_by,updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now')").bind(key,value,actor.id))
   ]);
   return json({ok:true,message:"Platform branding saved centrally."});
  }catch{return json({ok:false,error:"Could not save platform branding."},500)}
