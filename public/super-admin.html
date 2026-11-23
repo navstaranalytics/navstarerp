@@ -31,7 +31,7 @@
 <button data-page="system"><span class="ico">◷</span>System health</button>
 <button data-page="backup"><span class="ico">⤓</span>Backup & recovery</button>
 <button data-page="settings"><span class="ico">⚙</span>Platform settings</button>
-</nav><div class="side-bottom"><b>SUPER ADMIN WORKSPACE</b><br>Global control · Kenya<br><span id="saveState">Some sections still browser-only</span></div></aside>
+</nav><div class="side-bottom"><b>SUPER ADMIN WORKSPACE</b><br>Global control · Kenya<br><span id="saveState">Connecting to central D1…</span></div></aside>
 <main class="main"><header class="topbar"><div class="crumb">Navstar <span>/</span> <b id="crumb">Overview</b></div><div class="top-actions"><input id="globalSearch" class="global-search" placeholder="Search schools and users"><button class="icon-btn" id="helpBtn">Help</button><div class="account-wrap"><button class="avatar" id="accountButton" aria-label="Account menu">SA</button><div class="account-menu" id="accountMenu"><div class="who"><b id="accountName">Super Admin</b><small id="accountEmail">Platform owner</small></div><button id="editProfile">My profile</button><button id="changePassword">Change password</button><button class="danger" id="logoutButton">Sign out</button></div></div></div></header><section class="content" id="view"></section></main>
 </div>
 <div class="modal-backdrop" id="modal"><form class="modal" id="modalForm"><div class="modal-head"><h2 id="modalTitle">Register school</h2><button type="button" class="tiny" id="closeModal">✕</button></div><div class="modal-body" id="modalBody"></div><div class="modal-foot"><button type="button" class="btn light" id="cancelModal">Cancel</button><button type="submit" class="btn" id="saveModal">Save record</button></div></form></div>
@@ -763,6 +763,7 @@ editPlan=function(name){
 };
 /* Legacy browser-data recovery: read-only scan, immutable D1 archive, then safe migration of supported records. */
 let legacyRecoveryRecords=[],legacyRecoveryScanDone=false,legacyRecoveryArchived=false;
+function stripRecoverySecrets(value){if(Array.isArray(value))return value.map(stripRecoverySecrets);if(value&&typeof value==='object'){const out={};for(const [key,item] of Object.entries(value)){if(/password|passwd|token|secret|otp|credential|api.?key|private.?key|access.?key|session/i.test(key))continue;out[key]=stripRecoverySecrets(item)}return out}return value}
 function recoveryPage(){
  return head('BUSINESS CONTINUITY','Backup & recovery','Capture legacy browser records, preserve them in central D1, and safely migrate supported records.')+
  panel('Step 1 · Scan this browser','Read old Navstar local records without changing or deleting them','<div class="panel-pad"><p class="muted">This scans the browser profile and current Navstar site origin for older prototype records. Authentication tokens, passwords, OTPs and secret-like keys are excluded.</p><button class="btn" data-action="recovery-scan">Scan browser records</button> <button class="btn light" data-action="recovery-download" '+(legacyRecoveryScanDone?'':'disabled')+'>Download recovery JSON</button><div id="recoveryScanResult" class="notice">Not scanned yet. Use the same browser and profile where the old Navstar records were created.</div></div>')+
@@ -776,10 +777,10 @@ async function scanLegacyBrowser(){
  const records=[],excluded=[];
  for(let i=0;i<localStorage.length;i++){
   const key=localStorage.key(i);if(!key)continue;
-  if(/auth|session|token|password|passwd|otp|secret|csrf|credential/i.test(key)){excluded.push(key);continue}
+  if(/auth|session|token|password|passwd|otp|secret|csrf|credential|api.?key|private.?key|access.?key/i.test(key)){excluded.push(key);continue}
   const raw=localStorage.getItem(key);if(raw===null)continue;
   let value=raw,encoding='text';try{value=JSON.parse(raw);encoding='json'}catch{}
-  records.push({key,encoding,value,characterCount:raw.length});
+  records.push({key,encoding,value:stripRecoverySecrets(value),characterCount:raw.length});
  }
  legacyRecoveryRecords=records;legacyRecoveryScanDone=true;legacyRecoveryArchived=false;
  const result=$('recoveryScanResult');if(result)result.textContent='Found '+records.length+' browser record(s) ('+records.reduce((n,r)=>n+r.characterCount,0).toLocaleString()+' characters). '+excluded.length+' sensitive/authentication-like key(s) excluded. Original browser data was not changed.';
