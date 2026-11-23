@@ -63,11 +63,12 @@ export async function onRequestPostNextAdmissionNumber({request,env}){
  const a=await actorFor(request,env,true);if(a.error)return a.error;
  try{
   await ensure(env.DB);
-  for(let attempt=0;attempt<5;attempt++){
-   const s=await env.DB.prepare("SELECT prefix,separator,next_number,padding,include_year FROM school_admission_settings WHERE school_id=?").bind(a.schoolId).first()||{prefix:"",separator:"-",next_number:1,padding:4,include_year:0};
-   const number=admissionLabel(s,Number(s.next_number)||1);
+  await env.DB.prepare("INSERT OR IGNORE INTO school_admission_settings(school_id,prefix,separator,next_number,padding,include_year,updated_by) VALUES(?,'','-',1,4,0,?)").bind(a.schoolId,a.actor.id).run();
+  for(let attempt=0;attempt<20;attempt++){
+   const allocated=await env.DB.prepare("UPDATE school_admission_settings SET next_number=next_number+1,updated_by=?,updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE school_id=? RETURNING prefix,separator,next_number-1 AS issued,padding,include_year").bind(a.actor.id,a.schoolId).first();
+   if(!allocated)break;
+   const number=admissionLabel(allocated,Number(allocated.issued)||1);
    const exists=await env.DB.prepare("SELECT 1 FROM learners WHERE school_id=? AND admission_number=?").bind(a.schoolId,number).first();
-   await env.DB.prepare("INSERT INTO school_admission_settings(school_id,prefix,separator,next_number,padding,include_year,updated_by,updated_at) VALUES(?,?,?,?,?,?,?,strftime('%Y-%m-%dT%H:%M:%fZ','now')) ON CONFLICT(school_id) DO UPDATE SET next_number=excluded.next_number,updated_by=excluded.updated_by,updated_at=excluded.updated_at").bind(a.schoolId,s.prefix||"",s.separator||"-",Number(s.next_number||1)+(exists?1:1),Number(s.padding||4),Number(s.include_year||0),a.actor.id).run();
    if(!exists)return json({ok:true,admission_number:number});
   }
   return json({ok:false,error:"Could not generate a unique admission number. Check your format settings."},409);
