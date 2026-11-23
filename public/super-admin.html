@@ -606,9 +606,11 @@ async function loadSchoolsFromDatabase(){
 }
 async function loadOverviewFromDatabase(){
   overviewLoading=true;
-  const [analytics,auditData]=await Promise.all([schoolApi("/api/data/analytics"),schoolApi("/api/data/audit")]);
-  overviewMetrics=analytics.analytics||{};
-  overviewAudit=Array.isArray(auditData.records)?auditData.records:[];
+  const [analyticsResult,auditResult]=await Promise.allSettled([schoolApi("/api/data/analytics"),schoolApi("/api/data/audit")]);
+  if(analyticsResult.status==="fulfilled")overviewMetrics=analyticsResult.value.analytics||{};
+  else{overviewMetrics=null;console.error("Navstar platform analytics unavailable",analyticsResult.reason)}
+  if(auditResult.status==="fulfilled")overviewAudit=Array.isArray(auditResult.value.records)?auditResult.value.records:[];
+  else{overviewAudit=[];console.warn("Navstar audit feed unavailable",auditResult.reason)}
   overviewLoading=false;
 }
 const schoolDirectoryBase=pages.schools;
