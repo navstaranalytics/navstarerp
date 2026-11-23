@@ -106,7 +106,7 @@ export async function onRequestPost({request,env}){
       catch(error){emailDelivery="failed";console.error("Navstar school welcome email error:",String(error?.message||error));}
     }
     const row=await env.DB.prepare("SELECT s.*,ss.settings_json FROM schools s LEFT JOIN school_settings ss ON ss.school_id=s.id WHERE s.id=?").bind(id).first();
-    return json({ok:true,school:mapSchool(row),emailDelivery,message:"School registered. Add its School Administrator from the school profile."},201);
+    return json({ok:true,school:mapSchool(row),emailDelivery,sampleData,message:"School registered. Add its School Administrator from the school profile."},201);
   }catch(error){
     const msg=String(error?.message||"");console.error("Navstar school registration failed:",msg);
     if(/UNIQUE constraint/i.test(msg))return json({ok:false,error:"That school code is already registered. Use a different institution code."},409);
