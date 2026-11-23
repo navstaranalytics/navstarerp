@@ -41,7 +41,7 @@ export async function onRequestPost({request,env}){
   let body;try{body=await request.json()}catch{return json({ok:false,error:"Invalid school details."},400)}
   const name=clean(body.name),county=clean(body.county),contact=clean(body.contact),email=clean(body.email).toLowerCase(),phone=clean(body.phone);
   if(!name||name.length>180||!county||county.length>100)return json({ok:false,error:"Official school name and county are required."},400);
-  if(!contact||contact.length>120||!/^\\S+@\\S+\\.\\S+$/.test(email)||email.length>190||!phone||phone.length>40)
+  if(!contact||contact.length>120||!/^\S+@\S+\.\S+$/.test(email)||email.length>190||!phone||phone.length>40)
     return json({ok:false,error:"To automatically create the School Administrator account, enter the administrator's full name, valid email address and phone number in the school contact fields."},400);
   const id=makeId(),code=clean(body.code)||("NS-"+crypto.randomUUID().slice(0,8).toUpperCase());
   const status=normStatus(body.status),curriculum=clean(body.curriculum)||"CBC";
@@ -71,7 +71,7 @@ export async function onRequestPost({request,env}){
       env.DB.prepare("INSERT INTO users(id,email,email_normalized,username,username_normalized,phone,full_name,password_hash,status) VALUES(?,?,?,?,?,?,?,?,'active')")
         .bind(userId,email,email,username,username,phone,contact,passwordHash),
       env.DB.prepare("INSERT INTO school_memberships(id,school_id,user_id,membership_status,job_title,joined_at) VALUES(?,?,?,'active','School Administrator',strftime('%Y-%m-%dT%H:%M:%fZ','now'))").bind(membershipId,id,userId),
-      env.DB.prepare("INSERT INTO user_role_assignments(id,user_id,role_id,school_id,scope_json,assigned_by) VALUES(?,?,?,?,'{\\"scope\\":\\"school\\",\\"level\\":\\"all\\"}',?)").bind(assignmentId,userId,adminRole.id,id,auth.user.id),
+      env.DB.prepare("INSERT INTO user_role_assignments(id,user_id,role_id,school_id,scope_json,assigned_by) VALUES(?,?,?,?,?,?)").bind(assignmentId,userId,adminRole.id,id,JSON.stringify({scope:"school",level:"all"}),auth.user.id),
       env.DB.prepare("INSERT INTO audit_logs (id,actor_user_id,school_id,action,resource_type,resource_id,outcome,details_json) VALUES (?,?,?,'school.created','school',?,'success',?)")
         .bind(makeId(),auth.user.id,id,id,JSON.stringify({name,schoolCode:code,schoolAdminUserId:userId,schoolAdminUsername:username}))
     ]);
