@@ -136,7 +136,8 @@ function addSchool(){
       await loadSchoolsFromDatabase();
       const created=schools.find(x=>x.id===result.school?.id)||result.school;
       closeModal();render();
-      const demo=result.sampleData?.created?' Demonstration data created.':'';\n      const delivery=result.emailDelivery==='sent'?'Welcome email sent.':result.emailDelivery==='failed'?'School saved, but welcome email delivery failed.':'School saved. Email sending is not configured.';
+      const demo=result.sampleData?.created?' Demonstration data created.':'';
+      const delivery=result.emailDelivery==='sent'?'Welcome email sent.':result.emailDelivery==='failed'?'School saved, but welcome email delivery failed.':'School saved. Email sending is not configured.';
       toast('School saved permanently in D1.'+demo+' '+delivery);
       if(created?.id)schoolDetails(created.id);
     }catch(error){
