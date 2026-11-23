@@ -20,8 +20,9 @@ export async function onRequestPost({request,env}) {
  if(!env.DB)return Response.json({ok:false,error:"Database connection is unavailable."},{status:503});
  const actor=await getSuperAdminSession(request,env);
  if(!actor)return Response.json({ok:false,error:"A Super Admin session is required."},{status:401});
+ let done=false;
  try {
-  const done=await env.DB.prepare("SELECT 1 FROM schema_migrations WHERE version='0003_role_access_control'").first();
+  done=!!(await env.DB.prepare("SELECT 1 FROM schema_migrations WHERE version='0003_role_access_control'").first());
  } catch {}
  for(let i=0;i<statements.length;i++){
   try{await env.DB.prepare(statements[i]).run();}
