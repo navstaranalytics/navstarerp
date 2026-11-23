@@ -7,7 +7,7 @@ export async function onRequestGet({request,env}){
  try{
   const rows=user.is_super_admin?await env.DB.prepare("SELECT template_key,name,category,description,version,template_json,is_active,updated_at FROM platform_output_templates ORDER BY category,name").all():await env.DB.prepare("SELECT template_key,name,category,description,version,template_json,is_active,updated_at FROM platform_output_templates WHERE is_active=1 ORDER BY category,name").all();
   return json({ok:true,templates:rows.results||[]});
- }catch(e){console.error("Output template read",e);return json({ok:false,error:"Output template catalogue is unavailable. Apply migration 0003 first."},503)}
+ }catch(e){console.error("Output template read",e);return json({ok:false,error:"Output template catalogue is unavailable. Apply migrations/0003_roles_and_output_templates.sql to the navstar-erp-db D1 database after the earlier migrations."},503)}
 }
 export async function onRequestPost({request,env}){
  if(!env.DB)return json({ok:false,error:"Database unavailable."},503);
