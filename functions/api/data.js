@@ -252,6 +252,11 @@ export async function onRequestGet({request,env}){
     if(cfg.scope)sql+=teacherFilter(name,a.user);
     sql+=(name==="audit"?" ORDER BY created_at DESC LIMIT 500":" ORDER BY rowid DESC LIMIT 1000");
     const rows=cfg.scope?await env.DB.prepare(sql).bind(schoolId).all():await env.DB.prepare(sql).all();
+    if(name==="grades"){
+      const school=await env.DB.prepare("SELECT curriculum,school_levels_json FROM schools WHERE id=?").bind(schoolId).first();
+      let levels=[];try{levels=JSON.parse(school?.school_levels_json||"[]")}catch{}
+      return json({ok:true,records:rows.results||[],school:{curriculum:school?.curriculum||"Kenyan CBE",levels}});
+    }
     return json({ok:true,records:rows.results||[]});
   }catch(error){console.error("NAVSTAR data read",name,error);return json({ok:false,error:"Could not load "+name+" from the database."},500)}
 }
