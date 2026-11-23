@@ -21,6 +21,10 @@ INSERT OR IGNORE INTO permissions(id,permission_key,description) VALUES
 ('perm_discipline_manage','discipline.manage','Manage learner discipline records'),
 ('perm_support_view','support.view','View and raise school support requests');
 
+UPDATE roles SET role_name='Subject Teacher' WHERE role_key='teacher' AND school_id IS NULL;
+UPDATE roles SET role_name='Finance Officer / Bursar' WHERE role_key='bursar_accountant' AND school_id IS NULL;
+UPDATE roles SET role_name='Admissions Registrar' WHERE role_key='admissions_registrar' AND school_id IS NULL;
+
 -- School Administrator: complete school-level administration, never platform-wide access.
 INSERT OR IGNORE INTO role_permissions(role_id,permission_id)
 SELECT 'role_school_admin',id FROM permissions WHERE permission_key IN (
