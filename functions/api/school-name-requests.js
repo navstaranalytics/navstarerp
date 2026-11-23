@@ -32,12 +32,13 @@ export async function onRequestPatch({request,env}){
  const actor=await getAuthenticatedSession(request,env);if(!actor?.is_super_admin)return json({ok:false,error:"Only Super Admin can review school name requests."},403);
  const requestId=decodeURIComponent(new URL(request.url).pathname.split("/").pop()||"");
  let body;try{body=await request.json()}catch{return json({ok:false,error:"Choose approve or decline."},400)}
- const decision=clean(body.decision),note=clean(body.note);if(!["approve","decline"].includes(decision))return json({ok:false,error:"Decision must be approve or decline."},400);
+ const decision=clean(body.decision),note=clean(body.note),approvedName=clean(body.approvedName)||"";if(!["approve","decline"].includes(decision))return json({ok:false,error:"Decision must be approve or decline."},400);
  await ensure(env.DB);
  const row=await env.DB.prepare("SELECT * FROM school_name_change_requests WHERE id=? AND status='pending'").bind(requestId).first();if(!row)return json({ok:false,error:"Pending school name request not found."},404);
  if(decision==="approve"){
+  const finalName=approvedName||row.requested_name;if(finalName.length<3||finalName.length>180)return json({ok:false,error:"The approved school name must be between 3 and 180 characters."},400);
   await env.DB.batch([
-   env.DB.prepare("UPDATE schools SET name=? WHERE id=?").bind(row.requested_name,row.school_id),
+   env.DB.prepare("UPDATE schools SET name=? WHERE id=?").bind(finalName,row.school_id),
    env.DB.prepare("UPDATE school_name_change_requests SET status='approved',reviewed_by=?,review_note=?,reviewed_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=? AND status='pending'").bind(actor.id,note||null,requestId)
   ]);
  }else await env.DB.prepare("UPDATE school_name_change_requests SET status='declined',reviewed_by=?,review_note=?,reviewed_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=? AND status='pending'").bind(actor.id,note||null,requestId).run();
