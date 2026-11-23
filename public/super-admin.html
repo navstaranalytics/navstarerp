@@ -707,6 +707,28 @@ $('changePassword').addEventListener('click',()=>{
   const updateMatch=()=>{if(!confirm.value){matchStatus.textContent='Enter the new password twice to check that they match.';matchStatus.style.color='';return}if(next.value===confirm.value){matchStatus.textContent='✓ New passwords match';matchStatus.style.color='#16845b'}else{matchStatus.textContent='✕ New passwords do not match';matchStatus.style.color='#c04d58'}};
   next.addEventListener('input',updateMatch);confirm.addEventListener('input',updateMatch);
 });
+/* Plan creation uses the central D1 subscription plan API. */
+addPlan=function(){
+  openModal('Create subscription plan','<div class="form-grid">'+
+    field('Plan name *','name','e.g. School Growth')+
+    selectFieldRich('Billing model','billingModel',BILLING_MODELS.map(x=>({value:x.value,label:x.label})),'per_learner_year')+
+    field('Price / rate (KES)','rate','0','number',0)+
+    field('Maximum learners (0 = unlimited)','learners','0','number',0)+
+    field('Included storage (GB)','storage','0','number',10)+
+    field('AI credits per billing cycle','ai','0','number',0)+
+    field('One-time onboarding fee (KES)','setupFee','0','number',0)+
+    field('Payment due within (days)','dueDays','14','number',14)+
+    field('Grace period (days)','graceDays','7','number',7)+
+    '<div class="form-field full"><label>Included capabilities</label><input class="field" name="modules" placeholder="Core, academics, reports…"></div></div>',
+    async d=>{
+      const name=d.get('name')?.trim();
+      if(!name||plans.some(p=>p.name.toLowerCase()===name.toLowerCase())){toast('Enter a unique plan name.');return}
+      const rate=Number(d.get('rate'))||0;
+      const plan={name,billingModel:d.get('billingModel'),rate,price:rate,learners:Number(d.get('learners'))||0,storage:Number(d.get('storage'))||0,ai:Number(d.get('ai'))||0,setupFee:Number(d.get('setupFee'))||0,dueDays:Number(d.get('dueDays'))||14,graceDays:Number(d.get('graceDays'))||7,modules:d.get('modules')?.trim()||'Core'};
+      try{await savePlanToDatabase(plan);closeModal();render();toast('Subscription plan saved centrally in D1.')}
+      catch(error){toast(error.message||'Plan could not be saved to D1.')}
+    });
+};
 /* Do not expose prototype-only platform user CRUD or browser-only message editing.
    The user directory is read from D1; provisioning must use the authenticated identity workflow. */
 pages.users=()=>head('IDENTITY & ACCESS','Platform users','Read-only view of platform accounts loaded from the central identity database.')+
