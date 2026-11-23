@@ -170,6 +170,14 @@ async function validateRefs(db,config,values,schoolId){
   }
   return null;
 }
+async function validateGradeBoundary(db,schoolId,values,excludeId=null){
+ const min=Number(values.min_score),max=Number(values.max_score);
+ if(!Number.isFinite(min)||!Number.isFinite(max)||min<0||max>100||max<min)return "Grade boundaries must be between 0 and 100, and the maximum must not be below the minimum.";
+ const args=[schoolId,values.scheme_id,min,max];let sql="SELECT id FROM grade_boundaries WHERE school_id=? AND scheme_id=? AND min_score<=? AND max_score>=?";
+ if(excludeId){sql+=" AND id<>?";args.push(excludeId)}
+ if(await db.prepare(sql+" LIMIT 1").bind(...args).first())return "This score range overlaps an existing grade boundary in the selected scheme.";
+ return null;
+}
 async function validateTimetableEntry(db,schoolId,values,excludeId=null){
   if(values.start_time&&values.end_time&&values.end_time<=values.start_time)return "Lesson end time must be later than its start time.";
   if(values.stream_id){const stream=await db.prepare("SELECT grade_level_id FROM streams WHERE id=? AND school_id=?").bind(values.stream_id,schoolId).first();if(!stream||stream.grade_level_id!==values.grade_level_id)return "The selected stream must belong to the selected grade.";}
@@ -297,6 +305,7 @@ export async function onRequestPost({request,env}){
     if(values.status&&!["draft","issued"].includes(values.status))return json({ok:false,error:"New invoices must be Draft or Issued. Settlement status is calculated from confirmed payments."},400);
     values.amount_paid=0;values.currency=values.currency||"KES";
   }
+  if(name==="grade-boundaries"){const issue=await validateGradeBoundary(env.DB,schoolId,values);if(issue)return json({ok:false,error:issue},400)}
   const teacherError=await validateTeacherWrite(env.DB,a.user,name,values);if(teacherError)return json({ok:false,error:teacherError},403);
   const recordId=id();
   try{
@@ -360,6 +369,7 @@ export async function onRequestPatch({request,env}){
     const gradeError=await validateConfiguredGrade(env.DB,name,schoolId,values,current);if(gradeError)return json({ok:false,error:gradeError},403);
     const refError=await validateRefs(env.DB,cfg,values,schoolId);if(refError)return json({ok:false,error:refError},400);
     if(name==="timetable"){const issue=await validateTimetableEntry(env.DB,schoolId,{...current,...values},recordId);if(issue)return json({ok:false,error:issue},400);}
+    if(name==="grade-boundaries"){const issue=await validateGradeBoundary(env.DB,schoolId,{...current,...values},recordId);if(issue)return json({ok:false,error:issue},400)}
     const teacherError=await validateTeacherWrite(env.DB,a.user,name,{...current,...values});if(teacherError)return json({ok:false,error:teacherError},403);
     const keys=Object.keys(values),sql="UPDATE "+cfg.table+" SET "+keys.map(k=>k+"=?").join(",")+(cfg.table==="schools"?",updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now')":"")+" WHERE "+where;
     await env.DB.prepare(sql).bind(...keys.map(k=>values[k]),...(cfg.scope?[recordId,schoolId]:[recordId])).run();
