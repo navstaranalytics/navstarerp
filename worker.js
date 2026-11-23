@@ -6,6 +6,7 @@ import { onRequestGet as dataGet, onRequestPost as dataPost, onRequestPatch as d
 import { onRequestPost as upgradePost } from "./functions/api/upgrade.js";
 import { onRequestPost as accessUpgradePost } from "./functions/api/access-upgrade.js";
 import { onRequestPost as schoolAdminPost } from "./functions/api/school-admin.js";
+import { onRequestGet as schoolUsersGet, onRequestPost as schoolUsersPost } from "./functions/api/school-users.js";
 import { onRequestGet as brandingGet, onRequestPost as brandingPost, onRequestGetLogo as brandingLogoGet, onRequestPostLogo as brandingLogoPost, onRequestGetStorageStatus as storageStatusGet, onRequestGetLoginBackground as loginBackgroundGet, onRequestPostLoginBackground as loginBackgroundPost } from "./functions/api/branding.js";
 import { onRequestPost as accountLookupPost } from "./functions/api/account-lookup.js";
 import {
@@ -60,6 +61,11 @@ export default {
     if (route === "/api/schools") {
       if (request.method === "GET") return schoolsGet({ request, env });
       if (request.method === "POST") return schoolsPost({ request, env });
+      return new Response("Method not allowed", { status: 405, headers: { Allow: "GET, POST" } });
+    }
+    if (route.startsWith("/api/schools/") && route.endsWith("/users")) {
+      if (request.method === "GET") return schoolUsersGet({ request, env });
+      if (request.method === "POST") return schoolUsersPost({ request, env });
       return new Response("Method not allowed", { status: 405, headers: { Allow: "GET, POST" } });
     }
     if (route.startsWith("/api/schools/") && route.endsWith("/admin")) {
@@ -143,7 +149,7 @@ export default {
     }
     const publicPages = ["/login.html", "/setup-admin.html", "/setup-database.html"];
     if (!publicPages.includes(route) && !route.startsWith("/api/")) {
-      const session = await getSuperAdminSession(request, env);
+      const session = await getAuthenticatedSession(request, env);
       if (!session) {
         try {
           const state = await setupStatusGet({ request, env, params: {}, data: {} });
@@ -154,6 +160,10 @@ export default {
           return Response.redirect(new URL("/login.html", url), 302);
         }
       }
+      if (route === "/super-admin.html" && !session.is_super_admin)
+        return Response.redirect(new URL("/school-portal.html", url), 302);
+      if (route === "/school-portal.html" && session.is_super_admin)
+        return Response.redirect(new URL("/super-admin.html", url), 302);
     }
     if (env.ASSETS) return env.ASSETS.fetch(request);
     return jsonNotFound();
