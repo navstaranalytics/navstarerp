@@ -16,3 +16,8 @@ CREATE TABLE IF NOT EXISTS learner_learning_areas (
   UNIQUE(enrollment_id, learning_area_id)
 );
 CREATE INDEX IF NOT EXISTS ix_learner_learning_areas_scope ON learner_learning_areas(school_id, enrollment_id, learner_id);
+
+-- Standardise the product-facing framework label while retaining each school's records.
+UPDATE schools SET curriculum='Kenyan CBE' WHERE upper(trim(curriculum)) IN ('CBC','KENYAN CBC');
+UPDATE grade_levels SET curriculum='Kenyan CBE' WHERE upper(trim(curriculum)) IN ('CBC','KENYAN CBC');
+UPDATE learning_areas SET curriculum='Kenyan CBE' WHERE upper(trim(curriculum)) IN ('CBC','KENYAN CBC');
