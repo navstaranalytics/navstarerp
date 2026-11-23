@@ -98,6 +98,8 @@ async function validateTeacherWrite(db,user,name,values){
   const a=await db.prepare("SELECT academic_year_id,grade_level_id,stream_id,learning_area_id FROM assessments WHERE id=? AND school_id=?").bind(values.assessment_id,user.school_id).first();
   if(!a)return "The assessment is not available in your school.";
   year=a.academic_year_id;grade=a.grade_level_id;stream=a.stream_id;area=a.learning_area_id;
+  const enrolled=await db.prepare("SELECT 1 FROM learner_enrollments WHERE learner_id=? AND school_id=? AND academic_year_id=? AND grade_level_id=? AND (stream_id IS ? OR stream_id=?) AND status='active'").bind(values.learner_id,user.school_id,year,grade,stream,stream).first();
+  if(!enrolled)return "The learner is not enrolled in the class for this assessment.";
  }
  if(name==="attendance-records"){
   const a=await db.prepare("SELECT academic_year_id,grade_level_id,stream_id FROM attendance_sessions WHERE id=? AND school_id=?").bind(values.session_id,user.school_id).first();
