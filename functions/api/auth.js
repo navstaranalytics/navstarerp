@@ -163,7 +163,13 @@ export async function getAuthenticatedSession(request, env) {
       const p=await env.DB.prepare("SELECT DISTINCT p.permission_key FROM role_permissions rp JOIN permissions p ON p.id=rp.permission_id WHERE rp.role_id IN ("+marks+")").bind(...roleIds).all();
       permissions=(p.results||[]).map(x=>x.permission_key);
     }
-    if(roleKeysRaw.includes('school_admin'))permissions.push('school.users.manage','school.settings.manage');
+    if(roleKeysRaw.includes('school_admin')){
+      // School Administrators receive the complete school-level permission catalogue,
+      // even when an older database has not yet populated role_permissions correctly.
+      // Platform-wide controls remain excluded and every request is still scoped to row.school_id.
+      const schoolPermissions=await env.DB.prepare("SELECT permission_key FROM permissions WHERE permission_key NOT IN ('platform.manage','schools.manage','billing.manage')").all();
+      permissions.push(...(schoolPermissions.results||[]).map(x=>x.permission_key),'school.users.manage','school.settings.manage');
+    }
     permissions=[...new Set(permissions)];
   }
   let scope={};try{scope=JSON.parse(row.scope_json||'{}')}catch{}
@@ -279,7 +285,7 @@ export async function onRequestPostLogin({ request, env }) {
     await env.DB.prepare("UPDATE users SET last_login_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?").bind(user.id).run();
     await audit(env,user.id,"auth.login","success",{role:user.role_key,schoolId:user.school_id||null});
     const redirect=user.role_key==='super_admin'?'/super-admin.html':'/school-portal.html';
-    return json({ok:true,message:"Signed in successfully.",redirect,sessionToken:issued.token,user:{fullName:user.full_name,username,role:user.role_name,roleKey:user.role_key,schoolId:user.school_id||null,schoolName:user.school_name||null}},200,{"Set-Cookie":sessionCookie(issued.token,issued.maxAge)});
+    return json({ok:true,message:"Signed in successfully.",redirect,sessionToken:issued.token,user:{fullName:user.full_name,username,role:user.role_name,roleKey:user.role_key,schoolId:user.school_id||null,schoolName:user.school_name||null}});
   }catch(error){console.error("Navstar login failure:",String(error?.message||error));return json({ok:false,error:"Sign-in is temporarily unavailable. Please try again."},503)}
 }
 
