@@ -1,3 +1,4 @@
+import { sendNavstarEmail } from "../lib/email.js";
 import { getAuthenticatedSession, hashPassword } from "./auth.js";
 const json=(data,status=200)=>Response.json(data,{status,headers:{"Cache-Control":"no-store"}});
 const id=()=>crypto.randomUUID();
@@ -67,13 +68,13 @@ export async function onRequestPost({request,env}) {
   let emailDelivery="not_configured";
   if(env.RESEND_API_KEY){
    const schoolInfo=await env.DB.prepare("SELECT name,school_code,contact_email,contact_phone,county FROM schools WHERE id=?").bind(schoolId).first();
-   const from=env.MAIL_FROM||"Navstar Analytics <onboarding@resend.dev>";
+   const from=env.MAIL_FROM||"Navstar Analytics <no-reply@mail.navstardigitalhub.co.ke>";
    const loginUrl=new URL("/login.html",new URL(request.url).origin).toString();
    const safe=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
    const schoolName=schoolInfo?.name||"your school",roleName=role.role_name||roleKey;
    const html="<div style='font-family:Arial,sans-serif;max-width:640px;margin:auto;color:#17233b'><div style='background:#10213c;color:white;padding:24px'><b style='font-size:22px'>Navstar Analytics</b><div>School management and education analytics</div></div><div style='padding:26px;border:1px solid #e5eaf2'><p>Hello "+safe(fullName)+",</p><h2>Your school account is ready</h2><p>Your account was created by the School Administrator of <b>"+safe(schoolName)+"</b>.</p><div style='background:#f3f6fb;padding:16px;border-radius:9px'><p><b>School:</b> "+safe(schoolName)+"</p><p><b>School code:</b> "+safe(schoolInfo?.school_code||"—")+"</p><p><b>School email:</b> "+safe(schoolInfo?.contact_email||"—")+"</p><p><b>School phone:</b> "+safe(schoolInfo?.contact_phone||"—")+"</p><p><b>County:</b> "+safe(schoolInfo?.county||"—")+"</p><p><b>Your name:</b> "+safe(fullName)+"</p><p><b>Username:</b> "+safe(username)+"</p><p><b>Your email:</b> "+safe(email)+"</p><p><b>Phone:</b> "+safe(phone||"—")+"</p><p><b>Role:</b> "+safe(roleName)+"</p></div><p>Sign in using your username. For security, your password is not included in this email. Select <b>Forgot password</b> and follow the one-time email code instructions to set your password.</p><p><a href='"+loginUrl+"'>Open Navstar login</a></p><p>Welcome,<br><b>Navstar Analytics</b></p></div></div>";
    try{
-    const sent=await fetch("https://api.resend.com/emails",{method:"POST",headers:{"Authorization":"Bearer "+env.RESEND_API_KEY,"Content-Type":"application/json"},body:JSON.stringify({from,to:[email],subject:"Your "+roleName+" account · "+schoolName,html,text:"Hello "+fullName+",\\nSchool: "+schoolName+"\\nSchool code: "+(schoolInfo?.school_code||"—")+"\\nSchool email: "+(schoolInfo?.contact_email||"—")+"\\nSchool phone: "+(schoolInfo?.contact_phone||"—")+"\\nYour name: "+fullName+"\\nUsername: "+username+"\\nEmail: "+email+"\\nPhone: "+(phone||"—")+"\\nRole: "+roleName+"\\n\\nSign in at "+loginUrl+" using your username. Use Forgot password to receive an OTP and set your password.\\n\\nNavstar Analytics."})});
+    const sent=await sendNavstarEmail(env,{method:"POST",headers:{"Authorization":"Bearer "+env.RESEND_API_KEY,"Content-Type":"application/json"},body:JSON.stringify({from,to:[email],subject:"Your "+roleName+" account · "+schoolName,html,text:"Hello "+fullName+",\\nSchool: "+schoolName+"\\nSchool code: "+(schoolInfo?.school_code||"—")+"\\nSchool email: "+(schoolInfo?.contact_email||"—")+"\\nSchool phone: "+(schoolInfo?.contact_phone||"—")+"\\nYour name: "+fullName+"\\nUsername: "+username+"\\nEmail: "+email+"\\nPhone: "+(phone||"—")+"\\nRole: "+roleName+"\\n\\nSign in at "+loginUrl+" using your username. Use Forgot password to receive an OTP and set your password.\\n\\nNavstar Analytics."})});
     emailDelivery=sent.ok?"sent":"failed";if(!sent.ok)console.error("Navstar school user email failed:",sent.status,await sent.text());
    }catch(error){emailDelivery="failed";console.error("Navstar school user email error:",String(error?.message||error));}
   }
