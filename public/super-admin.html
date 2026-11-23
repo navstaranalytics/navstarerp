@@ -160,6 +160,59 @@ configureSchoolBilling=function(id){
       }catch(error){toast(error.message||"Subscription could not be saved.");if(button){button.disabled=false;button.textContent="Save record"}}
     });
 };
+
+addPlan=function(){
+  openModal("Create subscription plan",
+    '<div class="form-grid">'+
+    field("Plan name *","name","e.g. School Growth")+
+    selectFieldRich("Billing model","billingModel",BILLING_MODELS.map(x=>({value:x.value,label:x.label})),"per_learner_year")+
+    field("Price / rate (KES)","rate","0","number",0)+
+    field("Maximum learners (0 = unlimited)","learners","0","number",0)+
+    field("Included storage (GB)","storage","0","number",10)+
+    field("AI credits per billing cycle","ai","0","number",0)+
+    field("One-time onboarding fee (KES)","setupFee","0","number",0)+
+    field("Grace period (days)","graceDays","7","number",7)+
+    '<div class="form-field full"><label>Included capabilities (comma separated)</label><input name="modules" value="Core, Learners, Staff & HR, Academics, Reports"></div>'+
+    '<div class="form-field full"><label>Available school stages</label><div class="county-grid">'+["PP1","PP2","Grade 1–6","Grade 7–9","Grade 10–12","Forms 1–4"].map(x=>'<label class="county"><input type="checkbox" name="stages" value="'+esc(x)+'" checked> '+esc(x)+'</label>').join("")+'</div></div>'+
+    '</div>',
+    async d=>{
+      const name=d.get("name")?.trim(),rate=Number(d.get("rate"));
+      if(!name||plans.some(x=>x.name.toLowerCase()===name.toLowerCase())||!Number.isFinite(rate)||rate<0){toast("Enter a unique plan name and a valid non-negative rate.");return}
+      const plan={name,billingModel:d.get("billingModel"),rate,price:rate,learners:Math.max(0,Number(d.get("learners"))||0),storage:Math.max(0,Number(d.get("storage"))||0),ai:Math.max(0,Number(d.get("ai"))||0),setupFee:Math.max(0,Number(d.get("setupFee"))||0),graceDays:Math.max(0,Number(d.get("graceDays"))||0),countBasis:"enrolled",modules:d.get("modules")||"Core",stages:d.getAll("stages"),active:true};
+      try{await savePlanToDatabase(plan);closeModal();render();toast("Subscription plan saved permanently in D1.")}catch(error){toast(error.message||"Plan could not be saved.")}
+    });
+};
+editPlan=function(name){
+  const p=plans.find(x=>x.name===name);if(!p)return;
+  openModal("Configure plan · "+p.name,
+    '<div class="form-grid">'+
+    field("Plan name *","name","", "text",p.name)+
+    selectFieldRich("Billing model","billingModel",BILLING_MODELS.map(x=>({value:x.value,label:x.label})),p.billingModel||"per_learner_month")+
+    field("Price / rate (KES)","rate","0","number",p.rate??p.price??0)+
+    field("Maximum learners (0 = unlimited)","learners","0","number",p.learners)+
+    field("Included storage (GB)","storage","0","number",p.storage)+
+    field("AI credits per billing cycle","ai","0","number",p.ai)+
+    field("One-time onboarding fee (KES)","setupFee","0","number",p.setupFee||0)+
+    field("Grace period (days)","graceDays","7","number",p.graceDays??7)+
+    '<div class="form-field full"><label>Included capabilities (comma separated)</label><input name="modules" value="'+esc(p.modules||"Core")+'"></div>'+
+    '<div class="form-field full"><label>Available school stages</label><div class="county-grid">'+["PP1","PP2","Grade 1–6","Grade 7–9","Grade 10–12","Forms 1–4"].map(x=>'<label class="county"><input type="checkbox" name="stages" value="'+esc(x)+'" '+((p.stages||[]).includes(x)?"checked":"")+'> '+esc(x)+'</label>').join("")+'</div></div>'+
+    '<label class="county"><input type="checkbox" name="active" '+(p.active===false?"":"checked")+'> Plan available for new school subscriptions</label></div>',
+    async d=>{
+      const nextName=d.get("name")?.trim(),rate=Number(d.get("rate"));
+      if(!nextName||plans.some(x=>x!==p&&x.name.toLowerCase()===nextName.toLowerCase())||!Number.isFinite(rate)||rate<0){toast("Check the unique plan name and valid price.");return}
+      const previousName=p.name;
+      const next={...p,name:nextName,billingModel:d.get("billingModel"),rate,price:rate,learners:Math.max(0,Number(d.get("learners"))||0),storage:Math.max(0,Number(d.get("storage"))||0),ai:Math.max(0,Number(d.get("ai"))||0),setupFee:Math.max(0,Number(d.get("setupFee"))||0),graceDays:Math.max(0,Number(d.get("graceDays"))||0),modules:d.get("modules")||"Core",stages:d.getAll("stages"),active:d.has("active")};
+      try{
+        await savePlanToDatabase(next,p.id);
+        if(previousName!==nextName){
+          for(const school of schools.filter(x=>x.plan===previousName)){
+            await schoolApi("/api/schools/"+encodeURIComponent(school.id),{method:"PATCH",body:JSON.stringify({plan:nextName})});
+          }
+        }
+        await loadSchoolsFromDatabase();await loadSchoolBillingFromDatabase();closeModal();render();toast("Plan and associated school records updated in D1.");
+      }catch(error){toast(error.message||"Plan changes could not be saved.")}
+    });
+};
 document.querySelectorAll('[data-page]').forEach(b=>b.onclick=()=>go(b.dataset.page));$('view').addEventListener('click',e=>{let b=e.target.closest('[data-action],[data-page-go]');if(!b)return;if(b.dataset.pageGo){go(b.dataset.pageGo);return}let a=b.dataset.action,id=b.dataset.id;if(a==='add-school')addSchool();if(a==='school-details')schoolDetails(id);if(a==='add-user')addUser();if(a==='compose')compose();if(a==='add-plan')addPlan();if(a==='edit-plan')editPlan(b.dataset.plan);if(a==='school-status'){let s=schools.find(x=>x.id===id);if(s){s.status=s.status==='Active'?'Suspended':'Active';save(KEY,schools);log('School status changed',s.name+' → '+s.status);render();toast('School status updated locally.')}}if(a==='user-status'){let u=users.find(x=>x.id===id);if(u){u.status=u.status==='Active'?'Disabled':'Active';save(USERKEY,users);log('Platform user status changed',u.email+' → '+u.status);render()}}if(a==='export-schools'){let cols=['name','code','county','category','level','curriculum','plan','status','email','phone','created'];let csv=[cols.join(','),...schools.map(s=>cols.map(k=>'"'+String(s[k]??'').replace(/"/g,'""')+'"').join(','))].join('\r\n');let url=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));let x=document.createElement('a');x.href=url;x.download='navstar-school-directory.csv';x.click();URL.revokeObjectURL(url)}});
 $('closeModal').onclick=closeModal;$('cancelModal').onclick=closeModal;$('modal').onclick=e=>{if(e.target===$('modal'))closeModal()};$('helpBtn').onclick=()=>toast('Use the left navigation to manage each platform area.');$('globalSearch').onkeydown=e=>{if(e.key==='Enter'){go('schools');setTimeout(()=>{let x=$('schoolSearch');if(x){x.value=e.target.value;x.dispatchEvent(new Event('input'))}},0)}};
 
