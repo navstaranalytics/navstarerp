@@ -312,7 +312,7 @@ export default {
       } catch {}
     }
     const publicPages = ["/login.html", "/setup-admin.html", "/setup-database.html"];
-    if (!publicPages.includes(route) && !route.startsWith("/api/")) {
+    if (!publicPages.includes(route) && !route.startsWith("/api/") && !["/school-portal.html","/super-admin.html"].includes(route)) {
       const session = await getAuthenticatedSession(request, env);
       if (!session) {
         try {
