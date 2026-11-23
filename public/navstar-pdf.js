@@ -1,6 +1,6 @@
 (function(){
 "use strict";
-const esc=s=>String(s??"").replace(/\\n/g,"\n").replace(/\/n\b/g,"\n").replace(/\r/g,"");
+const esc=s=>String(s??"").replace(/\\n/g,"\n").replace(/\/n(?=\s|$)/g,"\n").replace(/\r/g,"");
 const loadImage=src=>new Promise(resolve=>{if(!src)return resolve(null);const im=new Image();im.crossOrigin="anonymous";im.onload=()=>resolve(im);im.onerror=()=>resolve(null);im.src=src});
 const wrap=(ctx,value,max)=>{const words=esc(value).split(/\s+/);const out=[];let line="";for(const word of words){const next=line?line+" "+word:word;if(ctx.measureText(next).width>max&&line){out.push(line);line=word}else line=next}if(line)out.push(line);return out};
 function concat(parts){const size=parts.reduce((n,p)=>n+p.length,0),out=new Uint8Array(size);let at=0;for(const p of parts){out.set(p,at);at+=p.length}return out}
