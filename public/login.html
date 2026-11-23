@@ -187,9 +187,25 @@ html,body{width:100%;height:100%;min-height:100%;overflow:hidden}
 .error{margin:9px 0!important}
 @media(max-width:620px){.card{max-width:410px!important;padding:14px 19px 17px!important}.mark{height:52px!important}.brand-promise{margin-bottom:11px!important;padding-bottom:9px!important}}
 @media(max-height:650px){.card{padding-top:10px!important;padding-bottom:12px!important}.mark{height:48px!important}.brand-promise{margin-bottom:8px!important;padding-bottom:7px!important}.field{margin:5px 0 8px!important}.field input,.submit{height:42px!important}}
+
+/* Brand signature in the upper-left; feature benefits neatly grouped at card bottom. */
+.topline{justify-content:flex-start!important;text-align:left!important;padding:14px 4.5%!important}
+.corner-brand{display:flex;flex-direction:column;align-items:flex-start;gap:3px;color:#fff;text-shadow:0 2px 9px #00265f}
+.corner-brand strong{font-family:Georgia,serif;font-size:clamp(19px,2vw,27px);font-weight:800;letter-spacing:.015em}
+.corner-brand span{font-size:clamp(10px,1vw,13px);font-weight:650;letter-spacing:.025em}
+.features{display:none!important}
+.card{display:flex!important;flex-direction:column!important}
+.card-features{order:6!important;width:100%;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:15px;padding-top:13px;border-top:1px solid #e2eaf5}
+.card-feature{min-width:0;display:flex;align-items:center;justify-content:center;gap:7px;color:#173a70;font-size:11px;line-height:1.2;text-align:left}
+.card-feature>span:last-child{display:flex;flex-direction:column;gap:2px}
+.card-feature strong{font-size:10px;font-weight:800}
+.card-feature small{font-size:10px;color:#687994}
+.card-feature .featureicon{width:29px;height:29px;border:0;border-radius:9px;font-size:14px;box-shadow:none;flex:none}
+@media(max-width:620px){.topline{padding:8px 16px!important}.corner-brand strong{font-size:18px}.corner-brand span{font-size:10px}.card-features{gap:4px;margin-top:11px;padding-top:10px}.card-feature{gap:4px;font-size:9px}.card-feature strong,.card-feature small{font-size:9px}.card-feature .featureicon{width:25px;height:25px;font-size:12px}}
+@media(max-height:650px){.topline{padding-top:5px!important;padding-bottom:5px!important}.card-features{margin-top:8px;padding-top:8px}}
 </style></head><body>
 <div class="page">
-<div class="topline">Welcome to Navstar Analytics</div>
+<div class="topline"><div class="corner-brand"><strong>Navstar Analytics</strong><span>Empowering Schools with Smart Data</span></div></div>
 <main class="main">
 <aside class="leftcopy"><h2>Analytics • Innovation • Impact</h2><p>Empowering Schools with Smart Data</p></aside>
 <section class="card" aria-label="NAVSTAR sign in">
@@ -199,8 +215,9 @@ html,body{width:100%;height:100%;min-height:100%;overflow:hidden}
 <div class="account" id="accountCard"><div class="avatar" id="avatar">N</div><div><strong id="accountName"></strong><small id="accountRole"></small><small id="accountEmail"></small></div></div>
 <form id="passwordForm" style="display:none"><div class="field"><label for="password">Password</label><div class="pw"><input id="password" type="password" autocomplete="current-password" placeholder="Password" required maxlength="128"><button class="toggle" type="button" id="toggle">Show</button></div></div><label class="remember"><span><input type="checkbox" id="remember"> Remember me</span></label><button class="submit" id="signIn" type="submit">⇥ &nbsp; Log In</button><button class="back" type="button" id="back">← Use a different username</button></form>
 <div class="error" id="error" role="alert"></div>
+<div class="card-features"><div class="card-feature"><span class="featureicon">▥</span><span><strong>Data-Driven</strong><small>Insights</small></span></div><div class="card-feature"><span class="featureicon">✓</span><span><strong>Secure &amp; Reliable</strong></span></div><div class="card-feature"><span class="featureicon">♙</span><span><strong>Empowering</strong><small>Education</small></span></div></div>
 </section>
-<aside class="features"><div class="opposite-brand">Smart Analytics…<br>Better Education…</div><div class="feature"><span class="featureicon">▥</span><span>Data-Driven<br>Insights</span></div><div class="feature"><span class="featureicon">✓</span><span>Secure &amp; Reliable</span></div><div class="feature"><span class="featureicon">♙</span><span>Empowering<br>Education</span></div></aside>
+
 </main>
 <footer class="footer"><span class="footer-credit">Engineered, maintained &amp; powered by <strong>Navstar Digital Hub</strong></span><span>Help Desk: <a href="tel:+254797688576">+254 797 688 576</a></span><span>WhatsApp: <a href="https://wa.me/254797688576" target="_blank" rel="noopener">+254 797 688 576</a></span><span>Email: <a href="mailto:navstaranalytics@gmail.com">navstaranalytics@gmail.com</a></span></footer>
 </div>
