@@ -20,7 +20,7 @@ import {
   onRequestPostPasswordResetConfirm,
   onRequestPostUsernameRecoveryRequest,
   onRequestPostUsernameRecoveryConfirm,
-  getSuperAdminSession
+  getAuthenticatedSession
 } from "./functions/api/auth.js";
 
 const jsonNotFound = () => Response.json(
