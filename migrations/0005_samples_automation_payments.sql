@@ -1,3 +1,4 @@
+ALTER TABLE schools ADD COLUMN suspension_reason TEXT;
 -- Navstar platform automation, sample-data tracking and payment callback ledger.
 CREATE TABLE IF NOT EXISTS sample_data_records (
  id TEXT PRIMARY KEY,
