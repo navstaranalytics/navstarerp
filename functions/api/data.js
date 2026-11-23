@@ -138,8 +138,8 @@ async function existsInSchool(db,table,ref,schoolId){
 }
 function bodyFields(body,config){
   const values={};
-  if(config.scope&&body.school_id!==undefined)values.school_id=clean(body.school_id);
-  for(const field of config.fields)if(body[field]!==undefined)values[field]=clean(body[field]);
+  if(config.scope&&body.school_id!==undefined){const v=clean(body.school_id);values.school_id=v===""?null:v;}
+  for(const field of config.fields)if(body[field]!==undefined){const v=clean(body[field]);values[field]=v===""?null:v;}
   return values;
 }
 async function validateRefs(db,config,values,schoolId){
