@@ -203,8 +203,8 @@ export async function onRequestGet({request,env}){
   const a=await auth(request,env);if(a.error)return a.error;
   const url=new URL(request.url),name=url.pathname.split("/").pop(),cfg=resources[name];
   if(!cfg)return json({ok:false,error:"Unknown data resource."},404);
-  if(name==="grade-boundaries")await ensureGradeBoundaryScope(env.DB);
   const needed=permissionFor(name,false);if(!allowed(a.user,needed))return json({ok:false,error:"Your role does not have permission to view this resource."},403);
+  if(name==="grade-boundaries")await ensureGradeBoundaryScope(env.DB);
   if(name==="platform-users"){
     try{const rows=await env.DB.prepare("SELECT u.id,u.full_name,u.username,u.email,u.phone,u.status,u.created_at,u.last_login_at,r.role_key,r.role_name FROM users u JOIN user_role_assignments a ON a.user_id=u.id AND a.school_id IS NULL JOIN roles r ON r.id=a.role_id WHERE r.role_key IN ('super_admin','platform_operations','regional_administrator','finance_administrator','academic_standards_administrator','support_administrator') ORDER BY u.created_at DESC LIMIT 1000").all();return json({ok:true,records:rows.results||[]});}
     catch(error){console.error("NAVSTAR platform users read",error);return json({ok:false,error:"Could not load platform users."},500)}
@@ -245,8 +245,8 @@ export async function onRequestPost({request,env}){
   const a=await auth(request,env);if(a.error)return a.error;
   const name=new URL(request.url).pathname.split("/").pop(),cfg=resources[name];
   if(!cfg)return json({ok:false,error:"Unknown data resource."},404);
-  if(name==="grade-boundaries")await ensureGradeBoundaryScope(env.DB);
   if(!allowed(a.user,permissionFor(name,true)))return json({ok:false,error:"Your role does not have permission to change this resource."},403);
+  if(name==="grade-boundaries")await ensureGradeBoundaryScope(env.DB);
   if(cfg.readOnly)return json({ok:false,error:"This resource is read-only."},405);
   let body;try{body=await request.json()}catch{return json({ok:false,error:"Invalid record data."},400)}
   const values=bodyFields(body,cfg);
