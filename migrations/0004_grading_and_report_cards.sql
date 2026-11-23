@@ -15,7 +15,6 @@ CREATE TABLE IF NOT EXISTS grading_schemes (
 
 CREATE TABLE IF NOT EXISTS grade_boundaries (
  id TEXT PRIMARY KEY,
- school_id TEXT REFERENCES schools(id) ON DELETE CASCADE,
  scheme_id TEXT NOT NULL REFERENCES grading_schemes(id) ON DELETE CASCADE,
  label TEXT NOT NULL,
  min_score REAL NOT NULL CHECK(min_score>=0 AND min_score<=100),
@@ -25,6 +24,19 @@ CREATE TABLE IF NOT EXISTS grade_boundaries (
  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
  CHECK(max_score>=min_score)
 );
+
+-- Older Navstar databases may already have grade_boundaries without school_id.
+-- Create the table without that column above, then add it exactly once here so
+-- both fresh and existing databases follow the same migration path.
+ALTER TABLE grade_boundaries ADD COLUMN school_id TEXT REFERENCES schools(id) ON DELETE CASCADE;
+
+-- Backfill the school scope from each boundary's parent grading scheme.
+UPDATE grade_boundaries
+SET school_id = (
+ SELECT gs.school_id FROM grading_schemes gs
+ WHERE gs.id = grade_boundaries.scheme_id
+)
+WHERE school_id IS NULL;
 
 CREATE INDEX IF NOT EXISTS ix_grade_boundaries_scheme ON grade_boundaries(school_id,scheme_id,min_score DESC);
 
