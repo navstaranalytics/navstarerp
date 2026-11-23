@@ -50,3 +50,39 @@ export async function onRequestPost({request,env}){
     return json({ok:false,error:"The School Administrator account could not be created. Please try again."},500);
   }
 }
+
+export async function onRequestPatch({request,env}){
+  if(!env.DB)return json({ok:false,error:"Database connection is unavailable."},503);
+  const actor=await getSuperAdminSession(request,env);
+  if(!actor)return json({ok:false,error:"Only Super Admin can update a School Administrator."},403);
+  const schoolId=decodeURIComponent(new URL(request.url).pathname.split("/").slice(-2,-1)[0]||"");
+  let body;try{body=await request.json()}catch{return json({ok:false,error:"Enter the updated administrator details."},400)}
+  const fullName=clean(body.fullName),username=clean(body.username).toLowerCase(),email=clean(body.email).toLowerCase(),phone=clean(body.phone);
+  if(!schoolId||!fullName||fullName.length>120||!/^[a-z0-9._-]{3,32}$/.test(username)||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||email.length>190||!phone||phone.length>40)
+    return json({ok:false,error:"Enter a valid full name, username, email address and phone number."},400);
+  try{
+    const current=await env.DB.prepare(`SELECT u.id,u.email,u.username FROM school_memberships m
+      JOIN users u ON u.id=m.user_id JOIN user_role_assignments a ON a.user_id=u.id AND a.school_id=m.school_id
+      JOIN roles r ON r.id=a.role_id AND r.role_key='school_admin'
+      WHERE m.school_id=? AND m.membership_status IN ('active','invited') LIMIT 1`).bind(schoolId).first();
+    if(!current)return json({ok:false,error:"No School Administrator account is assigned to this school yet. Use Add School User to create one."},404);
+    if(await env.DB.prepare("SELECT 1 AS found FROM users WHERE username_normalized=? AND id<>? LIMIT 1").bind(username,current.id).first())
+      return json({ok:false,error:"That username is already taken across NAVSTAR. Choose a different username."},409);
+    if(await env.DB.prepare("SELECT 1 AS found FROM users WHERE email_normalized=? AND id<>? LIMIT 1").bind(email,current.id).first())
+      return json({ok:false,error:"That email address is already registered. Use a different email address."},409);
+    await env.DB.batch([
+      env.DB.prepare("UPDATE users SET full_name=?,username=?,username_normalized=?,email=?,email_normalized=?,phone=?,updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?").bind(fullName,username,username,email,email,phone,current.id),
+      env.DB.prepare("INSERT INTO audit_logs(id,actor_user_id,school_id,action,resource_type,resource_id,outcome,details_json) VALUES(?,?,?,'school.admin.updated','user',?,'success',?)").bind(makeId(),actor.id,schoolId,current.id,JSON.stringify({username,email}))
+    ]);
+    let emailDelivery="not_configured";
+    if(env.RESEND_API_KEY){
+      const school=await env.DB.prepare("SELECT name,school_code,status FROM schools WHERE id=?").bind(schoolId).first();
+      const from=env.MAIL_FROM||"Navstar Analytics <onboarding@resend.dev>",loginUrl=new URL("/login.html",new URL(request.url).origin).toString();
+      const safe=v=>String(v).replace(/[&<>"]/g,x=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[x]));
+      const html="<div style='font-family:Arial,sans-serif;max-width:600px;margin:auto;color:#17233b'><div style='background:#082b70;color:#fff;padding:24px'><b>NAVSTAR ANALYTICS</b><div>School management platform</div></div><div style='padding:26px;border:1px solid #e5eaf2'><p>Hello "+safe(fullName)+",</p><h2>Your School Administrator details have been updated</h2><p>School: <b>"+safe(school?.name||"Your school")+"</b></p><p>Username: <b>"+safe(username)+"</b><br>Email: "+safe(email)+"<br>Phone: "+safe(phone)+"</p><p>Use Forgot password on the NAVSTAR login page to receive a one-time email code and set or reset your password securely.</p><p><a href='"+loginUrl+"'>Open NAVSTAR login</a></p><p>Regards,<br>NAVSTAR Analytics Team</p></div></div>";
+      try{const sent=await fetch("https://api.resend.com/emails",{method:"POST",headers:{"Authorization":"Bearer "+env.RESEND_API_KEY,"Content-Type":"application/json"},body:JSON.stringify({from,to:[email],subject:"Updated NAVSTAR School Administrator account · "+(school?.name||"Your school"),html,text:"Your NAVSTAR School Administrator details have been updated. School: "+(school?.name||"Your school")+". Username: "+username+". Email: "+email+". Phone: "+phone+". Use Forgot password at "+loginUrl+" to receive an OTP and set your password."})});emailDelivery=sent.ok?"sent":"failed";if(!sent.ok)console.error("NAVSTAR School Admin update email failed:",sent.status,await sent.text());}
+      catch(error){emailDelivery="failed";console.error("NAVSTAR School Admin update email error:",String(error?.message||error));}
+    }
+    return json({ok:true,emailDelivery,admin:{id:current.id,fullName,username,email,phone,role:"School Administrator",status:"active"},message:"School Administrator details updated."});
+  }catch(error){const msg=String(error?.message||"");console.error("NAVSTAR School Admin update failed:",msg);return json({ok:false,error:/UNIQUE constraint/i.test(msg)?"The username or email has just been registered. Refresh and choose another.":"School Administrator details could not be updated."},/UNIQUE constraint/i.test(msg)?409:500)}
+}
