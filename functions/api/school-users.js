@@ -6,7 +6,7 @@ const norm=v=>String(v||"").trim().toLowerCase();
 const clean=v=>String(v||"").trim();
 const allowedRoles=new Set(["school_owner","principal","deputy_principal","director_of_studies","deputy_director_of_studies","senior_teacher","head_of_department","examinations_officer","class_teacher","teacher","bursar_accountant","hr_administrator","admissions_registrar","librarian","parent","student"]);
 const ensureLearnerLinkTable=db=>db.prepare("CREATE TABLE IF NOT EXISTS learner_user_links (id TEXT PRIMARY KEY,school_id TEXT NOT NULL REFERENCES schools(id) ON DELETE CASCADE,learner_id TEXT NOT NULL REFERENCES learners(id) ON DELETE CASCADE,user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,created_by TEXT REFERENCES users(id) ON DELETE SET NULL,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,UNIQUE(school_id,learner_id),UNIQUE(school_id,user_id))").run();
-const staffRoles=new Set(["school_owner","principal","deputy_principal","director_of_studies","deputy_director_of_studies","head_of_department","examinations_officer","class_teacher","teacher","bursar_accountant","hr_administrator","admissions_registrar","librarian"]);
+const staffRoles=new Set(["school_owner","principal","deputy_principal","director_of_studies","deputy_director_of_studies","senior_teacher","head_of_department","examinations_officer","class_teacher","teacher","bursar_accountant","hr_administrator","admissions_registrar","librarian"]);
 export async function onRequestGet({request,env}) {
  if(!env.DB)return json({ok:false,error:"Database connection is unavailable."},503);
  const actor=await getAuthenticatedSession(request,env);
