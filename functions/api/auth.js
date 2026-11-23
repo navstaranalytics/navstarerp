@@ -277,8 +277,8 @@ export async function onRequestPostProfile({ request, env }) {
   const profilePhotoUrl = safeText(body.profilePhotoUrl);
   if (profilePhotoUrl && (!/^https:\/\//i.test(profilePhotoUrl) || profilePhotoUrl.length > 2048)) return json({ ok: false, error: 'Profile photo must be a valid HTTPS image URL.' }, 400);
   if (!fullName || fullName.length > 120 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ||
-      email.length > 190 || !phone || phone.length > 40 || !designation || designation.length > 100 ||
-      !organisationName || organisationName.length > 140) {
+      email.length > 190 || !phone || phone.length > 40 ||
+      (current.is_super_admin && (!designation || designation.length > 100 || !organisationName || organisationName.length > 140))) {
     return json({ ok: false, error: "Complete all profile fields with valid details." }, 400);
   }
   try {
@@ -296,7 +296,7 @@ export async function onRequestPostProfile({ request, env }) {
 }
 
 export async function onRequestPostChangePassword({ request, env }) {
-  const current = await getSuperAdminSession(request, env);
+  const current = await getAuthenticatedSession(request, env);
   if (!current) return json({ ok: false, error: "Your session has expired. Please sign in again." }, 401);
   let body;
   try { body = await request.json(); } catch { return json({ ok: false, error: "Invalid password request." }, 400); }
