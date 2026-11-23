@@ -9,7 +9,7 @@ import { onRequestPost as schoolAdminPost, onRequestPatch as schoolAdminPatch } 
 import { onRequestGet as schoolUsersGet, onRequestPost as schoolUsersPost } from "./functions/api/school-users.js";
 import { onRequestGet as portalGet } from "./functions/api/portal.js";
 import { onRequestGet as brandingGet, onRequestPost as brandingPost, onRequestGetLogo as brandingLogoGet, onRequestPostLogo as brandingLogoPost, onRequestGetStorageStatus as storageStatusGet, onRequestGetLoginBackground as loginBackgroundGet, onRequestPostLoginBackground as loginBackgroundPost, onRequestPostProfilePhoto as profilePhotoPost, onRequestGetProfilePhoto as profilePhotoGet } from "./functions/api/branding.js";
-import { onRequestPost as accountLookupPost } from "./functions/api/account-lookup.js";
+import { onRequestPost as accountLookupPost, onRequestPostUsernameAvailability } from "./functions/api/account-lookup.js";
 import {
   onRequestPostSetupAdmin,
   onRequestPostLogin,
@@ -104,6 +104,10 @@ export default {
     if (route === "/api/portal/me") {
       if (request.method !== "GET") return new Response("Method not allowed", { status: 405, headers: { Allow: "GET" } });
       return portalGet({ request, env });
+    }
+    if (route === "/api/auth/username-availability") {
+      if (request.method !== "POST") return new Response("Method not allowed", { status: 405, headers: { Allow: "POST" } });
+      return onRequestPostUsernameAvailability({ request, env });
     }
     if (route === "/api/auth/account-lookup") {
       if (request.method !== "POST") return new Response("Method not allowed", { status: 405, headers: { Allow: "POST" } });
