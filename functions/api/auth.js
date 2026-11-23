@@ -107,11 +107,13 @@ export async function getAuthenticatedSession(request, env) {
   const tokenHash=await digest(token);
   const row=await env.DB.prepare(`
     SELECT u.id,u.full_name,u.username,u.email,u.phone,u.status,
+      p.designation,p.organisation_name,p.profile_photo_url,p.country,p.timezone,p.currency,
       r.role_key,r.role_name,a.school_id,a.scope_json,
       sc.name AS school_name,sc.status AS school_status,
       sm.membership_status
     FROM auth_sessions s
     JOIN users u ON u.id=s.user_id
+    LEFT JOIN super_admin_profiles p ON p.user_id=u.id
     JOIN user_role_assignments a ON a.user_id=u.id
     JOIN roles r ON r.id=a.role_id
     LEFT JOIN school_memberships sm ON sm.user_id=u.id AND sm.school_id=a.school_id
@@ -248,7 +250,7 @@ export async function onRequestPostLogin({ request, env }) {
 export async function onRequestGetMe({request,env}) {
  const user=await getAuthenticatedSession(request,env);
  if(!user)return json({ok:false,authenticated:false},401);
- return json({ok:true,authenticated:true,user:{id:user.id,fullName:user.full_name,username:user.username,email:user.email,phone:user.phone,role:user.role_name,roleKey:user.role_key,schoolId:user.school_id||null,schoolName:user.school_name||null,permissions:user.permissions,scope:user.scope}});
+ return json({ok:true,authenticated:true,user:{id:user.id,fullName:user.full_name,username:user.username,email:user.email,phone:user.phone,role:user.role_name,roleKey:user.role_key,schoolId:user.school_id||null,schoolName:user.school_name||null,permissions:user.permissions,scope:user.scope,designation:user.designation,organisationName:user.organisation_name,profilePhotoUrl:user.profile_photo_url,country:user.country,timezone:user.timezone,currency:user.currency}});
 }
 export async function onRequestPostLogout({ request, env }) {
   const token = cookieValue(request, COOKIE);
@@ -263,7 +265,7 @@ export async function onRequestPostLogout({ request, env }) {
 
 
 export async function onRequestPostProfile({ request, env }) {
-  const current = await getSuperAdminSession(request, env);
+  const current = await getAuthenticatedSession(request, env);
   if (!current) return json({ ok: false, error: "Your session has expired. Please sign in again." }, 401);
   let body;
   try { body = await request.json(); } catch { return json({ ok: false, error: "Invalid profile details." }, 400); }
@@ -283,8 +285,8 @@ export async function onRequestPostProfile({ request, env }) {
     await env.DB.batch([
       env.DB.prepare("UPDATE users SET full_name = ?, email = ?, email_normalized = ?, phone = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?")
         .bind(fullName, email, email, phone, current.id),
-      env.DB.prepare("UPDATE super_admin_profiles SET designation = ?, organisation_name = ?, profile_photo_url = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE user_id = ?")
-        .bind(designation, organisationName, profilePhotoUrl || null, current.id)
+      ...(current.is_super_admin?[env.DB.prepare("UPDATE super_admin_profiles SET designation = ?, organisation_name = ?, profile_photo_url = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE user_id = ?")
+        .bind(designation, organisationName, profilePhotoUrl || null, current.id)]:[])
     ]);
     await audit(env, current.id, "auth.profile.updated", "success");
     return json({ ok: true, message: "Profile updated." });
