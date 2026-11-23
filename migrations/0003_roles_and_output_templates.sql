@@ -44,7 +44,9 @@ INSERT OR IGNORE INTO role_permissions(role_id,permission_id)
 SELECT r.id,p.id FROM roles r JOIN permissions p ON p.permission_key IN (
 'academics.manage','learners.view','staff.view','classes.view','allocations.manage','assessments.view',
 'assessments.manage','attendance.view','timetable.view','reports.view','discipline.manage','profile.self'
-) WHERE r.school_id IS NULL AND r.role_key IN ('director_of_studies','deputy_director_of_studies','senior_teacher');
+) WHERE r.school_id IS NULL AND r.role_key IN ('director_of_studies','deputy_director_of_studies');
+INSERT OR IGNORE INTO role_permissions(role_id,permission_id)
+SELECT r.id,p.id FROM roles r JOIN permissions p ON p.permission_key IN ('learners.view','staff.view','classes.view','assessments.view','attendance.view','timetable.view','reports.view','profile.self') WHERE r.school_id IS NULL AND r.role_key='senior_teacher';
 
 -- Heads of Department.
 INSERT OR IGNORE INTO role_permissions(role_id,permission_id)
