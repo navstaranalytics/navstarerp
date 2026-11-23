@@ -143,6 +143,18 @@ function bodyFields(body,config){
   for(const field of config.fields)if(body[field]!==undefined){const v=clean(body[field]);values[field]=v===""?null:v;}
   return values;
 }
+async function validateConfiguredGrade(db,name,schoolId,values,current={}){
+ if(name!=="grades")return null;
+ const school=await db.prepare("SELECT school_levels_json FROM schools WHERE id=?").bind(schoolId).first();
+ if(!school)return "School workspace was not found.";
+ let selected=[];try{selected=JSON.parse(school.school_levels_json||"[]")}catch{}
+ if(!Array.isArray(selected)||!selected.length)return null;
+ const stageName=String(values.stage_name??current.stage_name??"").trim().toLowerCase();
+ const stageCode=String(values.stage_code??current.stage_code??"").trim().toLowerCase();
+ const allowed=new Set(selected.map(x=>String(x).trim().toLowerCase()));
+ if(!allowed.has(stageName)&&!allowed.has(stageCode))return "This grade is not enabled for the school. Ask Super Admin to activate the matching school level first.";
+ return null;
+}
 async function validateRefs(db,config,values,schoolId){
   if(!config.refs)return null;
   for(const [field,table] of Object.entries(config.refs)){
@@ -210,6 +222,7 @@ export async function onRequestPost({request,env}){
   if(cfg.scope&&!a.user.is_super_admin&&values.school_id&&values.school_id!==a.user.school_id)return json({ok:false,error:"You cannot create records for another school."},403);
   if(cfg.scope&&!await env.DB.prepare("SELECT 1 FROM schools WHERE id=?"+(a.user.is_super_admin?"":" AND status='active'")).bind(schoolId).first())return json({ok:false,error:"School not found or inactive."},404);
   if(cfg.scope)values.school_id=schoolId;
+  const gradeError=await validateConfiguredGrade(env.DB,name,schoolId,values);if(gradeError)return json({ok:false,error:gradeError},403);
   if(name==="announcements")values.created_by=a.user.id;
   const refError=await validateRefs(env.DB,cfg,values,schoolId);if(refError)return json({ok:false,error:refError},400);
   const teacherError=await validateTeacherWrite(env.DB,a.user,name,values);if(teacherError)return json({ok:false,error:teacherError},403);
@@ -251,6 +264,7 @@ export async function onRequestPatch({request,env}){
     if(cfg.scope&&!a.user.is_super_admin&&requested&&requested!==a.user.school_id)return json({ok:false,error:"You cannot update records in another school."},403);
     const current=await env.DB.prepare("SELECT * FROM "+cfg.table+" WHERE "+where).bind(...(cfg.scope?[recordId,schoolId]:[recordId])).first();
     if(!current)return json({ok:false,error:"Record not found in the selected school."},404);
+    const gradeError=await validateConfiguredGrade(env.DB,name,schoolId,values,current);if(gradeError)return json({ok:false,error:gradeError},403);
     const refError=await validateRefs(env.DB,cfg,values,schoolId);if(refError)return json({ok:false,error:refError},400);
     const teacherError=await validateTeacherWrite(env.DB,a.user,name,{...current,...values});if(teacherError)return json({ok:false,error:teacherError},403);
     const keys=Object.keys(values),sql="UPDATE "+cfg.table+" SET "+keys.map(k=>k+"=?").join(",")+(cfg.table==="schools"?",updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now')":"")+" WHERE "+where;
