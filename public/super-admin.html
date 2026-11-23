@@ -99,7 +99,7 @@ if(lbf){
  lbf.onsubmit=async e=>{e.preventDefault();const file=fileInput.files[0];if(!file){status.textContent='Choose an image first.';return}const fd=new FormData();fd.append('background',file);status.textContent='Uploading…';const button=lbf.querySelector('button[type="submit"]');button.disabled=true;try{const response=await fetch('/api/branding/login-background',{method:'POST',credentials:'same-origin',body:fd});const data=await response.json();if(!response.ok||!data.ok)throw new Error(data.error||'Background upload failed.');preview.src='/api/branding/login-background?v='+Date.now();status.textContent='Saved to '+data.storage+'. Login page background updated.';fileInput.value='';toast('Login background uploaded successfully.')}catch(error){status.textContent=error.message||'Upload failed.'}finally{button.disabled=false}};
 }
 const pdf=$('platformDetailsForm');if(pdf){fetch('/api/branding',{credentials:'same-origin'}).then(r=>r.json()).then(d=>{if(d.ok){const b=d.branding;for(const k of ['address','city','county','phone','website','registeredDomain','supportEmail'])if(pdf.elements.namedItem(k))pdf.elements.namedItem(k).value=b[k]||''}}).catch(()=>{});pdf.onsubmit=async e=>{e.preventDefault();const d=new FormData(pdf),status=$('platformDetailsStatus');status.textContent='Saving…';const payload=Object.fromEntries(['address','city','county','phone','website','registeredDomain','supportEmail'].map(k=>[k,d.get(k)]));try{const response=await fetch('/api/branding',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:$('brandNameInput')?.value||'Navstar Analytics',tagline:$('brandTaglineInput')?.value||'Empowering Schools with Smart Data',...payload})});const result=await response.json();if(!response.ok||!result.ok)throw new Error(result.error||'Could not save details.');status.textContent='Official contact details saved centrally.';toast('Platform contact details saved.')}catch(error){status.textContent=error.message||'Save failed.'}}}const sf=$('settingsForm');if(sf)sf.onsubmit=async e=>{e.preventDefault();let d=new FormData(sf),button=sf.querySelector('button[type="submit"]');const next={platformName:d.get('platformName'),supportEmail:d.get('supportEmail'),defaultCurrency:d.get('defaultCurrency'),timezone:d.get('timezone'),registrationOpen:d.has('registrationOpen'),aiEnabled:d.has('aiEnabled'),maintenance:d.has('maintenance')};button.disabled=true;button.textContent='Saving centrally…';try{await persistPlatformSettings(next);toast('Platform settings saved permanently in the central database.');render()}catch(error){toast(error.message||'Platform settings could not be saved.')}finally{button.disabled=false;button.textContent='Save platform settings'}}}
-async function go(p){page=p;if(p==="users"){try{await loadPlatformUsersFromDatabase()}catch(error){toast(error.message||"Could not load platform users.")}}if(p==="communications"){try{await loadAnnouncementsFromDatabase()}catch(error){toast(error.message||"Could not load announcements.")}}if(p==="security"){try{await loadAuditFromDatabase()}catch(error){toast(error.message||"Could not load audit history.")}}render();window.scrollTo(0,0)}
+async function go(p){page=p;if(p==="users"){try{await loadPlatformUsersFromDatabase()}catch(error){toast(error.message||"Could not load platform users.")}}if(p==="communications"){try{await loadAnnouncementsFromDatabase()}catch(error){toast(error.message||"Could not load announcements.")}}if(p==="security"){try{await loadAuditFromDatabase()}catch(error){toast(error.message||"Could not load audit history.")}}render();if(p==="support")loadSupportTickets();window.scrollTo(0,0)}
 function openModal(title,body,submit){$('modalTitle').textContent=title;$('modalBody').innerHTML=body;$('modal').classList.add('open');$('modalForm').onsubmit=e=>{e.preventDefault();submit(new FormData(e.target));}}
 function closeModal(){$('modal').classList.remove('open');$('modalForm').onsubmit=null}
 function field(label,name,placeholder='',type='text',value=''){return '<div class="form-field"><label>'+label+'</label><input class="field" name="'+name+'" type="'+type+'" placeholder="'+placeholder+'" value="'+esc(value)+'"></div>'}
@@ -911,17 +911,13 @@ loadSignedInUser();
     const accessResponse=await fetch('/api/system/access-upgrade',{method:'POST',credentials:'same-origin'});
     const accessUpgrade=await accessResponse.json();
     if(!accessResponse.ok||!accessUpgrade.ok)throw new Error(accessUpgrade.error||'Role and permission setup failed.');
-    await loadPlatformSettingsFromDatabase();
-    await loadExtraFromDatabase();
-    await loadTenantWorkspaceFromDatabase();
-    await loadSchoolsFromDatabase();
-    await loadPlatformUsersFromDatabase();
-    await loadPlansFromDatabase();
-    await loadSchoolBillingFromDatabase();
-    await loadBillingRecordsFromDatabase();
-    await loadAnnouncementsFromDatabase();
-    await loadAuditFromDatabase();
-    await loadOverviewFromDatabase();
+    const supportResponse=await fetch('/api/system/support-upgrade',{method:'POST',credentials:'same-origin'});const supportUpgrade=await supportResponse.json();if(!supportResponse.ok||!supportUpgrade.ok)console.warn('Navstar support desk upgrade pending:',supportUpgrade.error||supportResponse.status);
+    await Promise.all([
+      loadPlatformSettingsFromDatabase(),loadExtraFromDatabase(),loadTenantWorkspaceFromDatabase(),
+      loadSchoolsFromDatabase(),loadPlatformUsersFromDatabase(),loadPlansFromDatabase(),
+      loadSchoolBillingFromDatabase(),loadBillingRecordsFromDatabase(),loadAnnouncementsFromDatabase(),
+      loadAuditFromDatabase(),loadOverviewFromDatabase()
+    ]);
     render();
     const status=$('saveState');if(status)status.textContent='Connected · D1 schools, settings, plans, subscriptions, invoices, payments, platform users, announcements, audit and workspace preferences · other workflows still in progress';
   }catch(error){
