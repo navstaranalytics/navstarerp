@@ -691,7 +691,7 @@ loadSignedInUser();
     await loadAuditFromDatabase();
     await loadOverviewFromDatabase();
     render();
-    const status=$('saveState');if(status)status.textContent='Connected · D1 schools, settings, plans, platform users, announcements and audit · other admin workflows still in progress';
+    const status=$('saveState');if(status)status.textContent='Connected · D1 schools, settings, plans, subscriptions, invoices, payments, platform users, announcements, audit and workspace preferences · other workflows still in progress';
   }catch(error){
     schools=[];overviewMetrics=null;overviewAudit=[];overviewLoading=false;const status=$('saveState');if(status)status.textContent='Database connection needs attention';
     render();toast(error.message||'Could not connect to the central database.');
