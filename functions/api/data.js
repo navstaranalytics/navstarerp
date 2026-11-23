@@ -164,6 +164,22 @@ async function validateRefs(db,config,values,schoolId){
   }
   return null;
 }
+async function validateTimetableEntry(db,schoolId,values,excludeId=null){
+  if(values.start_time&&values.end_time&&values.end_time<=values.start_time)return "Lesson end time must be later than its start time.";
+  if(values.stream_id){const stream=await db.prepare("SELECT grade_level_id FROM streams WHERE id=? AND school_id=?").bind(values.stream_id,schoolId).first();if(!stream||stream.grade_level_id!==values.grade_level_id)return "The selected stream must belong to the selected grade.";}
+  const args=[schoolId,values.academic_year_id,values.term_id??null,values.grade_level_id,values.stream_id??null,values.weekday,values.end_time,values.start_time];
+  let sql="SELECT id FROM timetable_entries WHERE school_id=? AND academic_year_id=? AND term_id IS ? AND grade_level_id=? AND stream_id IS ? AND weekday=? AND start_time<? AND end_time>?";
+  if(excludeId){sql+=" AND id<>?";args.push(excludeId);}
+  const clash=await db.prepare(sql+" LIMIT 1").bind(...args).first();
+  if(clash)return "This class or stream already has a lesson overlapping that time.";
+  if(values.staff_id){
+    const teacherArgs=[schoolId,values.academic_year_id,values.term_id??null,values.weekday,values.end_time,values.start_time,values.staff_id];
+    let teacherSql="SELECT id FROM timetable_entries WHERE school_id=? AND academic_year_id=? AND term_id IS ? AND weekday=? AND start_time<? AND end_time>? AND staff_id=?";
+    if(excludeId){teacherSql+=" AND id<>?";teacherArgs.push(excludeId);}
+    if(await db.prepare(teacherSql+" LIMIT 1").bind(...teacherArgs).first())return "The selected teacher already has a lesson scheduled during that time.";
+  }
+  return null;
+}
 async function audit(db,user,schoolId,action,resource,resourceId){
   try{await db.prepare("INSERT INTO audit_logs (id,actor_user_id,school_id,action,resource_type,resource_id,outcome,details_json) VALUES (?,?,?,?,?,?,'success','{}')")
     .bind(id(),user.id,schoolId||null,action,resource,resourceId||null).run()}catch{}
@@ -228,6 +244,7 @@ export async function onRequestPost({request,env}){
   if(name==="attendance-sessions")values.taken_by=a.user.id;
   if(name==="attendance-records")values.marked_by=a.user.id;
   const refError=await validateRefs(env.DB,cfg,values,schoolId);if(refError)return json({ok:false,error:refError},400);
+  if(name==="timetable"){const issue=await validateTimetableEntry(env.DB,schoolId,values);if(issue)return json({ok:false,error:issue},400);}
   if(name==="attendance-sessions"&&values.stream_id){const stream=await env.DB.prepare("SELECT grade_level_id FROM streams WHERE id=? AND school_id=?").bind(values.stream_id,schoolId).first();if(!stream||stream.grade_level_id!==values.grade_level_id)return json({ok:false,error:"The selected stream must belong to the selected grade."},400);}
   if(name==="attendance-records"){const pair=await env.DB.prepare("SELECT s.grade_level_id,s.stream_id,e.grade_level_id AS enrolled_grade,e.stream_id AS enrolled_stream,e.status FROM attendance_sessions s JOIN learner_enrollments e ON e.learner_id=? AND e.school_id=s.school_id AND e.academic_year_id=s.academic_year_id WHERE s.id=? AND s.school_id=?").bind(values.learner_id,values.session_id,schoolId).first();if(!pair||pair.status!=="active"||pair.grade_level_id!==pair.enrolled_grade||(pair.stream_id&&pair.stream_id!==pair.enrolled_stream))return json({ok:false,error:"This learner is not actively enrolled in the selected attendance class."},400);}
   if(name==="classes"){const stream=await env.DB.prepare("SELECT grade_level_id FROM streams WHERE id=? AND school_id=?").bind(values.stream_id,schoolId).first();if(!stream||stream.grade_level_id!==values.grade_level_id)return json({ok:false,error:"The selected stream must belong to the selected grade."},400);if(values.class_teacher_staff_id){const teacher=await env.DB.prepare("SELECT 1 FROM staff_profiles WHERE id=? AND school_id=? AND employment_status='active'").bind(values.class_teacher_staff_id,schoolId).first();if(!teacher)return json({ok:false,error:"Select an active staff member as class teacher."},400);}}
@@ -298,6 +315,7 @@ export async function onRequestPatch({request,env}){
     if(!current)return json({ok:false,error:"Record not found in the selected school."},404);
     const gradeError=await validateConfiguredGrade(env.DB,name,schoolId,values,current);if(gradeError)return json({ok:false,error:gradeError},403);
     const refError=await validateRefs(env.DB,cfg,values,schoolId);if(refError)return json({ok:false,error:refError},400);
+    if(name==="timetable"){const issue=await validateTimetableEntry(env.DB,schoolId,{...current,...values},recordId);if(issue)return json({ok:false,error:issue},400);}
     const teacherError=await validateTeacherWrite(env.DB,a.user,name,{...current,...values});if(teacherError)return json({ok:false,error:teacherError},403);
     const keys=Object.keys(values),sql="UPDATE "+cfg.table+" SET "+keys.map(k=>k+"=?").join(",")+(cfg.table==="schools"?",updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now')":"")+" WHERE "+where;
     await env.DB.prepare(sql).bind(...keys.map(k=>values[k]),...(cfg.scope?[recordId,schoolId]:[recordId])).run();
