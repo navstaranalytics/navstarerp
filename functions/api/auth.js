@@ -128,7 +128,7 @@ export async function getAuthenticatedSession(request, env) {
       AND s.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now')
       AND u.status='active'
       AND ((a.school_id IS NULL AND r.role_key='super_admin')
-        OR (a.school_id IS NOT NULL AND sm.membership_status='active' AND sc.status='active'))
+        OR (a.school_id IS NOT NULL AND sm.membership_status='active' AND sc.status IN ('active','suspended')))
     ORDER BY CASE WHEN r.role_key='super_admin' THEN 0 ELSE 1 END
     LIMIT 1
   `).bind(tokenHash).first();
