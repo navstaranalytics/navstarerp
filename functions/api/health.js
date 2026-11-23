@@ -2,7 +2,7 @@ const REQUIRED_TABLES=[
   "users","schools","school_memberships","roles","permissions","role_permissions",
   "subscription_plans","school_subscriptions","invoices","payments",
   "academic_years","terms","grade_levels","teacher_allocations","learners",
-  "learner_enrollments","audit_logs","platform_settings"
+  "learner_enrollments","audit_logs","platform_settings","announcements","learner_user_links","assessments","assessment_results","grading_schemes","grade_boundaries","attendance_sessions","attendance_records","timetable_entries","fee_structures","learner_fee_accounts","finance_transactions","inventory_items","inventory_movements","library_books","library_loans","transport_routes","transport_assignments","boarding_houses","boarding_allocations","payroll_records","platform_regions","ai_usage_ledger","integration_connections","report_cards","learner_discipline_records"
 ];
 export async function onRequestGet({ env }) {
   try {
