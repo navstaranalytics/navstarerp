@@ -8,6 +8,7 @@ import { onRequestPost as accessUpgradePost } from "./functions/api/access-upgra
 import { onRequestPost as schoolAdminPost, onRequestPatch as schoolAdminPatch } from "./functions/api/school-admin.js";
 import { onRequestGet as schoolUsersGet, onRequestPost as schoolUsersPost } from "./functions/api/school-users.js";
 import { onRequestGet as schoolNameRequestsGet, onRequestPost as schoolNameRequestsPost, onRequestPatch as schoolNameRequestsPatch } from "./functions/api/school-name-requests.js";
+import { onRequestPost as auditEventPost } from "./functions/api/audit-events.js";
 import { onRequestGet as portalGet } from "./functions/api/portal.js";
 import { onRequestGet as brandingGet, onRequestPost as brandingPost, onRequestGetLogo as brandingLogoGet, onRequestPostLogo as brandingLogoPost, onRequestGetStorageStatus as storageStatusGet, onRequestGetLoginBackground as loginBackgroundGet, onRequestPostLoginBackground as loginBackgroundPost, onRequestPostProfilePhoto as profilePhotoPost, onRequestGetProfilePhoto as profilePhotoGet } from "./functions/api/branding.js";
 import { onRequestPost as accountLookupPost, onRequestPostUsernameAvailability } from "./functions/api/account-lookup.js";
@@ -59,6 +60,10 @@ export default {
       if (request.method === "POST") return dataPost({ request, env });
       if (request.method === "PATCH") return dataPatch({ request, env });
       return new Response("Method not allowed", { status: 405, headers: { Allow: "GET, POST, PATCH" } });
+    }
+    if (route === "/api/audit-events") {
+      if (request.method !== "POST") return new Response("Method not allowed", { status: 405, headers: { Allow: "POST" } });
+      return auditEventPost({ request, env });
     }
     if (route === "/api/school-name-requests") {
       if (request.method === "GET") return schoolNameRequestsGet({ request, env });
