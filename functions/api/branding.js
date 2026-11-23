@@ -26,8 +26,8 @@ export async function onRequestGet({env}){
   const rows=await env.DB.prepare("SELECT setting_key,setting_value FROM platform_settings WHERE setting_key IN ('platform_name','platform_tagline','platform_address','platform_city','platform_county','platform_phone','platform_website','platform_support_email','platform_registered_domain')").all();
   const settings=Object.fromEntries((rows.results||[]).map(x=>[x.setting_key,x.setting_value]));
   const logo=await env.DB.prepare("SELECT 1 AS present FROM platform_branding_assets WHERE asset_key=?").bind(LOGO_KEY).first();
-  return json({ok:true,branding:{logoUrl:logo?"/api/branding/logo":"",name:settings.platform_name||"NAVSTAR Analytics",tagline:settings.platform_tagline||"Education management platform",address:settings.platform_address||"",city:settings.platform_city||"",county:settings.platform_county||"",phone:settings.platform_phone||"",website:settings.platform_website||"",supportEmail:settings.platform_support_email||"",registeredDomain:settings.platform_registered_domain||""}});
- }catch{return json({ok:true,branding:{logoUrl:"",name:"NAVSTAR Analytics",tagline:"Education management platform"}})}
+  return json({ok:true,branding:{logoUrl:logo?"/api/branding/logo":"",name:settings.platform_name||"Navstar Analytics",tagline:settings.platform_tagline||"Education management platform",address:settings.platform_address||"",city:settings.platform_city||"",county:settings.platform_county||"",phone:settings.platform_phone||"",website:settings.platform_website||"",supportEmail:settings.platform_support_email||"",registeredDomain:settings.platform_registered_domain||""}});
+ }catch{return json({ok:true,branding:{logoUrl:"",name:"Navstar Analytics",tagline:"Education management platform"}})}
 }
 export async function onRequestGetStorageStatus({request,env}){
  const actor=await getSuperAdminSession(request,env);
@@ -157,7 +157,7 @@ export async function onRequestPostProfilePhoto({request,env}){
   const photoUrl="/api/auth/profile-photo";
   await env.DB.prepare("UPDATE users SET profile_photo_url=?,updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?").bind(photoUrl,actor.id).run();
   return json({ok:true,profilePhotoUrl:photoUrl+"?v="+Date.now(),storage:env.R2?"R2":"D1",message:"Profile picture uploaded successfully."});
- }catch(error){console.error("NAVSTAR profile photo upload failed:",String(error?.message||error));return json({ok:false,error:"Profile picture upload failed. Please try again."},500)}
+ }catch(error){console.error("Navstar profile photo upload failed:",String(error?.message||error));return json({ok:false,error:"Profile picture upload failed. Please try again."},500)}
 }
 export async function onRequestGetProfilePhoto({request,env}){
  if(!env.DB)return new Response("Database unavailable.",{status:503});
