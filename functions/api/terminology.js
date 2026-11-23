@@ -1,0 +1,3 @@
+import { getAuthenticatedSession } from "./auth.js";
+const json=(data,status=200)=>Response.json(data,{status,headers:{"Cache-Control":"no-store"}});
+export async function onRequestGet({request,env}){const user=await getAuthenticatedSession(request,env);if(!user)return json({ok:false,error:"Sign in to load Navstar terminology."},401);try{const row=await env.DB.prepare("SELECT setting_value FROM platform_settings WHERE setting_key='terminology'").first();let terminology={};try{terminology=JSON.parse(row?.setting_value||"{}")}catch{}return json({ok:true,terminology})}catch(e){console.error("Navstar terminology",e);return json({ok:false,error:"Terminology is temporarily unavailable."},500)}}
