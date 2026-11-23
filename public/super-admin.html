@@ -299,31 +299,25 @@ schoolDetails=function(id){
   if(!school||!body||!form)return;
   const plan=plans.find(p=>p.name===school.plan)||{},allowed=Array.isArray(plan.modules)?plan.modules:[];
   const panel=document.createElement("section");panel.className="panel";panel.style.cssText="padding:16px;margin-top:16px;border:1px solid #dce5f2;border-radius:12px;background:#f8faff";
-  if(school.schoolAdmin){
-    const a=school.schoolAdmin;
-    panel.innerHTML="<h3 style='margin:0 0 10px'>School Administrator account</h3><div><b>Name:</b> "+esc(a.fullName)+"</div><div><b>Username:</b> "+esc(a.username)+"</div><div><b>Email:</b> "+esc(a.email)+"</div><div><b>Phone:</b> "+esc(a.phone)+"</div><div><b>Status:</b> "+esc(a.status||"active")+"</div><p class='muted'>Super Admin oversight: account details are visible here. The School Administrator manages teachers and other school users within this institution.</p>";
-  }else{
-    panel.innerHTML="<h3 style='margin:0 0 6px'>Add School User · School Administrator</h3><p class='muted'>Set up the person who will administer this school's workspace and create its teachers and other users. This is a separate account from the school's official contact email.</p><div class='form-grid' style='margin-top:12px'><div class='form-field'><label>Administrator full name *</label><input id='schoolAdminFullName' required maxlength='120' placeholder='Full legal name'></div><div class='form-field'><label>Username *</label><input id='schoolAdminUsername' required minlength='3' maxlength='32' pattern='[A-Za-z0-9._-]+' placeholder='e.g. jane.admin'></div><div class='form-field'><label>Administrator email *</label><input id='schoolAdminEmail' type='email' required maxlength='190' placeholder='admin@school.ac.ke'></div><div class='form-field'><label>Phone number *</label><input id='schoolAdminPhone' type='tel' required maxlength='40' placeholder='+254…'></div></div><button type='button' id='createSchoolAdmin' class='btn' style='margin-top:14px'>Create School Administrator</button><div id='schoolAdminFeedback' class='muted' style='margin-top:8px'></div>";
-  }
+  const currentAdmin=school.schoolAdmin||{};
+  const editing=!!school.schoolAdmin;
+  panel.innerHTML="<h3 style='margin:0 0 6px'>"+(editing?"School Administrator details":"Add School User · School Administrator")+"</h3><p class='muted'>"+(editing?"Review or update the assigned School Administrator's name, username, email and phone.":"Set up the person who will administer this school's workspace and create its teachers and other users. This is a separate account from the school's official contact email.")+"</p><div class='form-grid' style='margin-top:12px'><div class='form-field'><label>Administrator full name *</label><input id='schoolAdminFullName' required maxlength='120' value='"+esc(currentAdmin.fullName||"")+"' placeholder='Full legal name'></div><div class='form-field'><label>Username *</label><input id='schoolAdminUsername' required minlength='3' maxlength='32' pattern='[A-Za-z0-9._-]+' value='"+esc(currentAdmin.username||"")+"' placeholder='e.g. jane.admin'></div><div class='form-field'><label>Administrator email *</label><input id='schoolAdminEmail' type='email' required maxlength='190' value='"+esc(currentAdmin.email||"")+"' placeholder='admin@school.ac.ke'></div><div class='form-field'><label>Phone number *</label><input id='schoolAdminPhone' type='tel' required maxlength='40' value='"+esc(currentAdmin.phone||"")+"' placeholder='+254…'></div></div><div class='muted' style='margin-top:8px'>"+(editing?"Current account status: "+esc(currentAdmin.status||"active")+".":"The administrator will set their own password using the Forgot password OTP flow.")+"</div><button type='button' id='saveSchoolAdmin' class='btn' style='margin-top:14px'>"+(editing?"Save School Administrator details":"Create School Administrator")+"</button><div id='schoolAdminFeedback' class='muted' style='margin-top:8px'></div>";
   body.appendChild(panel);
   const entitlement=document.createElement("div");entitlement.className="notice";
   entitlement.textContent="Plan entitlement: "+(plan.name||"No plan")+". "+(allowed.length?"Included capabilities: "+allowed.join(", "):"No module entitlements have been configured for this plan.")+". School module selections must remain within plan entitlements.";
   body.appendChild(entitlement);
-  if(!school.schoolAdmin){
-    $("createSchoolAdmin").addEventListener("click",async()=>{
-      const payload={fullName:$("schoolAdminFullName").value.trim(),username:$("schoolAdminUsername").value.trim(),email:$("schoolAdminEmail").value.trim(),phone:$("schoolAdminPhone").value.trim()};
-      const feedback=$("schoolAdminFeedback"),button=$("createSchoolAdmin");
-      if(!payload.fullName||!payload.username||!payload.email||!payload.phone){feedback.textContent="Complete all four administrator details.";return}
-      button.disabled=true;button.textContent="Creating account…";feedback.textContent="Creating the account and sending the welcome email…";
-      try{
-        const result=await schoolApi("/api/schools/"+encodeURIComponent(id)+"/admin",{method:"POST",body:JSON.stringify(payload)});
-        school.schoolAdmin=result.admin;
-        const emailText=result.emailDelivery==="sent"?"Welcome email sent.":result.emailDelivery==="failed"?"Account created, but email delivery failed.":"Account created; email service is not configured.";
-        closeModal();await loadSchoolsFromDatabase();render();schoolDetails(id);
-        toast("School Administrator created · "+result.admin.username+" · "+emailText);
-      }catch(error){feedback.textContent=error.message||"Administrator account could not be created.";button.disabled=false;button.textContent="Create School Administrator"}
-    });
-  }
+  $("saveSchoolAdmin").addEventListener("click",async()=>{
+    const payload={fullName:$("schoolAdminFullName").value.trim(),username:$("schoolAdminUsername").value.trim(),email:$("schoolAdminEmail").value.trim(),phone:$("schoolAdminPhone").value.trim()};
+    const feedback=$("schoolAdminFeedback"),button=$("saveSchoolAdmin");
+    if(!payload.fullName||!payload.username||!payload.email||!payload.phone){feedback.textContent="Complete all four administrator details.";return}
+    button.disabled=true;button.textContent=editing?"Saving details…":"Creating account…";feedback.textContent=editing?"Updating the administrator account…":"Creating the account and sending the welcome email…";
+    try{
+      const result=await schoolApi("/api/schools/"+encodeURIComponent(id)+"/admin",{method:editing?"PATCH":"POST",body:JSON.stringify(payload)});
+      const emailText=result.emailDelivery==="sent"?"Email notification sent.":result.emailDelivery==="failed"?"Details saved, but email delivery failed.":"Email service is not configured.";
+      await loadSchoolsFromDatabase();closeModal();render();schoolDetails(id);
+      toast((editing?"School Administrator updated · ":"School Administrator created · ")+result.admin.username+" · "+emailText);
+    }catch(error){feedback.textContent=error.message||"School Administrator details could not be saved.";button.disabled=false;button.textContent=editing?"Save School Administrator details":"Create School Administrator"}
+  });
   form.onsubmit=async e=>{
     e.preventDefault();const d=new FormData(form),submit=$("saveModal");
     const payload={name:d.get("name"),code:d.get("code"),contact:d.get("contact"),email:d.get("email"),phone:d.get("phone"),address:d.get("address"),registrationNumber:d.get("registrationNumber"),county:d.get("county"),category:d.get("category"),ownership:d.get("ownership"),curriculum:d.get("curriculum"),plan:d.get("plan"),status:d.get("status"),expiry:d.get("expiry"),learnerCount:Number(d.get("learnerCount"))||0,teacherCount:Number(d.get("teacherCount"))||0,levels:d.getAll("levels"),modules:d.getAll("modules")};
