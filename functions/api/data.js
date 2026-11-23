@@ -255,6 +255,11 @@ export async function onRequestPost({request,env}){
     if(!enrolled)return json({ok:false,error:"The learner is not actively enrolled in the assessment class or pathway."},400);
   }
 
+  if(name==="assessments"){
+    if(!Number.isFinite(Number(values.max_score??100))||Number(values.max_score??100)<=0)return json({ok:false,error:"Assessment maximum score must be greater than zero."},400);
+    if(values.weight!==undefined&&(!Number.isFinite(Number(values.weight))||Number(values.weight)<0))return json({ok:false,error:"Assessment weight cannot be negative."},400);
+    if(values.stream_id){const stream=await env.DB.prepare("SELECT grade_level_id FROM streams WHERE id=? AND school_id=?").bind(values.stream_id,schoolId).first();if(!stream||stream.grade_level_id!==values.grade_level_id)return json({ok:false,error:"The selected stream must belong to the selected grade."},400);}
+  }
   if(name==="learner-fee-accounts"){
     const fee=await env.DB.prepare("SELECT amount,grade_level_id,is_active FROM fee_structures WHERE id=? AND school_id=?").bind(values.fee_structure_id,schoolId).first();
     if(!fee||Number(fee.is_active)===0)return json({ok:false,error:"Select an active fee structure from this school."},400);
