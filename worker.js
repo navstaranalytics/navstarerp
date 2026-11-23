@@ -11,6 +11,7 @@ import { onRequestGet as schoolWorkspaceSummaryGet } from "./functions/api/schoo
 import { onRequestGet as platformControlsGet, onRequestPost as platformControlsPost } from "./functions/api/platform-controls.js";
 import { onRequestGet as sampleDataGet, onRequestDelete as sampleDataDelete } from "./functions/api/sample-data.js";
 import { onRequestGet as terminologyGet } from "./functions/api/terminology.js";
+import { onRequestGet as systemGuideGet } from "./functions/api/system-guide.js";
 import { runScheduledAutomations } from "./functions/api/scheduled-automations.js";
 import { onRequestPostStk as mpesaStkPost, onRequestPostCallback as mpesaCallbackPost } from "./functions/api/mpesa-payments.js";
 import { onRequestGet as schoolLogoGet, onRequestPost as schoolLogoPost } from "./functions/api/school-branding.js";
@@ -60,7 +61,7 @@ export default {
       const policySession = await getAuthenticatedSession(request, env);
       if (policySession && !policySession.is_super_admin) {
         const mode = policySession.access_mode || "full";
-        const billingAllowed = ["/api/auth/me","/api/auth/logout","/api/school-workspace-summary","/api/terminology","/api/support","/api/payments/mpesa/stkpush"].includes(route) || /^\/api\/data\/(invoices|payments|subscriptions)$/.test(route);
+        const billingAllowed = ["/api/auth/me","/api/auth/logout","/api/school-workspace-summary","/api/terminology","/api/system-guide","/api/support","/api/payments/mpesa/stkpush"].includes(route) || /^\/api\/data\/(invoices|payments|subscriptions)$/.test(route);
         const locked = mode === "block_all" || (mode === "billing_only" && !billingAllowed) || (mode === "read_only" && !["GET","HEAD","OPTIONS"].includes(request.method));
         if (locked) return Response.json({ ok:false, error: policySession.access_notice || "This school account is restricted by its subscription policy. Contact Navstar Analytics or open Billing & Support.", accessMode:mode }, { status:423, headers:{"Cache-Control":"no-store"} });
       }
@@ -77,6 +78,10 @@ export default {
     if (route === "/api/payments/mpesa/callback") {
       if (request.method !== "POST") return new Response("Method not allowed", { status: 405, headers: { Allow: "POST" } });
       return mpesaCallbackPost({ request, env });
+    }
+    if (route === "/api/system-guide") {
+      if (request.method !== "GET") return new Response("Method not allowed", { status: 405, headers: { Allow: "GET" } });
+      return systemGuideGet({ request, env });
     }
     if (route === "/api/terminology") {
       if (request.method !== "GET") return new Response("Method not allowed", { status: 405, headers: { Allow: "GET" } });
