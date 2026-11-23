@@ -161,7 +161,16 @@ async function validateConfiguredGrade(db,name,schoolId,values,current={}){
  const stageName=String(values.stage_name??current.stage_name??"").trim().toLowerCase();
  const stageCode=String(values.stage_code??current.stage_code??"").trim().toLowerCase();
  const allowed=new Set(selected.map(x=>String(x).trim().toLowerCase()));
- if(!allowed.has(stageName)&&!allowed.has(stageCode))return "This grade is not enabled for the school. Ask Super Admin to activate the matching school level first.";
+ const matches=selected.some(value=>{
+  const level=String(value).trim().toLowerCase();
+  if(level==="pre-primary")return /^pp[12]$/.test(stageCode)||/^pp[12]$/.test(stageName);
+  if(level==="primary")return /^g[1-6]$/.test(stageCode)||/^grade [1-6]$/.test(stageName);
+  if(level==="junior school")return /^g[7-9]$/.test(stageCode)||/^grade [7-9]$/.test(stageName);
+  if(level==="senior school")return /^g1[0-2]$/.test(stageCode)||/^grade 1[0-2]$/.test(stageName);
+  if(level.includes("8-4-4")||level==="secondary")return /^form[1-4]$/.test(stageCode)||/^form [1-4]$/.test(stageName);
+  return allowed.has(stageName)||allowed.has(stageCode);
+ });
+ if(!matches)return "This grade is not enabled for the school. Ask Super Admin to activate the matching school level first.";
  return null;
 }
 async function validateRefs(db,config,values,schoolId){
