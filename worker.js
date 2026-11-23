@@ -10,6 +10,7 @@ import { onRequestPost as reportCardGeneratePost } from "./functions/api/report-
 import { onRequestGet as schoolWorkspaceSummaryGet } from "./functions/api/school-workspace-summary.js";
 import { onRequestGet as platformControlsGet, onRequestPost as platformControlsPost } from "./functions/api/platform-controls.js";
 import { onRequestGet as sampleDataGet, onRequestDelete as sampleDataDelete } from "./functions/api/sample-data.js";
+import { onRequestGet as terminologyGet } from "./functions/api/terminology.js";
 import { onRequestGet as schoolLogoGet, onRequestPost as schoolLogoPost } from "./functions/api/school-branding.js";
 import { onRequestGetSettings as admissionSettingsGet, onRequestPostSettings as admissionSettingsPost, onRequestPostNextAdmissionNumber as nextAdmissionNumberPost, onRequestPostPhotos as learnerPhotosPost, onRequestGetPhoto as learnerPhotoGet } from "./functions/api/learner-photos.js";
 import { onRequestGet as recoveryGet, onRequestPost as recoveryPost } from "./functions/api/recovery.js";
@@ -55,7 +56,7 @@ export default {
       if (request.method === "POST") return platformControlsPost({ request, env });
       return new Response("Method not allowed", { status: 405, headers: { Allow: "GET, POST" } });
     }
-    if (route === "/api/sample-data") {
+    if (route === "/api/terminology") {\n      if (request.method !== "GET") return new Response("Method not allowed", { status: 405, headers: { Allow: "GET" } });\n      return terminologyGet({ request, env });\n    }\n    if (route === "/api/sample-data") {
       if (request.method === "GET") return sampleDataGet({ request, env });
       if (request.method === "DELETE") return sampleDataDelete({ request, env });
       return new Response("Method not allowed", { status: 405, headers: { Allow: "GET, DELETE" } });
