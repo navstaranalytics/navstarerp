@@ -1,3 +1,6 @@
+import { onRequestGet as supportGet, onRequestPost as supportPost } from "./functions/api/support.js";
+import { onRequestPost as supportUpgradePost } from "./functions/api/support-upgrade.js";
+import { onRequestPost as aiDiagnosticsPost } from "./functions/api/ai-diagnostics.js";
 import { onRequestGet as recoveryGet, onRequestPost as recoveryPost } from "./functions/api/recovery.js";
 import { onRequestGet as healthGet } from "./functions/api/health.js";
 import { onRequestGet as setupStatusGet } from "./functions/api/setup-status.js";
@@ -48,7 +51,7 @@ export default {
       if (request.method !== "POST") return new Response("Method not allowed", { status: 405, headers: { Allow: "POST" } });
       return setupDatabasePost({ request, env, params: {}, data: {}, waitUntil: promise => ctx.waitUntil(promise) });
     }
-    if (route === "/api/system/access-upgrade") {
+    if (route === "/api/support") {\n      if (request.method === "GET") return supportGet({ request, env });\n      if (request.method === "POST") return supportPost({ request, env });\n      return new Response("Method not allowed", { status: 405, headers: { Allow: "GET, POST" } });\n    }\n    if (route === "/api/system/support-upgrade") {\n      if (request.method !== "POST") return new Response("Method not allowed", { status: 405, headers: { Allow: "POST" } });\n      return supportUpgradePost({ request, env });\n    }\n    if (route === "/api/ai/diagnostics") {\n      if (request.method !== "POST") return new Response("Method not allowed", { status: 405, headers: { Allow: "POST" } });\n      return aiDiagnosticsPost({ request, env });\n    }\n    if (route === "/api/system/access-upgrade") {
       if (request.method !== "POST") return new Response("Method not allowed", { status: 405, headers: { Allow: "POST" } });
       return accessUpgradePost({ request, env });
     }
