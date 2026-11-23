@@ -145,20 +145,28 @@ html,body{width:100%;height:100%;min-height:100%;overflow:hidden}
 @media(max-width:900px){.features{display:none!important}.main{padding-left:14px!important;padding-right:14px!important}.card{width:100%!important;max-width:480px!important}}
 @media(max-width:620px){.main{display:flex!important;justify-content:center!important;align-items:center!important}.card{margin:0 auto!important;max-width:420px!important}}
 
+
+/* Simplified sign-in card: only brand, sign-in prompt and required controls. */
+.card{padding:15px 25px 18px!important}
+.brand{gap:0!important;margin-bottom:3px!important}
+.brand b,.brand small{display:none!important}
+.brand-promise{margin:0 0 12px!important}
+.card h2{margin:4px 0!important}
+.intro{margin:0 0 12px!important;font-size:13px!important}
+.remember{justify-content:flex-start!important;margin:8px 0 12px!important}
+.security,.copyright{display:none!important}
 </style></head><body>
 <div class="page">
 <div class="topline">Smart Analytics… Better Education…</div>
 <main class="main">
 <aside class="leftcopy"><h2>Analytics • Innovation • Impact</h2><p>Empowering Schools with Smart Data</p></aside>
 <section class="card" aria-label="NAVSTAR sign in">
-<div class="brand"><div class="mark" id="sideMark"><img src="/api/branding/logo" alt="NAVSTAR Analytics logo" onerror="this.style.display='none'"></div><div><b id="brandName">Navstar Analytics</b><small>HOME OF TECHNOCRATS</small></div><div class="mobileMarkHidden" id="mobileMark"></div></div><div class="brand-promise"><strong>Analytics • Innovation • Impact</strong><span>Empowering Schools with Smart Data</span></div>
-<div class="hero"><div class="eyebrow">One connected education ecosystem</div><h1>Welcome to NAVSTAR</h1><p id="brandTagline">Data · Insight · Impact</p></div>
-<svg class="art" viewBox="0 0 520 210" aria-hidden="true"></svg>
-<div class="tag">Secure platform access</div><h2 id="heading">Welcome Back!</h2><p class="intro" id="intro">Sign in to access your NAVSTAR ERP account</p>
+<div class="brand"><div class="mark" id="sideMark"><img src="/api/branding/logo" alt="Navstar Analytics logo" onerror="this.style.display='none'"></div><div class="mobileMarkHidden" id="mobileMark"></div><b id="brandName" hidden>Navstar Analytics</b></div><div class="brand-promise"><strong>Analytics • Innovation • Impact</strong><span>Empowering Schools with Smart Data</span></div>
+<p id="brandTagline" hidden></p><h2 id="heading">Welcome Back</h2><p class="intro" id="intro">Sign in to your account</p>
 <form id="usernameForm"><div class="field"><label for="username">Username</label><input id="username" autocomplete="username" placeholder="Username or Email Address" required maxlength="190"></div><button class="submit" id="lookupButton" type="submit">Continue →</button></form>
 <div class="account" id="accountCard"><div class="avatar" id="avatar">N</div><div><strong id="accountName"></strong><small id="accountRole"></small><small id="accountEmail"></small></div></div>
-<form id="passwordForm" style="display:none"><div class="field"><label for="password">Password</label><div class="pw"><input id="password" type="password" autocomplete="current-password" placeholder="Password" required maxlength="128"><button class="toggle" type="button" id="toggle">Show</button></div></div><label class="remember"><span><input type="checkbox" id="remember"> Remember Me</span><span>Secure account access</span></label><button class="submit" id="signIn" type="submit">⇥ &nbsp; Log In</button><button class="back" type="button" id="back">← Use a different username</button></form>
-<div class="error" id="error" role="alert"></div><div class="security"><span>⬟</span><span><b>Secure &amp; Encrypted Access</b></span><span>⬟</span></div><p class="copyright">© <span id="year"></span> <span id="copyrightName">Navstar Analytics</span>. All rights reserved.</p>
+<form id="passwordForm" style="display:none"><div class="field"><label for="password">Password</label><div class="pw"><input id="password" type="password" autocomplete="current-password" placeholder="Password" required maxlength="128"><button class="toggle" type="button" id="toggle">Show</button></div></div><label class="remember"><span><input type="checkbox" id="remember"> Remember me</span></label><button class="submit" id="signIn" type="submit">⇥ &nbsp; Log In</button><button class="back" type="button" id="back">← Use a different username</button></form>
+<div class="error" id="error" role="alert"></div>
 </section>
 <aside class="features"><div class="opposite-brand">Smart Analytics…<br>Better Education…</div><div class="feature"><span class="featureicon">▥</span><span>Data-Driven<br>Insights</span></div><div class="feature"><span class="featureicon">✓</span><span>Secure &amp; Reliable</span></div><div class="feature"><span class="featureicon">♙</span><span>Empowering<br>Education</span></div></aside>
 </main>
@@ -167,9 +175,9 @@ html,body{width:100%;height:100%;min-height:100%;overflow:hidden}
 <script>
 const $=id=>document.getElementById(id),err=$('error');let foundIdentifier='';
 function showError(t){err.textContent=t;err.style.display='block'}function clearError(){err.textContent='';err.style.display='none'}
-function applyBrand(b){const name=b?.name||'Navstar Analytics',tag=b?.tagline||'One secure workspace for school operations, academic excellence, learner progress and intelligent education management.';$('brandName').textContent=name.replace(/\b[A-Z]+\b/g,w=>w.charAt(0)+w.slice(1).toLowerCase());if($('mobileBrandName'))$('mobileBrandName').textContent=name.replace(/\b[A-Z]+\b/g,w=>w.charAt(0)+w.slice(1).toLowerCase());$('copyrightName').textContent=name;$('brandTagline').textContent=tag;const url=b?.logoUrl;if(url){for(const id of ['sideMark','mobileMark'])$(id).innerHTML='<img src="'+url.replace(/&/g,'&amp;').replace(/"/g,'&quot;')+'" alt="Platform logo">'} }
+function applyBrand(b){const name=b?.name||'Navstar Analytics',tag=b?.tagline||'One secure workspace for school operations, academic excellence, learner progress and intelligent education management.';if($('brandName'))$('brandName').textContent=name.replace(/\b[A-Z]+\b/g,w=>w.charAt(0)+w.slice(1).toLowerCase());if($('mobileBrandName'))$('mobileBrandName').textContent=name.replace(/\b[A-Z]+\b/g,w=>w.charAt(0)+w.slice(1).toLowerCase());if($('copyrightName'))$('copyrightName').textContent=name;if($('brandTagline'))$('brandTagline').textContent=tag;const url=b?.logoUrl;if(url){for(const id of ['sideMark','mobileMark'])$(id).innerHTML='<img src="'+url.replace(/&/g,'&amp;').replace(/"/g,'&quot;')+'" alt="Platform logo">'} }
 fetch('/api/branding').then(r=>r.json()).then(d=>{if(d.ok)applyBrand(d.branding)}).catch(()=>{});
-$('year').textContent=new Date().getFullYear();
+
 $('usernameForm').addEventListener('submit',async e=>{e.preventDefault();clearError();const username=$('username').value.trim();$('lookupButton').disabled=true;$('lookupButton').textContent='Checking account…';try{const r=await fetch('/api/auth/account-lookup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username})});const d=await r.json();if(!r.ok||!d.ok)throw new Error(d.error||'Account not found.');foundIdentifier=username;$('accountName').textContent=d.account.fullName;$('accountRole').textContent=d.account.role+' · '+d.account.workspace;$('accountEmail').textContent=d.account.maskedEmail?'Email: '+d.account.maskedEmail:'';$('avatar').textContent=(d.account.fullName||'N').split(/\s+/).map(x=>x[0]).slice(0,2).join('').toUpperCase();$('usernameForm').style.display='none';$('accountCard').style.display='flex';$('passwordForm').style.display='block';$('heading').textContent='Welcome, '+d.account.fullName.split(' ')[0];$('intro').textContent='Your account has been found. Enter your password to continue.';$('password').focus()}catch(x){showError(x.message)}finally{$('lookupButton').disabled=false;$('lookupButton').innerHTML='Continue <span aria-hidden="true">→</span>'}});
 $('back').onclick=()=>{clearError();$('passwordForm').style.display='none';$('accountCard').style.display='none';$('usernameForm').style.display='block';$('password').value='';$('heading').textContent='Welcome back';$('intro').textContent='Enter your username to find your NAVSTAR account.';$('username').focus()};
 $('toggle').onclick=()=>{$('password').type=$('password').type==='password'?'text':'password';$('toggle').textContent=$('password').type==='password'?'Show':'Hide'};
