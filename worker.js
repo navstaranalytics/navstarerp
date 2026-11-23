@@ -160,7 +160,7 @@ export default {
           return Response.redirect(new URL("/login.html", url), 302);
         }
       }
-      if (route === "/super-admin.html" && !session.is_super_admin)
+      if (!session.is_super_admin && route !== "/school-portal.html")
         return Response.redirect(new URL("/school-portal.html", url), 302);
       if (route === "/school-portal.html" && session.is_super_admin)
         return Response.redirect(new URL("/super-admin.html", url), 302);
