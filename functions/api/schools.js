@@ -67,6 +67,15 @@ async function syncSchoolGradeLevels(db,schoolId,curriculum,levels){
  for(const row of existing.results||[])if(!wanted.has(row.stage_code))statements.push(db.prepare("UPDATE grade_levels SET is_active=0 WHERE id=? AND school_id=?").bind(row.id,schoolId));
  if(statements.length)await db.batch(statements);
 }
+function curriculumSelectionError(curriculum,levels){
+ const is844=/8-4-4/i.test(String(curriculum||"")),isCbe=/cbe|cbc|competenc/i.test(String(curriculum||""));
+ const legacy=(levels||[]).some(x=>/^8-4-4/i.test(String(x)));
+ const modern=(levels||[]).some(x=>/^(Pre-Primary|Primary|Junior School|Senior School)$/i.test(String(x)));
+ if(is844&&modern)return "For Kenyan 8-4-4, select 8-4-4 Primary and/or 8-4-4 Secondary divisions only.";
+ if(isCbe&&legacy)return "For Kenyan CBE, select Pre-Primary, Primary, Junior School and/or Senior School divisions only.";
+ if(!is844&&!isCbe&&legacy)return "8-4-4 divisions require the Kenyan 8-4-4 curriculum framework.";
+ return null;
+}
 function curriculumLearningAreas(curriculum,levels){
  const cbe=/cbe|cbc|competenc/i.test(String(curriculum||""));
  const template=cbe?"Kenya CBE 2024-2025":"Kenya 8-4-4";
@@ -167,6 +176,7 @@ export async function onRequestPost({request,env}){
   const status=normStatus(body.status),curriculum=clean(body.curriculum)||"Kenyan CBE";
   const levels=Array.isArray(body.levels)?[...new Set(body.levels.map(clean).filter(Boolean))]:[];
   if(!levels.length)return json({ok:false,error:"Select at least one school level in Super Admin before registering this school."},400);
+  const curriculumIssue=curriculumSelectionError(curriculum,levels);if(curriculumIssue)return json({ok:false,error:curriculumIssue},400);
   const meta={category:clean(body.category),level:clean(body.level),plan:clean(body.plan)||"Starter",expiry:clean(body.expiry),modules:modulesForLevels(levels),learnerCount:0,teacherCount:0};
   try{
     await env.DB.batch([
@@ -216,6 +226,7 @@ export async function onRequestPatch({request,env}){
     let selectedLevels=[];
     try{selectedLevels=body.levels===undefined?JSON.parse(existing.school_levels_json||"[]"):(Array.isArray(body.levels)?body.levels:[])}catch{selectedLevels=[]}
     selectedLevels=[...new Set(selectedLevels.map(clean).filter(Boolean))];
+    const curriculumIssue=curriculumSelectionError(body.curriculum===undefined?existing.curriculum:clean(body.curriculum),selectedLevels);if(curriculumIssue)return json({ok:false,error:curriculumIssue},400);
     const levels=JSON.stringify(selectedLevels);
     meta.modules=modulesForLevels(selectedLevels);
     const curriculum=body.curriculum===undefined?existing.curriculum:clean(body.curriculum);
