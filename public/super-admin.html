@@ -843,8 +843,27 @@ async function migrateLegacyRecords(){
    catch(error){skipped++;errors.push('Plan '+p.name+': '+(error.message||'not imported'))}
   }
  }
+ const messagesRecord=legacyRecoveryRecords.find(x=>x.key===MSGKEY);
+ let announcementsImported=0;
+ if(messagesRecord&&Array.isArray(messagesRecord.value)){
+  const markerKey='navstar.recovery.imported-announcement-ids.v1';
+  const markerData=await schoolApi('/api/data/settings');
+  const markerRow=(markerData.records||[]).find(x=>x.setting_key===markerKey);
+  let importedIds=[];try{importedIds=JSON.parse(markerRow?.setting_value||'[]')}catch{}
+  for(let i=0;i<messagesRecord.value.length;i++){
+   const m=messagesRecord.value[i]||{},legacyId=String(m.id||('legacy-'+i+'-'+String(m.subject||'').slice(0,40)));
+   if(importedIds.includes(legacyId)){skipped++;continue}
+   if(!String(m.subject||'').trim()||!String(m.body||'').trim()){skipped++;continue}
+   const rawStatus=String(m.status||'draft').toLowerCase(),status=['published','scheduled','archived'].includes(rawStatus)?rawStatus:'draft';
+   try{
+    await schoolApi('/api/data/announcements',{method:'POST',body:JSON.stringify({title:String(m.subject).slice(0,240),body:String(m.body),audience:String(m.audience||'all'),channel:String(m.channel||'in_app'),status})});
+    importedIds.push(legacyId);announcementsImported++;
+   }catch(error){errors.push('Announcement '+legacyId+': '+(error.message||'not imported'))}
+  }
+  await schoolApi('/api/data/settings',{method:'POST',body:JSON.stringify({setting_key:markerKey,setting_value:JSON.stringify(importedIds)})});
+ }
  await loadSchoolsFromDatabase();await loadPlansFromDatabase();await loadPlatformSettingsFromDatabase();await loadExtraFromDatabase();await loadTenantWorkspaceFromDatabase();
- if(status)status.textContent='Migration finished. Schools imported: '+imported+'. Plans imported: '+plansImported+'. Settings/workspace records copied: '+settingsImported+'. Skipped for review or duplicates: '+skipped+'. '+(errors.length?'Issues: '+errors.slice(0,5).join(' | '):'No API errors reported.');
+ if(status)status.textContent='Migration finished. Schools imported: '+imported+'. Plans imported: '+plansImported+'. Announcements imported: '+announcementsImported+'. Settings/workspace records copied: '+settingsImported+'. Skipped for review or duplicates: '+skipped+'. '+(errors.length?'Issues: '+errors.slice(0,5).join(' | '):'No API errors reported.');
 }
 $('view').addEventListener('click',async e=>{
  const b=e.target.closest('[data-action^="recovery-"]');if(!b)return;
