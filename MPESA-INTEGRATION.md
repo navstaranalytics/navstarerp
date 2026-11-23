@@ -29,13 +29,13 @@ The application constructs this URL from the current Navstar origin and the Work
 ## Test sequence
 
 1. Apply `migrations/0005_samples_automation_payments.sql` to the production D1 database.
-2. Add the Daraja sandbox credentials and set `MPESA_ENV=sandbox`.
+2. Add the Safaricom Daraja production consumer key, consumer secret, shortcode and Lipa Na M-Pesa passkey as protected Cloudflare Worker secrets. Set `MPESA_ENV=production`.
 3. Create a Navstar subscription invoice for a test school.
 4. Sign in to that school and open the Navstar subscription payment panel.
-5. Submit a valid sandbox test phone number and complete the STK prompt.
+5. Submit a valid Safaricom number and complete the production STK prompt on a controlled low-value invoice.
 6. Confirm that the payment remains pending until the callback arrives.
 7. Confirm the invoice and subscription update only after a successful matching callback.
-8. Before accepting live payments, replace sandbox credentials with production credentials, set `MPESA_ENV=production`, and complete Safaricom's production approval and callback verification.
+8. Accept live payments only after Safaricom has approved the production Daraja app and the production STK callback has been verified end-to-end.
 
 ## Important
 
