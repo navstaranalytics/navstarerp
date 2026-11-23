@@ -1,7 +1,7 @@
 const norm=v=>String(v||"").trim().toLowerCase();
 const json=(d,s=200)=>Response.json(d,{status:s,headers:{"Cache-Control":"no-store"}});
 const maskEmail=v=>{const [a,b]=String(v||"").split("@");return a&&b?a.slice(0,1)+"•••@"+b:""};
-const maskPhone=v=>{const d=String(v||"").replace(/\\D/g,"");return d.length>2?"••••••"+d.slice(-2):d?"•••"+d:""};
+const maskPhone=v=>{const d=String(v||"").replace(/\D/g,"");return d.length>2?"••••••"+d.slice(-2):d?"•••"+d:""};
 const safeImage=v=>{const x=String(v||"").trim();return x.startsWith("/")||/^https:\/\//i.test(x)?x:""};
 export async function onRequestPost({request,env}){
  if(!env.DB)return json({ok:false,error:"Account lookup is temporarily unavailable."},503);
