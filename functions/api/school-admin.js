@@ -15,6 +15,10 @@ export async function onRequestPost({request,env,params}) {
   return json({ok:false,error:"Enter a valid name, username, email and password."},400);
  if(!passwordPolicy(password))return json({ok:false,error:"Password must be at least 6 characters and contain at least 3 of uppercase, lowercase, number and special character."},400);
  try {
+  const usernameTaken=await env.DB.prepare("SELECT 1 AS found FROM users WHERE username_normalized=? LIMIT 1").bind(username).first();
+  if(usernameTaken)return json({ok:false,error:"That username is already taken across NAVSTAR. Please choose a different username."},409);
+  const emailTaken=await env.DB.prepare("SELECT 1 AS found FROM users WHERE email_normalized=? LIMIT 1").bind(email).first();
+  if(emailTaken)return json({ok:false,error:"That email address is already registered. Use a different email address."},409);
   const school=await env.DB.prepare("SELECT id,name,status FROM schools WHERE id=?").bind(schoolId).first();
   if(!school)return json({ok:false,error:"School not found."},404);
   const role=await env.DB.prepare("SELECT id FROM roles WHERE id='role_school_admin' AND role_key='school_admin'").first();
@@ -30,6 +34,6 @@ export async function onRequestPost({request,env,params}) {
  } catch(error) {
   const message=String(error?.message||"");
   console.error("NAVSTAR school admin provisioning failed",message);
-  return json({ok:false,error:/UNIQUE constraint/i.test(message)?"That username or email is already registered.":"The School Administrator account could not be saved. Please check the database and try again."},/UNIQUE constraint/i.test(message)?409:500);
+  const usernameNow=await env.DB.prepare("SELECT 1 AS found FROM users WHERE username_normalized=? LIMIT 1").bind(username).first().catch(()=>null);const emailNow=await env.DB.prepare("SELECT 1 AS found FROM users WHERE email_normalized=? LIMIT 1").bind(email).first().catch(()=>null);const conflict=/UNIQUE constraint/i.test(message);return json({ok:false,error:usernameNow?"That username is already taken across NAVSTAR. Please choose a different username.":emailNow?"That email address is already registered. Use a different email address.":conflict?"These account details are already registered. Please review the username and email.":"The School Administrator account could not be saved. Please check the database and try again."},conflict?409:500);
  }
 }
