@@ -343,9 +343,7 @@ export async function onRequestPostPasswordResetRequest({ request, env }) {
   try {
     await ensurePasswordResetTable(env.DB);
     const user=await env.DB.prepare(`SELECT u.id,u.email,u.full_name FROM users u
-      JOIN user_role_assignments a ON a.user_id=u.id AND a.school_id IS NULL
-      JOIN roles r ON r.id=a.role_id AND r.role_key='super_admin'
-      WHERE u.username_normalized=? LIMIT 1`).bind(identifier).first();
+      WHERE u.username_normalized=? AND u.status='active' LIMIT 1`).bind(identifier).first();
     if (!user || !user.email) return json({ok:true,message:"If the account exists and has a registered email, a verification code will be sent."});
     const recent=await env.DB.prepare("SELECT COUNT(*) AS total FROM auth_password_resets WHERE user_id=? AND created_at > datetime('now','-1 hour')").bind(user.id).first();
     if (Number(recent?.total||0)>=3) return json({ok:false,error:"Too many reset requests. Please wait before requesting another code."},429);
@@ -376,7 +374,7 @@ export async function onRequestPostPasswordResetConfirm({ request, env }) {
   if(password!==confirm)return json({ok:false,error:"The new passwords do not match."},400);
   try{
     await ensurePasswordResetTable(env.DB);
-    const user=await env.DB.prepare(`SELECT u.id FROM users u JOIN user_role_assignments a ON a.user_id=u.id AND a.school_id IS NULL JOIN roles r ON r.id=a.role_id AND r.role_key='super_admin' WHERE u.username_normalized=? LIMIT 1`).bind(identifier).first();
+    const user=await env.DB.prepare(`SELECT u.id FROM users u WHERE u.username_normalized=? AND u.status='active' LIMIT 1`).bind(identifier).first();
     if(!user)return json({ok:false,error:"The verification code is invalid or expired. Request a new code."},400);
     const reset=await env.DB.prepare("SELECT id,code_hash,expires_at,attempts FROM auth_password_resets WHERE user_id=? AND used_at IS NULL ORDER BY created_at DESC LIMIT 1").bind(user.id).first();
     if(!reset||reset.expires_at<=new Date().toISOString()||Number(reset.attempts)>=5)return json({ok:false,error:"The verification code is invalid or expired. Request a new code."},400);
@@ -410,9 +408,7 @@ export async function onRequestPostUsernameRecoveryRequest({ request, env }) {
   try {
     await ensureUsernameRecoveryTable(env.DB);
     const user=await env.DB.prepare(`SELECT u.id,u.email,u.full_name FROM users u
-      JOIN user_role_assignments a ON a.user_id=u.id AND a.school_id IS NULL
-      JOIN roles r ON r.id=a.role_id AND r.role_key='super_admin'
-      WHERE u.email_normalized=? LIMIT 1`).bind(email).first();
+      WHERE u.email_normalized=? AND u.status='active' LIMIT 1`).bind(email).first();
     if (!user) return json({ok:true,message:"If that email belongs to an active account, a verification code will be sent."});
     const recent=await env.DB.prepare("SELECT COUNT(*) AS total FROM auth_username_resets WHERE user_id=? AND created_at > datetime('now','-1 hour')").bind(user.id).first();
     if (Number(recent?.total||0)>=3) return json({ok:false,error:"Too many recovery requests. Please wait before requesting another code."},429);
@@ -441,7 +437,7 @@ export async function onRequestPostUsernameRecoveryConfirm({ request, env }) {
   if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||!/^[0-9]{6}$/.test(code)||!/^[a-z0-9._-]{3,32}$/.test(username))return json({ok:false,error:"Enter a valid email, 6-digit code and username (3–32 letters, numbers, dots, underscores or hyphens)."},400);
   try {
     await ensureUsernameRecoveryTable(env.DB);
-    const user=await env.DB.prepare(`SELECT u.id FROM users u JOIN user_role_assignments a ON a.user_id=u.id AND a.school_id IS NULL JOIN roles r ON r.id=a.role_id AND r.role_key='super_admin' WHERE u.email_normalized=? LIMIT 1`).bind(email).first();
+    const user=await env.DB.prepare(`SELECT u.id FROM users u WHERE u.email_normalized=? AND u.status='active' LIMIT 1`).bind(email).first();
     if(!user)return json({ok:false,error:"The verification code is invalid or expired. Request a new code."},400);
     const reset=await env.DB.prepare("SELECT id,code_hash,expires_at,attempts FROM auth_username_resets WHERE user_id=? AND used_at IS NULL ORDER BY created_at DESC LIMIT 1").bind(user.id).first();
     if(!reset||reset.expires_at<=new Date().toISOString()||Number(reset.attempts)>=5)return json({ok:false,error:"The verification code is invalid or expired. Request a new code."},400);
