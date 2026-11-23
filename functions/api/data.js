@@ -62,7 +62,7 @@ const permissionFor=(name,write=false)=>{
   if(name==="grade-boundaries")return "academics.manage";
   if(name==="classes")return "classes.manage";
   if(["years","terms","grades","streams","learning-areas","grading-schemes"].includes(name))return "academics.manage";
-  if(name==="learner-learning-areas")return write?"allocations.manage":"learners.view";
+  if(name==="learner-learning-areas")return write?"learner.learning.areas.manage":"learners.view";
   if(["staff"].includes(name))return "staff.manage";
   if(["learners","enrollments","guardians","transfers"].includes(name))return write?"learners.manage":"learners.view";
   if(name==="teacher-allocations")return "allocations.manage";
@@ -82,6 +82,7 @@ const permissionFor=(name,write=false)=>{
 function allowed(user,permission){
   if(user.is_super_admin)return true;
   if(!user.school_id||!permission||permission==="platform.manage")return false;
+  if(permission==="learner.learning.areas.manage")return user.permissions.includes("academics.manage")||user.permissions.includes("allocations.manage");
   return user.permissions.includes(permission);
 }
 async function schoolScope(request,user,cfg){
