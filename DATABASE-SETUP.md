@@ -33,3 +33,14 @@ Then open `/api/setup-status`. It should return `ok: true` after the schema is i
 - Never store plaintext passwords. Password hashing and session creation must be implemented in server-side handlers.
 - Every school-owned API query must enforce the authenticated user's school membership and permissions on the server.
 - The current school directory and dashboards are interface prototypes. Do not enter real student, staff, parent, financial, or confidential school data until server-side authentication, tenant isolation, audit logging, secure file storage, and backups are implemented and tested.
+
+## New platform features — migration 0005
+
+After migrations 0002, 0003 and 0004 have been applied, apply `migrations/0005_samples_automation_payments.sql` to the same remote D1 database. It adds:
+
+- Safe tracking of school demonstration records so School Administrators can remove them without deleting real school records.
+- Scheduled automation execution and notification history.
+- M-Pesa callback event records for duplicate-safe payment processing.
+- A reason marker that distinguishes subscription-triggered suspensions from manual Super Admin suspensions.
+
+Do not run migration 0005 twice: it adds a column to the existing `schools` table. The new sample-data, payment and automation features depend on this migration.
