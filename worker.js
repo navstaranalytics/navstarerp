@@ -6,6 +6,7 @@ import { onRequestGet as outputTemplatesGet, onRequestPost as outputTemplatesPos
 import { onRequestPost as bulkLearnerImportPost } from "./functions/api/bulk-import-learners.js";
 import { onRequestPost as timetableGeneratePost } from "./functions/api/timetable-generate.js";
 import { onRequestPost as reportCardGeneratePost } from "./functions/api/report-card-generate.js";
+import { onRequestGet as schoolLogoGet, onRequestPost as schoolLogoPost } from "./functions/api/school-branding.js";
 import { onRequestGetSettings as admissionSettingsGet, onRequestPostSettings as admissionSettingsPost, onRequestPostNextAdmissionNumber as nextAdmissionNumberPost, onRequestPostPhotos as learnerPhotosPost, onRequestGetPhoto as learnerPhotoGet } from "./functions/api/learner-photos.js";
 import { onRequestGet as recoveryGet, onRequestPost as recoveryPost } from "./functions/api/recovery.js";
 import { onRequestGet as healthGet } from "./functions/api/health.js";
@@ -71,6 +72,11 @@ export default {
       return learnerPhotosPost({ request, env });
     }
     if (route.startsWith("/api/learner-photos/") && request.method === "GET") return learnerPhotoGet({ request, env });
+    if (route === "/api/school-branding/logo") {
+      if (request.method === "GET") return schoolLogoGet({ request, env });
+      if (request.method === "POST") return schoolLogoPost({ request, env });
+      return new Response("Method not allowed", { status: 405, headers: { Allow: "GET, POST" } });
+    }
     if (route === "/api/report-cards/generate") {
       if (request.method !== "POST") return new Response("Method not allowed", { status: 405, headers: { Allow: "POST" } });
       return reportCardGeneratePost({ request, env });
