@@ -343,6 +343,27 @@ export async function onRequestPost({request,env}){
     return json({ok:false,error:/UNIQUE constraint/i.test(msg)?"A record with these details already exists.":/FOREIGN KEY constraint/i.test(msg)?"A linked record is missing or belongs to another school.":"The record could not be saved. Check required fields and try again."},/UNIQUE constraint/i.test(msg)?409:400);
   }
 }
+export async function onRequestDelete({request,env}){
+  const a=await auth(request,env);if(a.error)return a.error;
+  const parts=new URL(request.url).pathname.split("/"),name=parts[parts.length-2],recordId=decodeURIComponent(parts[parts.length-1]||""),cfg=resources[name];
+  if(!cfg||!recordId)return json({ok:false,error:"Unknown resource or record."},404);
+  if(!["years","terms"].includes(name))return json({ok:false,error:"Deletion is not enabled for this resource."},405);
+  if(!allowed(a.user,permissionFor(name,true)))return json({ok:false,error:"Your role does not have permission to delete this record."},403);
+  const requested=new URL(request.url).searchParams.get("schoolId")||"";
+  const schoolId=cfg.scope?(a.user.is_super_admin?requested:a.user.school_id):"";
+  if(cfg.scope&&!schoolId)return json({ok:false,error:"School workspace is required."},400);
+  if(cfg.scope&&!a.user.is_super_admin&&requested&&requested!==a.user.school_id)return json({ok:false,error:"You cannot delete records in another school."},403);
+  try{
+    const current=await env.DB.prepare("SELECT id FROM "+cfg.table+" WHERE id=? AND school_id=?").bind(recordId,schoolId).first();
+    if(!current)return json({ok:false,error:"Record not found in this school."},404);
+    await env.DB.prepare("DELETE FROM "+cfg.table+" WHERE id=? AND school_id=?").bind(recordId,schoolId).run();
+    await audit(env.DB,a.user,schoolId,"record.deleted",name,recordId);
+    return json({ok:true,message:name==="years"?"Academic year deleted.":"Term deleted."});
+  }catch(error){
+    console.error("NAVSTAR academic record delete",name,error);
+    return json({ok:false,error:"This record is still linked to classes, learners, assessments, attendance, timetable or other school records. Remove or reassign those records first."},409);
+  }
+}
 export async function onRequestPatch({request,env}){
   const a=await auth(request,env);if(a.error)return a.error;
   const parts=new URL(request.url).pathname.split("/"),name=parts[parts.length-2],recordId=decodeURIComponent(parts[parts.length-1]||""),cfg=resources[name];
