@@ -58,7 +58,8 @@ async function auth(request,env){
 }
 const permissionFor=(name,write=false)=>{
   if(["plans","subscriptions","invoices","payments","regions","platform-users","analytics","settings","audit","ai-usage","integrations"].includes(name))return "platform.manage";
-  if(["years","terms","grades","streams","learning-areas","classes","grading-schemes","grade-boundaries"].includes(name))return write?"academics.manage":"academics.manage";
+  if(name==="grade-boundaries")return "platform.manage";
+  if(["years","terms","grades","streams","learning-areas","classes","grading-schemes"].includes(name))return "academics.manage";
   if(["staff"].includes(name))return "staff.manage";
   if(["learners","enrollments","guardians","transfers"].includes(name))return write?"learners.manage":"learners.view";
   if(name==="teacher-allocations")return "allocations.manage";
@@ -125,9 +126,10 @@ function teacherFilter(name,user){
 }
 async function existsInSchool(db,table,ref,schoolId){
   if(!ref)return true;
-  const allowed=new Set(["subscription_plans","school_subscriptions","academic_years","grade_levels","streams","staff_profiles","users","terms","learning_areas","learners","learner_enrollments","assessments","attendance_sessions","attendance_records","attendance_sessions","fee_structures","inventory_items","library_books","transport_routes","boarding_houses","assessments"]);
+  const allowed=new Set(["subscription_plans","school_subscriptions","academic_years","grade_levels","streams","staff_profiles","users","terms","learning_areas","learners","learner_enrollments","assessments","attendance_sessions","attendance_records","attendance_sessions","fee_structures","invoices","grading_schemes","inventory_items","library_books","transport_routes","boarding_houses","assessments"]);
   if(!allowed.has(table))return false;
-  if(table==="subscription_plans"||table==="users")return !!(await db.prepare("SELECT 1 FROM "+table+" WHERE id=?").bind(ref).first());
+  if(table==="subscription_plans")return !!(await db.prepare("SELECT 1 FROM subscription_plans WHERE id=?").bind(ref).first());
+  if(table==="users")return !!(await db.prepare("SELECT 1 FROM school_memberships WHERE user_id=? AND school_id=? AND membership_status IN ('active','invited')").bind(ref,schoolId).first());
   return !!(await db.prepare("SELECT 1 FROM "+table+" WHERE id=? AND school_id=?").bind(ref,schoolId).first());
 }
 function bodyFields(body,config){
@@ -172,7 +174,7 @@ export async function onRequestGet({request,env}){
     }catch(error){console.error("NAVSTAR analytics read",error);return json({ok:false,error:"Could not load platform analytics."},500)}
   }
   const scope=await schoolScope(request,a.user,cfg);if(scope.error)return scope.error;const schoolId=scope.schoolId;
-  if(cfg.scope&&!await env.DB.prepare("SELECT 1 FROM schools WHERE id=? AND status='active'").bind(schoolId).first())return json({ok:false,error:"School not found or inactive."},404);
+  if(cfg.scope&&!await env.DB.prepare("SELECT 1 FROM schools WHERE id=?"+(a.user.is_super_admin?"":" AND status='active'")).bind(schoolId).first())return json({ok:false,error:"School not found or inactive."},404);
   try{
     if(name==="settings"){
       const rows=await env.DB.prepare("SELECT setting_key,setting_value,updated_at FROM platform_settings ORDER BY setting_key").all();
