@@ -1,3 +1,4 @@
+import { onRequestGet as recoveryGet, onRequestPost as recoveryPost } from "./functions/api/recovery.js";
 import { onRequestGet as healthGet } from "./functions/api/health.js";
 import { onRequestGet as setupStatusGet } from "./functions/api/setup-status.js";
 import { onRequestPost as setupDatabasePost } from "./functions/api/setup-database.js";
@@ -60,6 +61,11 @@ export default {
       if (request.method === "POST") return dataPost({ request, env });
       if (request.method === "PATCH") return dataPatch({ request, env });
       return new Response("Method not allowed", { status: 405, headers: { Allow: "GET, POST, PATCH" } });
+    }
+    if (route === "/api/recovery" || route.startsWith("/api/recovery/")) {
+      if (request.method === "GET") return recoveryGet({ request, env });
+      if (request.method === "POST" && route === "/api/recovery") return recoveryPost({ request, env });
+      return new Response("Method not allowed", { status: 405, headers: { Allow: "GET, POST" } });
     }
     if (route === "/api/audit-events") {
       if (request.method !== "POST") return new Response("Method not allowed", { status: 405, headers: { Allow: "POST" } });
