@@ -175,6 +175,10 @@ export async function onRequestPostSetupAdmin({ request, env }) {
 
   try {
     if (!(await setupState(env))) return json({ ok: false, setupRequired: false, error: "Initial Super Admin setup has already been completed. Please sign in." }, 409);
+    const usernameTaken=await env.DB.prepare("SELECT 1 AS found FROM users WHERE username_normalized=? LIMIT 1").bind(username).first();
+    if(usernameTaken)return json({ok:false,setupRequired:true,error:"That username is already taken across NAVSTAR. Please choose a different username."},409);
+    const emailTaken=await env.DB.prepare("SELECT 1 AS found FROM users WHERE email_normalized=? LIMIT 1").bind(email).first();
+    if(emailTaken)return json({ok:false,setupRequired:true,error:"That email address is already registered. Use a different email address."},409);
     const userId = id();
     const passwordHash = await hashPassword(password);
     const statements = [
