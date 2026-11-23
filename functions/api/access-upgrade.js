@@ -31,6 +31,7 @@ export async function onRequestPost({request,env}) {
  try {
   done=!!(await env.DB.prepare("SELECT 1 FROM schema_migrations WHERE version='0003_role_access_control'").first());
  } catch {}
+ if(done)return Response.json({ok:true,alreadyApplied:true,executed:0,message:"School roles and permissions are already installed."},{headers:{"Cache-Control":"no-store"}});
  for(let i=0;i<statements.length;i++){
   try{await env.DB.prepare(statements[i]).run();}
   catch(error){console.error("NAVSTAR role migration",i+1,error);return Response.json({ok:false,failedStatement:i+1,error:String(error?.message||"Role migration failed").slice(0,220)},{status:500});}
