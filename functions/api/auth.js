@@ -283,3 +283,63 @@ export async function onRequestPostChangePassword({ request, env }) {
     return json({ ok: false, error: "The password could not be changed. Please try again." }, 500);
   }
 }
+
+
+const RESET_OTP_TTL_MINUTES = 10;
+async function ensurePasswordResetTable(db) {
+  await db.prepare(`CREATE TABLE IF NOT EXISTS auth_password_resets (
+    id TEXT PRIMARY KEY, user_id TEXT NOT NULL, code_hash TEXT NOT NULL,
+    expires_at TEXT NOT NULL, attempts INTEGER NOT NULL DEFAULT 0,
+    used_at TEXT, created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+  )`).run();
+}
+export async function onRequestPostPasswordResetRequest({ request, env }) {
+  if (!env.DB) return json({ ok:false, error:"Database connection is unavailable." },503);
+  if (!env.RESEND_API_KEY) return json({ ok:false, error:"Email delivery is not configured yet. The platform administrator must configure the email service before password resets can be used." },503);
+  let body; try { body=await request.json(); } catch { return json({ok:false,error:"Enter your username or email address."},400); }
+  const identifier=normalize(body.identifier);
+  if (!identifier || identifier.length>190) return json({ok:false,error:"Enter your username or email address."},400);
+  try {
+    await ensurePasswordResetTable(env.DB);
+    const user=await env.DB.prepare(`SELECT u.id,u.email,u.full_name FROM users u
+      JOIN user_role_assignments a ON a.user_id=u.id AND a.school_id IS NULL
+      JOIN roles r ON r.id=a.role_id AND r.role_key='super_admin'
+      WHERE u.username_normalized=? OR u.email_normalized=? LIMIT 1`).bind(identifier,identifier).first();
+    if (!user || !user.email) return json({ok:true,message:"If the account exists and has a registered email, a verification code will be sent."});
+    const recent=await env.DB.prepare("SELECT COUNT(*) AS total FROM auth_password_resets WHERE user_id=? AND created_at > datetime('now','-1 hour')").bind(user.id).first();
+    if (Number(recent?.total||0)>=3) return json({ok:false,error:"Too many reset requests. Please wait before requesting another code."},429);
+    const code=String(crypto.getRandomValues(new Uint32Array(1))[0]%1000000).padStart(6,"0");
+    const resetId=id(), expiresAt=new Date(Date.now()+RESET_OTP_TTL_MINUTES*60*1000).toISOString();
+    await env.DB.prepare("UPDATE auth_password_resets SET used_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE user_id=? AND used_at IS NULL").bind(user.id).run();
+    await env.DB.prepare("INSERT INTO auth_password_resets(id,user_id,code_hash,expires_at) VALUES(?,?,?,?)").bind(resetId,user.id,await digest(code),expiresAt).run();
+    const from=env.MAIL_FROM||"Navstar Analytics <onboarding@resend.dev>";
+    const response=await fetch("https://api.resend.com/emails",{method:"POST",headers:{"Authorization":"Bearer "+env.RESEND_API_KEY,"Content-Type":"application/json"},body:JSON.stringify({from,to:[user.email],subject:"Your Navstar Analytics password reset code",text:"Hello "+user.full_name+",\n\nYour password reset verification code is "+code+". It expires in 10 minutes. If you did not request this, ignore this email.\n\nNavstar Analytics"})});
+    if(!response.ok){await env.DB.prepare("UPDATE auth_password_resets SET used_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?").bind(resetId).run();console.error("Password reset email delivery failed:",response.status,await response.text());return json({ok:false,error:"We could not deliver the email. Please contact the Help Desk or try again later."},502);}
+    await audit(env,user.id,"auth.password_reset.requested","success");
+    return json({ok:true,message:"A 6-digit verification code has been sent to your registered email address. It expires in 10 minutes."});
+  } catch(error) { console.error("Password reset request failed:",String(error?.message||error)); return json({ok:false,error:"Password reset is temporarily unavailable. Please try again."},503); }
+}
+export async function onRequestPostPasswordResetConfirm({ request, env }) {
+  if (!env.DB) return json({ok:false,error:"Database connection is unavailable."},503);
+  let body;try{body=await request.json()}catch{return json({ok:false,error:"Enter the verification code and your new password."},400)}
+  const identifier=normalize(body.identifier),code=String(body.code||"").trim(),password=String(body.newPassword||""),confirm=String(body.confirmPassword||"");
+  if(!identifier||!/^[0-9]{6}$/.test(code))return json({ok:false,error:"Enter the 6-digit email verification code."},400);
+  if(!passwordPolicy(password))return json({ok:false,error:"Password must be at least 6 characters and contain at least 3 of these 4 types: uppercase, lowercase, number and special character."},400);
+  if(password!==confirm)return json({ok:false,error:"The new passwords do not match."},400);
+  try{
+    await ensurePasswordResetTable(env.DB);
+    const user=await env.DB.prepare(`SELECT u.id FROM users u JOIN user_role_assignments a ON a.user_id=u.id AND a.school_id IS NULL JOIN roles r ON r.id=a.role_id AND r.role_key='super_admin' WHERE u.username_normalized=? OR u.email_normalized=? LIMIT 1`).bind(identifier,identifier).first();
+    if(!user)return json({ok:false,error:"The verification code is invalid or expired. Request a new code."},400);
+    const reset=await env.DB.prepare("SELECT id,code_hash,expires_at,attempts FROM auth_password_resets WHERE user_id=? AND used_at IS NULL ORDER BY created_at DESC LIMIT 1").bind(user.id).first();
+    if(!reset||reset.expires_at<=new Date().toISOString()||Number(reset.attempts)>=5)return json({ok:false,error:"The verification code is invalid or expired. Request a new code."},400);
+    if(await digest(code)!==reset.code_hash){await env.DB.prepare("UPDATE auth_password_resets SET attempts=attempts+1 WHERE id=?").bind(reset.id).run();return json({ok:false,error:"That verification code is incorrect. Please check the email and try again."},400);}
+    const passwordHash=await hashPassword(password);
+    await env.DB.batch([
+      env.DB.prepare("UPDATE users SET password_hash=?,password_changed_at=strftime('%Y-%m-%dT%H:%M:%fZ','now'),updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?").bind(passwordHash,user.id),
+      env.DB.prepare("UPDATE auth_password_resets SET used_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?").bind(reset.id),
+      env.DB.prepare("UPDATE auth_sessions SET revoked_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE user_id=? AND revoked_at IS NULL").bind(user.id)
+    ]);
+    await audit(env,user.id,"auth.password_reset.completed","success");
+    return json({ok:true,message:"Your password has been reset. Please log in using your new password."});
+  }catch(error){console.error("Password reset confirmation failed:",String(error?.message||error));return json({ok:false,error:"Password reset could not be completed. Please try again."},503);}
+}
