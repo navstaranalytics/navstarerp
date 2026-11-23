@@ -184,6 +184,10 @@ export async function onRequestGet({request,env}){
       const rows=await env.DB.prepare("SELECT setting_key,setting_value,updated_at FROM platform_settings ORDER BY setting_key").all();
       return json({ok:true,records:rows.results||[]});
     }
+    if(name==="staff"){
+      const rows=await env.DB.prepare("SELECT sp.*,u.full_name,u.username,u.email FROM staff_profiles sp LEFT JOIN users u ON u.id=sp.user_id WHERE sp.school_id=? ORDER BY u.full_name").bind(schoolId).all();
+      return json({ok:true,records:rows.results||[]});
+    }
     let sql="SELECT * FROM "+cfg.table+(cfg.scope?" WHERE school_id=?":"");
     if(cfg.scope)sql+=teacherFilter(name,a.user);
     sql+=(name==="audit"?" ORDER BY created_at DESC LIMIT 500":" ORDER BY rowid DESC LIMIT 1000");
