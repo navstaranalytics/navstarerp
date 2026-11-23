@@ -82,8 +82,14 @@ function curriculumLearningAreas(curriculum,levels){
  const stages=configuredGradeSpecs(levels).map(x=>x[0]);
  const rows=[];
  const add=(stage,items)=>items.forEach((x,i)=>rows.push({stage,code:x[0],name:x[1],type:x[2]||"mandatory",pathway:x[3]||null,mandatory:(x[2]||"mandatory")==="mandatory"?1:0}));
- const core=(names)=>names.map(n=>[n.toUpperCase().replace(/[^A-Z0-9]+/g,"_").slice(0,18),n,"mandatory"]);
- const optional=(names)=>names.map(n=>[n.toUpperCase().replace(/[^A-Z0-9]+/g,"_").slice(0,18),n,"optional"]);
+ const areaCode=(name)=>{
+  const key=String(name).toLowerCase().replace(/[^a-z0-9]+/g," ").trim();
+  const codes={"mathematics":"MAT","core essential mathematics":"MAT","english":"ENG","english language activities":"ENG","kiswahili":"KIS","kiswahili language activities kenya sign language":"KIS","science and technology":"SCI","integrated science including health education":"SCI","biology":"BIO","chemistry":"CHE","physics":"PHY","geography":"GEO","history and government":"HIS","history and citizenship":"HIS","business studies":"BST","agriculture":"AGR","computer studies":"ICT","ict skills":"ICT","home science":"HSC","christian religious education":"CRE","islamic religious education":"IRE","hindu religious education":"HRE","physical education":"PHE","physical and health education":"PHE","creative arts":"CRA","social studies":"SST","community service learning":"CSL","literature in english":"LIT","music and dance":"MUS","theatre and film":"THF","fine arts":"FAR","french":"FRE","german":"GER","arabic":"ARB","mandarin chinese":"MAN","kenya sign language":"KSL","woodwork":"WWK","metalwork":"MTW","building construction":"BCN","power mechanics":"PME","electricity":"ELC","aviation technology":"AVI","environmental activities":"ENV","literacy":"LIT","indigenous language activities":"ILA","movement and creative activities":"MCA","language activities":"LAN","mathematical activities":"MAT","psychomotor and creative activities":"PCA","religious education activities":"REL","pre technical studies including business and computer studies":"PTS","creative arts and sports":"CAS","pastoral religious programme of instruction":"PRI"};
+  if(codes[key])return codes[key];
+  const words=key.split(" ").filter(Boolean);return (words.length===1?words[0].slice(0,3):words.map(x=>x[0]).join("").slice(0,3)).toUpperCase();
+ };
+ const core=(names)=>names.map(n=>[areaCode(n),n,"mandatory"]);
+ const optional=(names)=>names.map(n=>[areaCode(n),n,"optional"]);
  for(const stage of stages){
   if(cbe){
    if(/^PP[12]$/.test(stage))add(stage,core(["Language Activities","Mathematical Activities","Environmental Activities","Psychomotor and Creative Activities","Religious Education Activities"]));
@@ -108,8 +114,9 @@ async function syncSchoolLearningAreas(db,schoolId,curriculum,levels){
  await db.prepare("UPDATE learning_areas SET is_active=0 WHERE school_id=? AND curriculum<>?").bind(schoolId,curriculum).run();
  const existing=await db.prepare("SELECT id,stage_code,code FROM learning_areas WHERE school_id=?").bind(schoolId).all();
  const byKey=new Map((existing.results||[]).map(x=>[String(x.stage_code||"")+"|"+String(x.code||""),x.id]));
+ const wantedKeys=new Set(rows.map(x=>x.stage+"|"+x.code));
  const statements=[];
- for(const x of existing.results||[])if(!wanted.has(x.stage_code))statements.push(db.prepare("UPDATE learning_areas SET is_active=0 WHERE id=? AND school_id=?").bind(x.id,schoolId));
+ for(const x of existing.results||[])if(!wanted.has(x.stage_code)||!wantedKeys.has(String(x.stage_code||"")+"|"+String(x.code||"")))statements.push(db.prepare("UPDATE learning_areas SET is_active=0 WHERE id=? AND school_id=?").bind(x.id,schoolId));
  for(const x of rows){
   const found=byKey.get(x.stage+"|"+x.code);
   if(found)statements.push(db.prepare("UPDATE learning_areas SET name=?,pathway=?,subject_type=?,is_mandatory=?,source_template=?,is_active=CASE WHEN ?=1 THEN 1 ELSE is_active END WHERE id=? AND school_id=?").bind(x.name,x.pathway,x.type,x.mandatory,template,x.mandatory,found,schoolId));
