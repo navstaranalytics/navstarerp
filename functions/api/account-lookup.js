@@ -33,11 +33,11 @@ export async function onRequestPost({request,env}){
   const schoolLogo=safeImage(meta.logoUrl||meta.logo_url||meta.schoolLogoUrl||branding.logoUrl||settings.school_logo_url||settings.logoUrl);
   const isSuperAdmin=user.role_key==="super_admin";
   return json({ok:true,account:{fullName:user.full_name,username:user.username,maskedEmail:maskEmail(user.email),maskedPhone:maskPhone(user.phone),
-    role:user.role_name,workspace:user.school_name||"NAVSTAR Platform",schoolName:user.school_name||"NAVSTAR Analytics",
+    role:user.role_name,workspace:user.school_name||"Navstar Platform",schoolName:user.school_name||"Navstar Analytics",
     maskedSchoolEmail:maskEmail(user.school_email),maskedSchoolPhone:maskPhone(user.school_phone),
     profilePhotoUrl:safeImage(user.profile_photo_url),schoolLogoUrl:isSuperAdmin?"":schoolLogo||"/api/branding/logo",
     identityType:isSuperAdmin?"platform":"school"}});
- }catch(error){console.error("NAVSTAR username lookup",error);return json({ok:false,error:"Account lookup is temporarily unavailable."},503)}
+ }catch(error){console.error("Navstar username lookup",error);return json({ok:false,error:"Account lookup is temporarily unavailable."},503)}
 }
 
 export async function onRequestPostUsernameAvailability({request,env}){
