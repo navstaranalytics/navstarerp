@@ -215,7 +215,7 @@ export async function onRequestPostLogin({ request, env }) {
     if(attempt?.locked_until&&attempt.locked_until>new Date().toISOString())
       return json({ok:false,error:"Too many unsuccessful attempts. Please wait 15 minutes before trying again."},429);
     const user=await env.DB.prepare(`
-      SELECT u.id,u.password_hash,u.status,r.role_key,r.role_name,a.school_id,sc.name AS school_name
+      SELECT u.id,u.full_name,u.password_hash,u.status,r.role_key,r.role_name,a.school_id,sc.name AS school_name
       FROM users u JOIN user_role_assignments a ON a.user_id=u.id
       JOIN roles r ON r.id=a.role_id
       LEFT JOIN school_memberships sm ON sm.user_id=u.id AND sm.school_id=a.school_id
