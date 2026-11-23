@@ -3,7 +3,7 @@ const json=(data,status=200)=>Response.json(data,{status,headers:{"Cache-Control
 const id=()=>crypto.randomUUID();
 const norm=v=>String(v||"").trim().toLowerCase();
 const clean=v=>String(v||"").trim();
-const allowedRoles=new Set(["school_owner","principal","deputy_principal","director_of_studies","deputy_director_of_studies","head_of_department","examinations_officer","class_teacher","teacher","bursar_accountant","hr_administrator","admissions_registrar","librarian"]);
+const allowedRoles=new Set(["school_owner","principal","deputy_principal","director_of_studies","deputy_director_of_studies","head_of_department","examinations_officer","class_teacher","teacher","bursar_accountant","hr_administrator","admissions_registrar","librarian","parent","student"]);
 const staffRoles=new Set(["school_owner","principal","deputy_principal","director_of_studies","deputy_director_of_studies","head_of_department","examinations_officer","class_teacher","teacher","bursar_accountant","hr_administrator","admissions_registrar","librarian"]);
 export async function onRequestGet({request,env}) {
  if(!env.DB)return json({ok:false,error:"Database connection is unavailable."},503);
@@ -35,6 +35,11 @@ export async function onRequestPost({request,env}) {
   if(!school||school.status!=="active")return json({ok:false,error:"The school workspace is not active."},409);
   const role=await env.DB.prepare("SELECT id,role_name FROM roles WHERE role_key=? AND school_id IS NULL").bind(roleKey).first();
   if(!role)return json({ok:false,error:"The selected role is not installed. Run the latest access-control upgrade."},503);
+  const learnerNumbers=Array.isArray(body.learnerAdmissionNumbers)?body.learnerAdmissionNumbers.map(clean).filter(Boolean):String(body.learnerAdmissionNumbers||"").split(",").map(clean).filter(Boolean);
+  if(["parent","student"].includes(roleKey)&&!learnerNumbers.length)return json({ok:false,error:"Enter at least one linked learner admission number."},400);
+  if(roleKey==="student"&&learnerNumbers.length!==1)return json({ok:false,error:"A learner account must be linked to exactly one learner."},400);
+  const linkedLearners=[];
+  for(const admission of learnerNumbers){const learner=await env.DB.prepare("SELECT id FROM learners WHERE school_id=? AND admission_number=?").bind(schoolId,admission).first();if(!learner)return json({ok:false,error:"Learner admission number "+admission+" was not found in this school."},404);linkedLearners.push(learner.id);}
   const userId=id(),membershipId=id(),assignmentId=id(),passwordHash=await hashPassword(password);
   const statements=[
    env.DB.prepare("INSERT INTO users(id,email,email_normalized,username,username_normalized,phone,full_name,password_hash,status,password_changed_at) VALUES(?,?,?,?,?,?,?,?,'active',strftime('%Y-%m-%dT%H:%M:%fZ','now'))").bind(userId,email,email,username,username,phone||null,fullName,passwordHash),
@@ -42,7 +47,13 @@ export async function onRequestPost({request,env}) {
    env.DB.prepare("INSERT INTO user_role_assignments(id,user_id,role_id,school_id,scope_json,assigned_by) VALUES(?,?,?,?,?,?)").bind(assignmentId,userId,role.id,schoolId,JSON.stringify({scope:"school",level:"all"}),actor.id)
   ];
   if(staffRoles.has(roleKey))statements.push(env.DB.prepare("INSERT INTO staff_profiles(id,school_id,user_id,staff_number,department,employment_status) VALUES(?,?,?,? ,?,'active')").bind(id(),schoolId,userId,clean(body.staffNumber)||null,clean(body.department)||null));
-  statements.push(env.DB.prepare("INSERT INTO audit_logs(id,actor_user_id,school_id,action,resource_type,resource_id,outcome,details_json) VALUES(?,?,?,'school.user.created','user',?,'success',?)").bind(id(),actor.id,schoolId,userId,JSON.stringify({username,role:roleKey})));
+  if(roleKey==="parent"){
+   const guardianId=id();
+   statements.push(env.DB.prepare("INSERT INTO guardians(id,school_id,user_id,full_name,phone,email,relationship) VALUES(?,?,?,?,?,?,?)").bind(guardianId,schoolId,userId,fullName,phone||null,email,clean(body.relationship)||"Parent/Guardian"));
+   for(const learnerId of linkedLearners)statements.push(env.DB.prepare("INSERT INTO learner_guardians(learner_id,guardian_id,is_primary,receives_communications) VALUES(?,?,0,1)").bind(learnerId,guardianId));
+  }
+  if(roleKey==="student")statements.push(env.DB.prepare("INSERT INTO learner_user_links(id,school_id,learner_id,user_id,created_by) VALUES(?,?,?,?,?)").bind(id(),schoolId,linkedLearners[0],userId,actor.id));
+  statements.push(env.DB.prepare("INSERT INTO audit_logs(id,actor_user_id,school_id,action,resource_type,resource_id,outcome,details_json) VALUES(?,?,?,'school.user.created','user',?,'success',?)").bind(id(),actor.id,schoolId,userId,JSON.stringify({username,role:roleKey,linkedLearners:linkedLearners.length})));
   await env.DB.batch(statements);
   return json({ok:true,message:"School account created successfully.",user:{id:userId,fullName,username,email,role:role.role_name,roleKey,schoolId}},201);
  }catch(error){
