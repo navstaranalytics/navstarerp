@@ -69,7 +69,7 @@ function pagesOverview(){
   panel('Platform governance','Current control areas','<div class="list"><div class="list-row"><b>Central database</b>'+pill(overviewMetrics?'Connected':'Checking')+'</div><div class="list-row"><b>Super Admin authentication</b>'+pill('Enabled')+'</div><div class="list-row"><b>AI services configuration</b>'+pill(settings.aiEnabled?'Enabled':'Disabled')+'</div></div>')+
   panel('Platform activity','Recent actions recorded in the central audit log','<div class="list">'+activity+'</div>')+
   panel('Quick actions','Common administrator tasks','<div class="quick-grid"><button class="quick" data-action="add-school"><b>＋ Register school</b><small>Onboard a new institution</small></button><button class="quick" data-page-go="users"><b>♙ Platform users</b><small>Review administrator accounts</small></button><button class="quick" data-page-go="communications"><b>✉ Communications</b><small>Manage school communications</small></button><button class="quick" data-page-go="academics"><b>▧ Academic standards</b><small>Review curriculum standards</small></button></div>')+
-  '</div><div class="notice warn"><b>Data status:</b> Overview figures, Super Admin sign-in and the school directory are connected to Cloudflare D1, so registered school records persist centrally across sessions. Other ERP workflows are still being connected and verified; do not yet enter confidential learner, staff or financial records into unfinished modules.</div>';
+  '</div><div class="notice warn"><b>Data status:</b> Navstar uses Cloudflare D1 for the central school directory, accounts, platform settings, subscription plans, billing records and configured academic resources. Some older Super Admin tools and school workflows still need end-to-end save and restore verification. Do not enter confidential learner, staff or financial records into any module until its save status is confirmed. Use Backup &amp; recovery to capture older browser records before migrating them.</div>';
 }
 function schoolsPage(){let q=($('schoolSearch')?.value||'').toLowerCase(),sf=$('schoolStatus')?.value||'all',cf=$('schoolCounty')?.value||'all';let rows=schools.filter(s=>(!q||[s.name,s.code,s.county,s.email,s.contact].join(' ').toLowerCase().includes(q))&&(sf==='all'||s.status===sf)&&(cf==='all'||s.county===cf));return head('INSTITUTION MANAGEMENT','School directory','Register, review, activate, configure and monitor every school tenant.','<button class="btn" data-action="add-school">＋ Register school</button>')+'<div class="stats">'+stat('Total schools',schools.length,'All institution records','▦')+stat('Active',schools.filter(s=>s.status==='Active').length,'Access enabled','✓')+stat('Pending',schools.filter(s=>s.status==='Pending').length,'Awaiting approval','◷')+stat('Suspended',schools.filter(s=>s.status==='Suspended').length,'Access paused','⊘')+'</div>'+panel('Institution register','School profile, curriculum, subscription and tenant status','<div class="table-tools"><input class="field search" id="schoolSearch" placeholder="Search name, code, contact…" value="'+esc(q)+'"><select id="schoolStatus"><option value="all">All statuses</option>'+['Active','Pending','Suspended'].map(x=>'<option '+(sf===x?'selected':'')+'>'+x+'</option>').join('')+'</select><select id="schoolCounty"><option value="all">All counties</option>'+counties.map(x=>'<option '+(cf===x?'selected':'')+'>'+x+'</option>').join('')+'</select><button class="btn light" data-action="export-schools">Export CSV</button></div><div class="table-wrap"><table><thead><tr><th>Institution</th><th>County</th><th>Category / levels</th><th>Curriculum</th><th>Plan</th><th>Status</th><th>Expiry</th><th>Actions</th></tr></thead><tbody>'+(rows.map(s=>'<tr><td><div class="school-name">'+esc(s.name)+'</div><div class="subline">'+esc(s.code||'No code')+' · '+esc(s.email||'No email')+' · School Admin: '+esc(s.schoolAdmin?.username||'Not assigned')+'</div></td><td>'+esc(s.county)+'</td><td>'+esc(s.category||s.level||'—')+'<div class="subline">'+esc((s.levels||[]).join(', '))+'</div></td><td>'+esc(s.curriculum||'CBC')+'</td><td>'+esc(s.plan||'Starter')+'</td><td>'+pill(s.status)+'</td><td>'+esc(s.expiry||'—')+'</td><td><div class="row-actions"><button class="tiny" data-action="school-details" data-id="'+s.id+'">Profile</button><button class="tiny" data-action="school-status" data-id="'+s.id+'">'+(s.status==='Active'?'Suspend':s.status==='Suspended'?'Activate':'Approve')+'</button></div></td></tr>').join('')||'<tr><td colspan="8"><div class="empty">No matching school records. Register a school to get started.</div></td></tr>')+'</tbody></table></div><div class="panel-pad small muted">School profiles include institution identity, ownership, contacts, offered levels, curriculum, users, learner/teacher counts, modules, subscription, usage, branding and activity summaries.</div>','')+'<div class="notice">A school is a separate tenant. In production, each tenant&#39;s branding, users, records, settings, documents and permissions must remain isolated from every other school.</div>'}
 function regionsPage(){let counts=counties.map(c=>({c,n:schools.filter(s=>s.county===c).length}));return head('GEOGRAPHIC OVERSIGHT','Regional & county management','View school coverage and coordinate onboarding across Kenya.')+'<div class="stats">'+stat('Counties covered',new Set(schools.map(s=>s.county)).size,'Counties with a registered school','⌖')+stat('Counties available',47,'Kenyan county directory','▦')+stat('Schools in Busia',schools.filter(s=>s.county==='Busia').length,'Current directory records','⌖')+stat('Unassigned region',schools.filter(s=>!s.county).length,'Records needing location','!')+'</div>'+panel('County coverage','School count by county','<div class="county-grid">'+counts.map(x=>'<div class="county"><b>'+x.c+'</b><div class="muted">'+x.n+' schools</div></div>').join('')+'</div>')+panel('Regional administrators','Delegate operational oversight by region','<div class="empty">Regional administrator assignment will be enabled when platform user roles and server-side permissions are connected.</div>')}
@@ -361,7 +361,7 @@ integrationsPage=function(){
     '<div class="notice">Never paste API keys or passwords into this page. Production secrets must remain in protected Cloudflare Worker settings. Use System Health to check D1 and storage connectivity.</div>';
 };
 pages.integrations=integrationsPage;
-document.querySelectorAll('[data-page]').forEach(b=>b.onclick=()=>go(b.dataset.page));$('view').addEventListener('click',e=>{let b=e.target.closest('[data-action],[data-page-go]');if(!b)return;if(b.dataset.pageGo){go(b.dataset.pageGo);return}let a=b.dataset.action,id=b.dataset.id;if(a==='add-school')addSchool();if(a==='school-details')schoolDetails(id);if(a==='add-user')addUser();if(a==='compose')compose();if(a==='add-plan')addPlan();if(a==='edit-plan')editPlan(b.dataset.plan);if(a==='school-status'){let s=schools.find(x=>x.id===id);if(s){s.status=s.status==='Active'?'Suspended':'Active';save(KEY,schools);log('School status changed',s.name+' → '+s.status);render();toast('School status updated locally.')}}if(a==='user-status'){let u=users.find(x=>x.id===id);if(u){u.status=u.status==='Active'?'Disabled':'Active';save(USERKEY,users);log('Platform user status changed',u.email+' → '+u.status);render()}}if(a==='export-schools'){let cols=['name','code','county','category','level','curriculum','plan','status','email','phone','created'];let csv=[cols.join(','),...schools.map(s=>cols.map(k=>'"'+String(s[k]??'').replace(/"/g,'""')+'"').join(','))].join('\r\n');let url=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));let x=document.createElement('a');x.href=url;x.download='navstar-school-directory.csv';x.click();URL.revokeObjectURL(url)}});
+document.querySelectorAll('[data-page]').forEach(b=>b.onclick=()=>go(b.dataset.page));$('view').addEventListener('click',e=>{let b=e.target.closest('[data-action],[data-page-go]');if(!b)return;if(b.dataset.pageGo){go(b.dataset.pageGo);return}let a=b.dataset.action,id=b.dataset.id;if(a==='add-school')addSchool();if(a==='school-details')schoolDetails(id);if(a==='add-user')addUser();if(a==='compose')compose();if(a==='add-plan')addPlan();if(a==='edit-plan')editPlan(b.dataset.plan);if(a==='school-status'){let school=schools.find(x=>x.id===id);if(school){const next=school.status==='Active'?'Suspended':'Active';b.disabled=true;schoolApi('/api/schools/'+encodeURIComponent(id),{method:'PATCH',body:JSON.stringify({status:next})}).then(()=>loadSchoolsFromDatabase()).then(()=>{log('School status changed',school.name+' → '+next);render();toast('School status saved centrally in D1.')}).catch(error=>{toast(error.message||'School status could not be saved.');b.disabled=false})}}if(a==='user-status'){let u=users.find(x=>x.id===id);if(u){u.status=u.status==='Active'?'Disabled':'Active';save(USERKEY,users);log('Platform user status changed',u.email+' → '+u.status);render()}}if(a==='export-schools'){let cols=['name','code','county','category','level','curriculum','plan','status','email','phone','created'];let csv=[cols.join(','),...schools.map(s=>cols.map(k=>'"'+String(s[k]??'').replace(/"/g,'""')+'"').join(','))].join('\r\n');let url=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));let x=document.createElement('a');x.href=url;x.download='navstar-school-directory.csv';x.click();URL.revokeObjectURL(url)}});
 $('closeModal').onclick=closeModal;$('cancelModal').onclick=closeModal;$('modal').onclick=e=>{if(e.target===$('modal'))closeModal()};$('helpBtn').onclick=()=>toast('Use the left navigation to manage each platform area.');$('globalSearch').onkeydown=e=>{if(e.key==='Enter'){go('schools');setTimeout(()=>{let x=$('schoolSearch');if(x){x.value=e.target.value;x.dispatchEvent(new Event('input'))}},0)}};
 
 /* Navstar Super Admin functional workspaces */
@@ -736,11 +736,114 @@ pages.users=()=>head('IDENTITY & ACCESS','Platform users','Read-only view of pla
   (users.map(u=>'<tr><td>'+esc(u.name)+'</td><td>'+esc(u.username||'—')+'</td><td>'+esc(u.email)+'</td><td>'+esc(u.role)+'</td><td>'+pill(u.status)+'</td></tr>').join('')||'<tr><td colspan="5" class="empty">No platform accounts found in D1.</td></tr>')+
   '</tbody></table></div>')+
   '<div class="notice">Browser-only account creation and editing have been disabled. Platform account provisioning must create a real authenticated account through the secure identity API.</div>';
-pages.communications=()=>head('PLATFORM COMMUNICATIONS','Announcements & notices','Create announcements centrally and review records saved in D1.','<button class="btn" data-action="compose">＋ Compose announcement</button>')+
+pages.communications=()=>head('PLATFORM COMMUNICATIONS','Announcements & notices','Review announcements saved in the central database.')+
   panel('Message centre','Announcements read from the central database','<div class="table-wrap"><table><thead><tr><th>Subject</th><th>Audience</th><th>Channel</th><th>Created</th><th>Status</th></tr></thead><tbody>'+
   (messages.map(m=>'<tr><td><b>'+esc(m.subject)+'</b></td><td>'+esc(m.audience||'—')+'</td><td>'+esc(m.channel||'In-app notice')+'</td><td>'+esc(m.date||'—')+'</td><td>'+pill(m.status||'Draft')+'</td></tr>').join('')||'<tr><td colspan="5" class="empty">No announcements recorded in D1.</td></tr>')+
   '</tbody></table></div>')+
   '<div class="notice">Announcement creation is stored centrally. Editing and deletion are not exposed until corresponding secure database endpoints are available.</div>';
+
+/* Legacy browser-data recovery: read-only scan, immutable D1 archive, then safe migration of supported records. */
+let legacyRecoveryRecords=[],legacyRecoveryScanDone=false;
+function recoveryPage(){
+ return head('BUSINESS CONTINUITY','Backup & recovery','Capture legacy browser records, preserve them in central D1, and safely migrate supported records.')+
+ panel('Step 1 · Scan this browser','Read old Navstar local records without changing or deleting them','<div class="panel-pad"><p class="muted">This scans the browser profile and current Navstar site origin for older prototype records. Authentication tokens, passwords, OTPs and secret-like keys are excluded.</p><button class="btn" data-action="recovery-scan">Scan browser records</button> <button class="btn light" data-action="recovery-download" '+(legacyRecoveryScanDone?'':'disabled')+'>Download recovery JSON</button><div id="recoveryScanResult" class="notice">Not scanned yet. Use the same browser and profile where the old Navstar records were created.</div></div>')+
+ panel('Step 2 · Preserve in D1','Create an untouched recovery snapshot before migrating anything','<div class="panel-pad"><button class="btn green" data-action="recovery-archive" '+(legacyRecoveryScanDone&&legacyRecoveryRecords.length?'':'disabled')+'>Save scanned records to Cloudflare D1</button> <label class="btn light" for="recoveryFile" style="display:inline-block;cursor:pointer">Archive an old JSON backup</label><input id="recoveryFile" type="file" accept="application/json,.json" hidden><div class="notice warn">Archiving preserves the original records as a separate recovery snapshot. It does not overwrite current school records or create fake user accounts.</div><div id="recoveryArchiveStatus" class="muted small"></div></div>')+
+ panel('Step 3 · Restore supported records','Migrate only records with a valid destination and required details','<div class="panel-pad"><button class="btn" data-action="recovery-migrate" '+(legacyRecoveryScanDone&&legacyRecoveryRecords.length?'':'disabled')+'>Migrate supported schools and settings to D1</button><div id="recoveryMigrationStatus" class="notice">First scan and save a recovery snapshot. Schools without a valid official email or county will remain safely in the archive for manual review.</div></div>')+
+ panel('D1 recovery archive','Previously captured recovery snapshots','<div class="panel-pad"><button class="btn light" data-action="recovery-refresh">Refresh archive list</button><div id="recoveryArchiveList" class="muted small">Loading archives…</div></div>');
+}
+pages.backup=recoveryPage;
+async function scanLegacyBrowser(){
+ const records=[],excluded=[];
+ for(let i=0;i<localStorage.length;i++){
+  const key=localStorage.key(i);if(!key)continue;
+  if(/auth|session|token|password|passwd|otp|secret|csrf|credential/i.test(key)){excluded.push(key);continue}
+  const raw=localStorage.getItem(key);if(raw===null)continue;
+  let value=raw,encoding='text';try{value=JSON.parse(raw);encoding='json'}catch{}
+  records.push({key,encoding,value,characterCount:raw.length});
+ }
+ legacyRecoveryRecords=records;legacyRecoveryScanDone=true;
+ const result=$('recoveryScanResult');if(result)result.textContent='Found '+records.length+' browser record(s) ('+records.reduce((n,r)=>n+r.characterCount,0).toLocaleString()+' characters). '+excluded.length+' sensitive/authentication-like key(s) excluded. Original browser data was not changed.';
+ const archive=$('recoveryArchiveStatus');if(archive)archive.textContent='Ready to create a D1 snapshot.';
+ const download=$('view').querySelector('[data-action="recovery-download"]'),save=$('view').querySelector('[data-action="recovery-archive"]'),migrate=$('view').querySelector('[data-action="recovery-migrate"]');
+ if(download)download.disabled=!records.length;if(save)save.disabled=!records.length;if(migrate)migrate.disabled=!records.length;
+ await refreshRecoveryArchives();
+}
+function downloadRecoveryFile(name,data){
+ const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+async function refreshRecoveryArchives(){
+ const host=$('recoveryArchiveList');if(!host)return;
+ try{const d=await schoolApi('/api/recovery');host.innerHTML=(d.archives||[]).length?'<div class="table-wrap"><table><thead><tr><th>Captured</th><th>Source</th><th>Records</th><th>Size</th><th>Action</th></tr></thead><tbody>'+(d.archives||[]).map(a=>'<tr><td>'+esc(a.created_at)+'</td><td>'+esc(a.source)+'</td><td>'+Number(a.record_count||0)+'</td><td>'+Number(a.byte_count||0).toLocaleString()+' bytes</td><td><button class="tiny" data-action="recovery-download-archive" data-id="'+esc(a.id)+'">Download</button></td></tr>').join('')+'</tbody></table></div>':'<div class="empty">No recovery archives saved in D1 yet.</div>'}
+ catch(error){host.textContent=error.message||'Could not load D1 recovery archives.'}
+}
+async function archiveRecoveryRecords(records,source){
+ const result=await schoolApi('/api/recovery',{method:'POST',body:JSON.stringify({source,records})});
+ const status=$('recoveryArchiveStatus');if(status)status.textContent=result.message+' Archive ID: '+result.archive.id;
+ await refreshRecoveryArchives();return result;
+}
+async function migrateLegacyRecords(){
+ const status=$('recoveryMigrationStatus');if(status)status.textContent='Checking recoverable records…';
+ let schoolCandidates=[];
+ for(const r of legacyRecoveryRecords){
+  if(r.key===KEY){const v=r.value;schoolCandidates=Array.isArray(v)?v:Array.isArray(v?.schools)?v.schools:[]}
+ }
+ let imported=0,skipped=0,errors=[];
+ const existingCodes=new Set(schools.map(x=>String(x.code||'').toLowerCase()));
+ for(const old of schoolCandidates){
+  const name=String(old.name||old.schoolName||'').trim(),county=String(old.county||old.locationCounty||'').trim(),email=String(old.email||old.contactEmail||'').trim().toLowerCase(),code=String(old.code||old.schoolCode||'').trim();
+  if(!name||!county||!/^\S+@\S+\.\S+$/.test(email)){skipped++;continue}
+  if(code&&existingCodes.has(code.toLowerCase())){skipped++;continue}
+  try{
+   const d=await schoolApi('/api/schools',{method:'POST',body:JSON.stringify({name,county,email,code:code||undefined,contact:old.contact||old.contactPerson||'',phone:old.phone||old.contactPhone||'',address:old.address||old.physicalAddress||'',registrationNumber:old.registrationNumber||'',subCounty:old.subCounty||'',town:old.town||'',category:old.category||old.type||'',level:old.level||'',ownership:old.ownership||'',curriculum:old.curriculum||'CBC',levels:Array.isArray(old.levels)?old.levels:[],plan:old.plan||'Starter',status:old.status||'Pending'})});
+   imported++;existingCodes.add(String(d.school?.code||code).toLowerCase());
+  }catch(error){skipped++;errors.push(name+': '+(error.message||'not imported'))}
+ }
+ const settingTargets=[
+  {source:'navstar_platform_settings_v1',target:PLATFORM_PREFS_KEY},
+  {source:'navstar.platform.preferences.v1',target:PLATFORM_PREFS_KEY},
+  {source:'navstar_superadmin_workspaces_v1',target:PLATFORM_WORKSPACES_KEY},
+  {source:'navstar.platform.workspaces.v1',target:PLATFORM_WORKSPACES_KEY},
+  {source:'navstar_tenant_workspaces_v1',target:TENANT_SETTINGS_KEY},
+  {source:'navstar.platform.tenant-workspaces.v1',target:TENANT_SETTINGS_KEY}
+ ];
+ let settingsImported=0;
+ for(const map of settingTargets){
+  const item=legacyRecoveryRecords.find(x=>x.key===map.source);if(!item)continue;
+  const value=typeof item.value==='string'?item.value:JSON.stringify(item.value);
+  try{await schoolApi('/api/data/settings',{method:'POST',body:JSON.stringify({setting_key:map.target,setting_value:value})});settingsImported++}catch(error){errors.push(map.source+': '+(error.message||'not imported'))}
+ }
+ const plansRecord=legacyRecoveryRecords.find(x=>x.key===PLANKEY);
+ let plansImported=0;
+ if(plansRecord&&Array.isArray(plansRecord.value)){
+  for(const p of plansRecord.value){
+   if(!p?.name||plans.some(x=>x.name.toLowerCase()===String(p.name).toLowerCase())){skipped++;continue}
+   try{await savePlanToDatabase({...p,rate:Number(p.rate??p.price)||0,price:Number(p.price??p.rate)||0,modules:Array.isArray(p.modules)?p.modules.join(', '):String(p.modules||'Core')});plansImported++}
+   catch(error){skipped++;errors.push('Plan '+p.name+': '+(error.message||'not imported'))}
+  }
+ }
+ await loadSchoolsFromDatabase();await loadPlansFromDatabase();await loadPlatformSettingsFromDatabase();await loadExtraFromDatabase();await loadTenantWorkspaceFromDatabase();
+ if(status)status.textContent='Migration finished. Schools imported: '+imported+'. Plans imported: '+plansImported+'. Settings/workspace records copied: '+settingsImported+'. Skipped for review or duplicates: '+skipped+'. '+(errors.length?'Issues: '+errors.slice(0,5).join(' | '):'No API errors reported.');
+}
+$('view').addEventListener('click',async e=>{
+ const b=e.target.closest('[data-action^="recovery-"]');if(!b)return;
+ const action=b.dataset.action;b.disabled=true;
+ try{
+  if(action==='recovery-scan')await scanLegacyBrowser();
+  if(action==='recovery-download'){if(legacyRecoveryRecords.length)downloadRecoveryFile('navstar-browser-recovery-'+new Date().toISOString().slice(0,10)+'.json',{format:'navstar-recovery-v1',capturedAt:new Date().toISOString(),records:legacyRecoveryRecords})}
+  if(action==='recovery-archive'){await archiveRecoveryRecords(legacyRecoveryRecords,'browser-local-storage')}
+  if(action==='recovery-migrate'){if(!confirm('First archive was recommended. Migrate only supported schools, plans and settings to D1? Existing matching school codes and plan names will be skipped.'))return;await migrateLegacyRecords()}
+  if(action==='recovery-refresh')await refreshRecoveryArchives();
+  if(action==='recovery-download-archive'){const d=await schoolApi('/api/recovery/'+encodeURIComponent(b.dataset.id));downloadRecoveryFile('navstar-recovery-archive-'+b.dataset.id+'.json',d.archive.data)}
+ }catch(error){toast(error.message||'Recovery action failed. Original browser records have not been deleted.')}
+ finally{b.disabled=false}
+});
+$('view').addEventListener('change',async e=>{
+ if(e.target.id!=='recoveryFile')return;
+ const file=e.target.files?.[0];if(!file)return;
+ try{const parsed=JSON.parse(await file.text());const records=[{key:'uploaded-backup:'+file.name,encoding:'json',value:parsed,characterCount:file.size}];await archiveRecoveryRecords(records,'uploaded-json-backup');toast('Uploaded backup preserved in central D1.')}
+ catch(error){toast(error.message||'Could not archive this backup file.')}
+ finally{e.target.value=''}
+});
 $('logoutButton').addEventListener('click',async()=>{
   $('accountMenu').classList.remove('open');
   try{await fetch('/api/auth/logout',{method:'POST',credentials:'same-origin'})}finally{location.replace('/login.html')}
