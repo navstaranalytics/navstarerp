@@ -94,7 +94,7 @@ export async function onRequestPost({request,env}){
 
 const LOGIN_BACKGROUND_KEY="login-background";
 const R2_LOGIN_BACKGROUND_KEY="platform/login-background";
-const MAX_LOGIN_BACKGROUND_BYTES=4*1024*1024;
+const MAX_LOGIN_BACKGROUND_BYTES=1800*1024;
 export async function onRequestGetLoginBackground({env}){
  if(!env.DB)return new Response("Database unavailable.",{status:503});
  try{
