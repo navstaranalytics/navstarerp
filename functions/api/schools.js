@@ -22,6 +22,43 @@ async function requireAdmin(request,env){
   const user=await getSuperAdminSession(request,env);
   return user?{user}:{error:json({ok:false,error:"Your Super Admin session has expired. Please sign in again."},401)};
 }
+async function ensureSchoolAdmin(env,request,actorId,school){
+  const existing=await env.DB.prepare(`SELECT u.id,u.full_name,u.username,u.email,u.phone FROM school_memberships m
+    JOIN users u ON u.id=m.user_id JOIN user_role_assignments a ON a.user_id=u.id AND a.school_id=m.school_id
+    JOIN roles r ON r.id=a.role_id AND r.role_key='school_admin'
+    WHERE m.school_id=? AND m.membership_status IN ('active','invited') LIMIT 1`).bind(school.id).first();
+  if(existing)return {created:false};
+  const fullName=clean(school.contact_person),email=clean(school.contact_email).toLowerCase(),phone=clean(school.contact_phone);
+  if(!fullName||!email||!/^\S+@\S+\.\S+$/.test(email)||!phone)return {created:false,error:"Add the School Administrator's full name, valid email and phone number, then save the school profile to create the account."};
+  const role=await env.DB.prepare("SELECT id FROM roles WHERE id='role_school_admin' AND role_key='school_admin' AND school_id IS NULL").first();
+  if(!role)return {created:false,error:"The School Administrator role is not installed. Run the access-control upgrade first."};
+  if(await env.DB.prepare("SELECT 1 AS found FROM users WHERE email_normalized=? LIMIT 1").bind(email).first())
+    return {created:false,error:"The administrator email is already registered to another NAVSTAR account. Use a unique email address."};
+  const base="admin."+String(school.school_code||school.id).toLowerCase().replace(/[^a-z0-9._-]/g,"").slice(0,23);
+  let username=base.slice(0,32),suffix=1;
+  while(await env.DB.prepare("SELECT 1 AS found FROM users WHERE username_normalized=? LIMIT 1").bind(username).first()){
+    const tail=String(++suffix);username=(base.slice(0,32-tail.length-1)+"."+tail).slice(0,32);
+  }
+  const userId=makeId(),membershipId=makeId(),assignmentId=makeId();
+  const bootstrap=Array.from(crypto.getRandomValues(new Uint8Array(32)),b=>b.toString(16).padStart(2,"0")).join("");
+  await env.DB.batch([
+    env.DB.prepare("INSERT INTO users(id,email,email_normalized,username,username_normalized,phone,full_name,password_hash,status) VALUES(?,?,?,?,?,?,?,?,'active')").bind(userId,email,email,username,username,phone,fullName,await hashPassword(bootstrap)),
+    env.DB.prepare("INSERT INTO school_memberships(id,school_id,user_id,membership_status,job_title,joined_at) VALUES(?,?,?,'active','School Administrator',strftime('%Y-%m-%dT%H:%M:%fZ','now'))").bind(membershipId,school.id,userId),
+    env.DB.prepare("INSERT INTO user_role_assignments(id,user_id,role_id,school_id,scope_json,assigned_by) VALUES(?,?,?,?,?,?)").bind(assignmentId,userId,role.id,school.id,JSON.stringify({scope:"school",level:"all"}),actorId),
+    env.DB.prepare("INSERT INTO audit_logs(id,actor_user_id,school_id,action,resource_type,resource_id,outcome,details_json) VALUES(?,?,?,'school.admin.auto_created','user',?,'success',?)").bind(makeId(),actorId,school.id,userId,JSON.stringify({username,email}))
+  ]);
+  let emailDelivery="not_configured";
+  if(env.RESEND_API_KEY){
+    const loginUrl=new URL("/login.html",new URL(request.url).origin).toString();
+    const from=env.MAIL_FROM||"Navstar Analytics <onboarding@resend.dev>";
+    const safe=v=>String(v).replace(/[&<>"]/g,x=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[x]));
+    const html="<div style='font-family:Arial,sans-serif;max-width:600px;margin:auto;color:#17233b'><div style='background:#082b70;color:#fff;padding:24px'><b>NAVSTAR ANALYTICS</b><div>School management platform</div></div><div style='padding:26px;border:1px solid #e5eaf2'><p>Hello "+safe(fullName)+",</p><h2>Your School Administrator account is ready</h2><p>School: <b>"+safe(school.name)+"</b></p><p>Username: <b>"+safe(username)+"</b></p><p>Email: "+safe(email)+"</p><p>Phone: "+safe(phone)+"</p><p>Open the NAVSTAR login page and choose <b>Forgot password</b> to receive a one-time email code and set your password securely.</p><p><a href='"+loginUrl+"'>Open NAVSTAR login</a></p><p>"+(school.status==="active"?"Your school workspace is active.":"Your workspace becomes available after the school is activated.")+"</p><p>Regards,<br>NAVSTAR Analytics</p></div></div>";
+    try{const sent=await fetch("https://api.resend.com/emails",{method:"POST",headers:{"Authorization":"Bearer "+env.RESEND_API_KEY,"Content-Type":"application/json"},body:JSON.stringify({from,to:[email],subject:"Your NAVSTAR School Administrator account · "+school.name,html,text:"Hello "+fullName+",\nYour School Administrator username is "+username+". Use Forgot password at "+loginUrl+" to set your password. School: "+school.name+". Phone: "+phone+". No temporary password is sent."})});emailDelivery=sent.ok?"sent":"failed";if(!sent.ok)console.error("NAVSTAR school admin email failed:",sent.status,await sent.text());}
+    catch(error){emailDelivery="failed";console.error("NAVSTAR school admin email error:",String(error?.message||error));}
+  }
+  return {created:true,admin:{fullName,username,email,phone,role:"School Administrator"},emailDelivery};
+}
+
 export async function onRequestGet({request,env}){
   const auth=await requireAdmin(request,env);if(auth.error)return auth.error;
   try{
@@ -118,6 +155,10 @@ export async function onRequestPatch({request,env}){
       env.DB.prepare("INSERT INTO school_settings (school_id,settings_json) VALUES (?,?) ON CONFLICT(school_id) DO UPDATE SET settings_json=excluded.settings_json,updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now')")
         .bind(id,JSON.stringify({...current,navstar_school_meta:meta}))
     ]);
+    const baseRow=await env.DB.prepare("SELECT * FROM schools WHERE id=?").bind(id).first();
+    let adminProvisioning={created:false};
+    try{adminProvisioning=await ensureSchoolAdmin(env,request,auth.user.id,baseRow);}
+    catch(error){adminProvisioning={created:false,error:String(error?.message||"School Administrator could not be created.")};}
     const row=await env.DB.prepare(`SELECT s.*,ss.settings_json,
       (SELECT u.id FROM school_memberships m JOIN users u ON u.id=m.user_id JOIN user_role_assignments a ON a.user_id=u.id AND a.school_id=s.id JOIN roles r ON r.id=a.role_id AND r.role_key='school_admin' WHERE m.school_id=s.id AND m.membership_status IN ('active','invited') ORDER BY m.created_at LIMIT 1) AS admin_user_id,
       (SELECT u.full_name FROM school_memberships m JOIN users u ON u.id=m.user_id JOIN user_role_assignments a ON a.user_id=u.id AND a.school_id=s.id JOIN roles r ON r.id=a.role_id AND r.role_key='school_admin' WHERE m.school_id=s.id AND m.membership_status IN ('active','invited') ORDER BY m.created_at LIMIT 1) AS admin_full_name,
@@ -128,7 +169,7 @@ export async function onRequestPatch({request,env}){
       FROM schools s LEFT JOIN school_settings ss ON ss.school_id=s.id WHERE s.id=?`).bind(id).first();
     await env.DB.prepare("INSERT INTO audit_logs (id,actor_user_id,school_id,action,resource_type,resource_id,outcome,details_json) VALUES (?,?,?,'school.updated','school',?,'success',?)")
       .bind(makeId(),auth.user.id,id,id,JSON.stringify({status})).run().catch(()=>{});
-    return json({ok:true,school:mapSchool(row),message:"School changes saved to the central database."});
+    return json({ok:true,school:mapSchool(row),adminProvisioning,message:"School changes saved to the central database."});
   }catch(error){
     if(/UNIQUE constraint/i.test(String(error?.message||"")))return json({ok:false,error:"That institution code is already assigned to another school."},409);
     return json({ok:false,error:"School changes could not be saved. Please try again."},500);
