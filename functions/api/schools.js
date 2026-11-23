@@ -6,6 +6,15 @@ const clean=v=>String(v??"").trim();
 const normStatus=v=>({Active:"active",Pending:"pending",Suspended:"suspended",Archived:"archived",active:"active",pending:"pending",suspended:"suspended",archived:"archived"}[v]||"pending");
 const displayStatus=v=>({active:"Active",pending:"Pending",suspended:"Suspended",archived:"Archived"}[v]||"Pending");
 const makeId=()=>crypto.randomUUID();
+function modulesForLevels(levels){
+  const selected=Array.isArray(levels)?levels:[];
+  const modules=new Set(["Core","Learners","Staff & HR","Academics","Examinations","Reports","Parent Portal"]);
+  if(selected.some(x=>/^Grade (7|8|9)$/.test(String(x))))["Junior School","Pathway Planning"].forEach(x=>modules.add(x));
+  if(selected.some(x=>/^Grade (10|11|12)$/.test(String(x))))["Senior School","Pathway Planning","AI Analytics"].forEach(x=>modules.add(x));
+  if(selected.some(x=>/^Form /.test(String(x))))modules.add("Secondary School");
+  if(selected.length)modules.add("Attendance");
+  return [...modules];
+}
 function mapSchool(row){
   let meta={};
   try{meta=JSON.parse(row.settings_json||"{}").navstar_school_meta||{}}catch{}
@@ -15,7 +24,7 @@ function mapSchool(row){
     subCounty:row.sub_county||"",town:row.town||"",contact:row.contact_person||"",email:row.contact_email||"",
     phone:row.contact_phone||"",address:row.physical_address||"",curriculum:row.curriculum||"CBC",
     curriculumLabel:meta.curriculumLabel||row.curriculum||"CBC",levels,plan:meta.plan||"Starter",
-    status:displayStatus(row.status),expiry:meta.expiry||"",modules:Array.isArray(meta.modules)?meta.modules:[],
+    status:displayStatus(row.status),expiry:meta.expiry||"",modules:modulesForLevels(levels),
     learnerCount:Number(meta.learnerCount||0),teacherCount:Number(meta.teacherCount||0),created:row.created_at,schoolAdmin:row.admin_user_id?{id:row.admin_user_id,fullName:row.admin_full_name,username:row.admin_username,email:row.admin_email,phone:row.admin_phone,status:row.admin_status,role:"School Administrator"}:null};
 }
 async function requireAdmin(request,env){
@@ -48,7 +57,7 @@ export async function onRequestPost({request,env}){
   const id=makeId(),code=clean(body.code)||("NS-"+crypto.randomUUID().slice(0,8).toUpperCase());
   const status=normStatus(body.status),curriculum=clean(body.curriculum)||"CBC";
   const levels=Array.isArray(body.levels)?[...new Set(body.levels.map(clean).filter(Boolean))]:[];
-  const meta={category:clean(body.category),level:clean(body.level),plan:clean(body.plan)||"Starter",expiry:clean(body.expiry),modules:Array.isArray(body.modules)?body.modules:[],learnerCount:0,teacherCount:0};
+  const meta={category:clean(body.category),level:clean(body.level),plan:clean(body.plan)||"Starter",expiry:clean(body.expiry),modules:modulesForLevels(levels),learnerCount:0,teacherCount:0};
   try{
     await env.DB.batch([
       env.DB.prepare(`INSERT INTO schools (id,school_code,name,registration_number,emis_code,institution_type,ownership,county,sub_county,town,physical_address,contact_person,contact_email,contact_phone,curriculum,school_levels_json,status,created_by,activated_at)
@@ -87,7 +96,11 @@ export async function onRequestPatch({request,env}){
     const name=body.name===undefined?existing.name:clean(body.name),code=body.code===undefined?existing.school_code:clean(body.code);
     if(!name||name.length>180||!code||code.length>80)return json({ok:false,error:"School name and institution code are required."},400);
     const status=body.status===undefined?existing.status:normStatus(body.status);
-    const levels=body.levels===undefined?existing.school_levels_json:JSON.stringify(Array.isArray(body.levels)?body.levels:[]);
+    let selectedLevels=[];
+    try{selectedLevels=body.levels===undefined?JSON.parse(existing.school_levels_json||"[]"):(Array.isArray(body.levels)?body.levels:[])}catch{selectedLevels=[]}
+    selectedLevels=[...new Set(selectedLevels.map(clean).filter(Boolean))];
+    const levels=JSON.stringify(selectedLevels);
+    meta.modules=modulesForLevels(selectedLevels);
     const curriculum=body.curriculum===undefined?existing.curriculum:clean(body.curriculum);
     await env.DB.batch([
       env.DB.prepare(`UPDATE schools SET school_code=?,name=?,registration_number=?,institution_type=?,ownership=?,county=?,sub_county=?,town=?,physical_address=?,contact_person=?,contact_email=?,contact_phone=?,curriculum=?,school_levels_json=?,status=?,activated_at=CASE WHEN ?='active' THEN COALESCE(activated_at,strftime('%Y-%m-%dT%H:%M:%fZ','now')) ELSE activated_at END,updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?`)
