@@ -1,4 +1,4 @@
-import { getSuperAdminSession } from "./auth.js";
+import { getAuthenticatedSession } from "./auth.js";
 
 const json=(data,status=200)=>Response.json(data,{status,headers:{"Cache-Control":"no-store"}});
 const id=()=>crypto.randomUUID();
@@ -53,8 +53,51 @@ const resources={
 const scopedTables=new Set(["academic_years","grade_levels","learning_areas","staff_profiles","learners","guardians"]);
 async function auth(request,env){
   if(!env.DB)return {error:json({ok:false,error:"Database connection is unavailable."},503)};
-  const user=await getSuperAdminSession(request,env);
-  return user?{user}:{error:json({ok:false,error:"A valid Super Admin session is required."},401)};
+  const user=await getAuthenticatedSession(request,env);
+  return user?{user}:{error:json({ok:false,error:"A valid active account session is required."},401)};
+}
+const permissionFor=(name,write=false)=>{
+  if(["plans","subscriptions","invoices","payments","regions","platform-users","analytics","settings","audit","ai-usage","integrations"].includes(name))return "platform.manage";
+  if(["years","terms","grades","streams","learning-areas","classes","grading-schemes","grade-boundaries"].includes(name))return write?"academics.manage":"academics.manage";
+  if(["staff"].includes(name))return "staff.manage";
+  if(["learners","enrollments","guardians","transfers"].includes(name))return write?"learners.manage":"learners.view";
+  if(name==="teacher-allocations")return "allocations.manage";
+  if(["assessments","assessment-results"].includes(name))return write?"assessments.manage":"assessments.view";
+  if(["attendance-sessions","attendance-records"].includes(name))return write?"attendance.manage":"attendance.view";
+  if(name==="timetable")return "timetable.view";
+  if(["fee-structures","learner-fee-accounts","finance-transactions"].includes(name))return write?"finance.manage":"finance.view";
+  if(["inventory","inventory-movements"].includes(name))return "inventory.manage";
+  if(["library-books","library-loans"].includes(name))return "library.manage";
+  if(["transport-routes","transport-assignments","boarding-houses","boarding-allocations"].includes(name))return "school.settings.manage";
+  if(name==="payroll")return write?"hr.manage":"hr.view";
+  if(name==="report-cards")return "reports.view";
+  if(name==="discipline")return "discipline.manage";
+  if(name==="announcements")return "school.settings.manage";
+  return null;
+};
+function allowed(user,permission){
+  if(user.is_super_admin)return true;
+  if(!user.school_id||!permission||permission==="platform.manage")return false;
+  return user.permissions.includes(permission);
+}
+async function schoolScope(request,user,cfg){
+  if(!cfg.scope)return user.is_super_admin?{schoolId:null}: {error:json({ok:false,error:"This platform resource is restricted to Super Admin."},403)};
+  const requested=new URL(request.url).searchParams.get("schoolId")||"";
+  const schoolId=user.is_super_admin?requested:user.school_id;
+  if(!schoolId)return {error:json({ok:false,error:"schoolId is required for school records."},400)};
+  if(!user.is_super_admin&&requested&&requested!==user.school_id)return {error:json({ok:false,error:"You cannot access another school's workspace."},403)};
+  return {schoolId};
+}
+function teacherFilter(name,user){
+  if(user.is_super_admin||!["teacher","class_teacher","head_of_department","director_of_studies","deputy_director_of_studies","examinations_officer"].includes(user.role_key))return "";
+  const staff="EXISTS (SELECT 1 FROM staff_profiles sp JOIN teacher_allocations ta ON ta.staff_id=sp.id WHERE sp.user_id='"+user.id+"' AND ta.school_id='"+user.school_id+"' AND ";
+  if(name==="learners"||name==="enrollments")return " AND "+staff+"ta.grade_level_id="+(name==="learners"?"(SELECT le.grade_level_id FROM learner_enrollments le WHERE le.learner_id=learners.id AND le.status='active' LIMIT 1)":"learner_enrollments.grade_level_id")+" AND (ta.stream_id IS NULL OR ta.stream_id="+(name==="learners"?"(SELECT le.stream_id FROM learner_enrollments le WHERE le.learner_id=learners.id AND le.status='active' LIMIT 1)":"learner_enrollments.stream_id")+") )";
+  if(name==="assessments")return " AND "+staff+"ta.grade_level_id=assessments.grade_level_id AND (ta.stream_id IS NULL OR ta.stream_id=assessments.stream_id) AND (ta.learning_area_id=assessments.learning_area_id) AND (ta.academic_year_id=assessments.academic_year_id) )";
+  if(name==="assessment-results")return " AND EXISTS (SELECT 1 FROM assessments ax WHERE ax.id=assessment_results.assessment_id AND "+staff+"ta.grade_level_id=ax.grade_level_id AND (ta.stream_id IS NULL OR ta.stream_id=ax.stream_id) AND ta.learning_area_id=ax.learning_area_id AND ta.academic_year_id=ax.academic_year_id))";
+  if(name==="attendance-sessions")return " AND "+staff+"ta.grade_level_id=attendance_sessions.grade_level_id AND (ta.stream_id IS NULL OR ta.stream_id=attendance_sessions.stream_id) AND ta.academic_year_id=attendance_sessions.academic_year_id )";
+  if(name==="attendance-records")return " AND EXISTS (SELECT 1 FROM attendance_sessions ats WHERE ats.id=attendance_records.session_id AND "+staff+"ta.grade_level_id=ats.grade_level_id AND (ta.stream_id IS NULL OR ta.stream_id=ats.stream_id) AND ta.academic_year_id=ats.academic_year_id))";
+  if(name==="timetable")return " AND "+staff+"ta.grade_level_id=timetable_entries.grade_level_id AND (ta.stream_id IS NULL OR ta.stream_id=timetable_entries.stream_id) AND ta.learning_area_id=timetable_entries.learning_area_id AND ta.academic_year_id=timetable_entries.academic_year_id )";
+  return "";
 }
 async function existsInSchool(db,table,ref,schoolId){
   if(!ref)return true;
@@ -85,6 +128,7 @@ export async function onRequestGet({request,env}){
   const a=await auth(request,env);if(a.error)return a.error;
   const url=new URL(request.url),name=url.pathname.split("/").pop(),cfg=resources[name];
   if(!cfg)return json({ok:false,error:"Unknown data resource."},404);
+  const needed=permissionFor(name,false);if(!allowed(a.user,needed))return json({ok:false,error:"Your role does not have permission to view this resource."},403);
   if(name==="platform-users"){
     try{const rows=await env.DB.prepare("SELECT id,full_name,username,email,phone,status,created_at,last_login_at FROM users ORDER BY created_at DESC LIMIT 1000").all();return json({ok:true,records:rows.results||[]});}
     catch(error){console.error("NAVSTAR platform users read",error);return json({ok:false,error:"Could not load platform users."},500)}
@@ -103,15 +147,16 @@ export async function onRequestGet({request,env}){
       return json({ok:true,analytics:{schools:Number(q[0]?.total||0),activeSchools:Number(q[1]?.total||0),learners:Number(q[2]?.total||0),users:Number(q[3]?.total||0),invoices:Number(q[4]?.total||0),confirmedPayments:Number(q[5]?.total||0),schoolRegistrationsByMonth:q[6]?.results||[]}});
     }catch(error){console.error("NAVSTAR analytics read",error);return json({ok:false,error:"Could not load platform analytics."},500)}
   }
-  const schoolId=url.searchParams.get("schoolId");
-  if(cfg.scope&&!schoolId)return json({ok:false,error:"schoolId is required for school records."},400);
-  if(cfg.scope&&!await env.DB.prepare("SELECT 1 FROM schools WHERE id=?").bind(schoolId).first())return json({ok:false,error:"School not found."},404);
+  const scope=await schoolScope(request,a.user,cfg);if(scope.error)return scope.error;const schoolId=scope.schoolId;
+  if(cfg.scope&&!await env.DB.prepare("SELECT 1 FROM schools WHERE id=? AND status='active'").bind(schoolId).first())return json({ok:false,error:"School not found or inactive."},404);
   try{
     if(name==="settings"){
       const rows=await env.DB.prepare("SELECT setting_key,setting_value,updated_at FROM platform_settings ORDER BY setting_key").all();
       return json({ok:true,records:rows.results||[]});
     }
-    let sql="SELECT * FROM "+cfg.table+(cfg.scope?" WHERE school_id=?":"")+(name==="audit"?" ORDER BY created_at DESC LIMIT 500":" ORDER BY "+(cfg.scope?"rowid":"rowid")+" DESC LIMIT 1000");
+    let sql="SELECT * FROM "+cfg.table+(cfg.scope?" WHERE school_id=?":"");
+    if(cfg.scope)sql+=teacherFilter(name,a.user);
+    sql+=(name==="audit"?" ORDER BY created_at DESC LIMIT 500":" ORDER BY rowid DESC LIMIT 1000");
     const rows=cfg.scope?await env.DB.prepare(sql).bind(schoolId).all():await env.DB.prepare(sql).all();
     return json({ok:true,records:rows.results||[]});
   }catch(error){console.error("NAVSTAR data read",name,error);return json({ok:false,error:"Could not load "+name+" from the database."},500)}
@@ -120,12 +165,16 @@ export async function onRequestPost({request,env}){
   const a=await auth(request,env);if(a.error)return a.error;
   const name=new URL(request.url).pathname.split("/").pop(),cfg=resources[name];
   if(!cfg)return json({ok:false,error:"Unknown data resource."},404);
+  if(!allowed(a.user,permissionFor(name,true)))return json({ok:false,error:"Your role does not have permission to change this resource."},403);
   if(cfg.readOnly)return json({ok:false,error:"This resource is read-only."},405);
   let body;try{body=await request.json()}catch{return json({ok:false,error:"Invalid record data."},400)}
   const values=bodyFields(body,cfg);
   for(const key of cfg.required)if(values[key]===undefined||values[key]===null||values[key]==="")return json({ok:false,error:key+" is required."},400);
-  const schoolId=cfg.scope?values.school_id:values.school_id||null;
-  if(cfg.scope&&!await env.DB.prepare("SELECT 1 FROM schools WHERE id=?").bind(schoolId).first())return json({ok:false,error:"School not found."},404);
+  const schoolId=cfg.scope?(a.user.is_super_admin?values.school_id:a.user.school_id):(values.school_id||null);
+  if(cfg.scope&&!schoolId)return json({ok:false,error:"School workspace is required."},400);
+  if(cfg.scope&&!a.user.is_super_admin&&values.school_id&&values.school_id!==a.user.school_id)return json({ok:false,error:"You cannot create records for another school."},403);
+  if(cfg.scope&&!await env.DB.prepare("SELECT 1 FROM schools WHERE id=? AND status='active'").bind(schoolId).first())return json({ok:false,error:"School not found or inactive."},404);
+  if(cfg.scope)values.school_id=schoolId;
   const refError=await validateRefs(env.DB,cfg,values,schoolId);if(refError)return json({ok:false,error:refError},400);
   const recordId=id();
   try{
@@ -158,8 +207,10 @@ export async function onRequestPatch({request,env}){
   if(!Object.keys(values).length)return json({ok:false,error:"No editable fields were supplied."},400);
   try{
     const where=cfg.scope?"id=? AND school_id=?":"id=?";
-    const schoolId=cfg.scope?String(body.school_id||new URL(request.url).searchParams.get("schoolId")||""):"";
+    const requested=String(body.school_id||new URL(request.url).searchParams.get("schoolId")||"");
+    const schoolId=cfg.scope?(a.user.is_super_admin?requested:a.user.school_id):"";
     if(cfg.scope&&!schoolId)return json({ok:false,error:"schoolId is required for school records."},400);
+    if(cfg.scope&&!a.user.is_super_admin&&requested&&requested!==a.user.school_id)return json({ok:false,error:"You cannot update records in another school."},403);
     const current=await env.DB.prepare("SELECT * FROM "+cfg.table+" WHERE "+where).bind(...(cfg.scope?[recordId,schoolId]:[recordId])).first();
     if(!current)return json({ok:false,error:"Record not found in the selected school."},404);
     const refError=await validateRefs(env.DB,cfg,values,schoolId);if(refError)return json({ok:false,error:refError},400);
