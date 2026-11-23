@@ -133,17 +133,25 @@ export async function getAuthenticatedSession(request, env) {
     LIMIT 1
   `).bind(tokenHash).first();
   if(!row)return null;
+  const roleRows=await env.DB.prepare("SELECT r.id,r.role_key,r.role_name FROM user_role_assignments a JOIN roles r ON r.id=a.role_id WHERE a.user_id=? AND a.school_id IS ? ORDER BY CASE r.role_key WHEN 'school_admin' THEN 0 WHEN 'principal' THEN 1 WHEN 'school_owner' THEN 2 WHEN 'deputy_principal' THEN 3 WHEN 'director_of_studies' THEN 4 WHEN 'deputy_director_of_studies' THEN 5 WHEN 'senior_teacher' THEN 6 WHEN 'head_of_department' THEN 7 WHEN 'teacher' THEN 8 WHEN 'class_teacher' THEN 9 WHEN 'parent_guardian' THEN 20 WHEN 'student_learner' THEN 21 ELSE 10 END").bind(row.id,row.school_id??null).all();
+  const roleKeysRaw=(roleRows.results||[]).map(x=>x.role_key);
+  const roleNames=(roleRows.results||[]).map(x=>x.role_name);
+  const roleKeys=roleKeysRaw.map(k=>k==='parent_guardian'?'parent':k==='student_learner'?'student':k);
   let permissions=[];
-  if(row.role_key==='super_admin')permissions=['*'];
+  if(roleKeysRaw.includes('super_admin'))permissions=['*'];
   else {
-    const p=await env.DB.prepare(`SELECT p.permission_key FROM role_permissions rp
-      JOIN permissions p ON p.id=rp.permission_id WHERE rp.role_id=?`).bind(row.role_id).all();
-    permissions=(p.results||[]).map(x=>x.permission_key);
-    if(row.role_key==='school_admin')permissions.push('school.users.manage','school.settings.manage');
+    const roleIds=(roleRows.results||[]).map(x=>x.id);
+    if(roleIds.length){
+      const marks=roleIds.map(()=>'?').join(',');
+      const p=await env.DB.prepare("SELECT DISTINCT p.permission_key FROM role_permissions rp JOIN permissions p ON p.id=rp.permission_id WHERE rp.role_id IN ("+marks+")").bind(...roleIds).all();
+      permissions=(p.results||[]).map(x=>x.permission_key);
+    }
+    if(roleKeysRaw.includes('school_admin'))permissions.push('school.users.manage','school.settings.manage');
+    permissions=[...new Set(permissions)];
   }
   let scope={};try{scope=JSON.parse(row.scope_json||'{}')}catch{}
   const normalizedRoleKey=row.role_key==='parent_guardian'?'parent':row.role_key==='student_learner'?'student':row.role_key;
-  return {...row,role_key:normalizedRoleKey,permissions,scope,is_super_admin:row.role_key==='super_admin'};
+  return {...row,role_key:normalizedRoleKey,role_keys:roleKeys,role_names:roleNames,permissions,scope,is_super_admin:row.role_key==='super_admin'};
 }
 async function issueSession(env, request, userId, remember = false) {
   const token = randomHex(32);
@@ -261,7 +269,7 @@ export async function onRequestPostLogin({ request, env }) {
 export async function onRequestGetMe({request,env}) {
  const user=await getAuthenticatedSession(request,env);
  if(!user)return json({ok:false,authenticated:false},401);
- return json({ok:true,authenticated:true,user:{id:user.id,fullName:user.full_name,username:user.username,email:user.email,phone:user.phone,role:user.role_name,roleKey:user.role_key,schoolId:user.school_id||null,schoolName:user.school_name||null,permissions:user.permissions,scope:user.scope,designation:user.designation,organisationName:user.organisation_name,profilePhotoUrl:user.profile_photo_url,country:user.country,timezone:user.timezone,currency:user.currency}});
+ return json({ok:true,authenticated:true,user:{id:user.id,fullName:user.full_name,username:user.username,email:user.email,phone:user.phone,role:user.role_name,roleKey:user.role_key,roleKeys:user.role_keys||[user.role_key],roleNames:user.role_names||[user.role_name],schoolId:user.school_id||null,schoolName:user.school_name||null,permissions:user.permissions,scope:user.scope,designation:user.designation,organisationName:user.organisation_name,profilePhotoUrl:user.profile_photo_url,country:user.country,timezone:user.timezone,currency:user.currency}});
 }
 export async function onRequestPostLogout({ request, env }) {
   const token = cookieValue(request, COOKIE);
