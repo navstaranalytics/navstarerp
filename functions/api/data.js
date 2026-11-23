@@ -246,6 +246,7 @@ export async function onRequestPost({request,env}){
   const name=new URL(request.url).pathname.split("/").pop(),cfg=resources[name];
   if(!cfg)return json({ok:false,error:"Unknown data resource."},404);
   if(!allowed(a.user,permissionFor(name,true)))return json({ok:false,error:"Your role does not have permission to change this resource."},403);
+  if(name==="grades"&&!a.user.is_super_admin)return json({ok:false,error:"Grade levels are configured by Navstar Super Admin. School Admins may create streams only."},403);
   if(name==="grade-boundaries")await ensureGradeBoundaryScope(env.DB);
   if(cfg.readOnly)return json({ok:false,error:"This resource is read-only."},405);
   let body;try{body=await request.json()}catch{return json({ok:false,error:"Invalid record data."},400)}
