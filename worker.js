@@ -16,7 +16,7 @@ import {
   onRequestPostProfile,
   onRequestPostChangePassword,
   onRequestPostPasswordResetRequest,
-  onRequestPostPasswordResetConfirm,
+  onRequestPostPasswordResetConfirm,\n  onRequestPostUsernameRecoveryRequest,\n  onRequestPostUsernameRecoveryConfirm,
   getSuperAdminSession
 } from "./functions/api/auth.js";
 
@@ -95,7 +95,7 @@ export default {
       if (request.method !== "POST") return new Response("Method not allowed", { status: 405, headers: { Allow: "POST" } });
       return accountLookupPost({ request, env });
     }
-    if (route === "/api/auth/password-reset/request") {
+    if (route === "/api/auth/username-recovery/request") {\n      if (request.method !== "POST") return new Response("Method not allowed", { status: 405, headers: { Allow: "POST" } });\n      return onRequestPostUsernameRecoveryRequest({ request, env });\n    }\n    if (route === "/api/auth/username-recovery/confirm") {\n      if (request.method !== "POST") return new Response("Method not allowed", { status: 405, headers: { Allow: "POST" } });\n      return onRequestPostUsernameRecoveryConfirm({ request, env });\n    }\n    if (route === "/api/auth/password-reset/request") {
       if (request.method !== "POST") return new Response("Method not allowed", { status: 405, headers: { Allow: "POST" } });
       return onRequestPostPasswordResetRequest({ request, env });
     }
