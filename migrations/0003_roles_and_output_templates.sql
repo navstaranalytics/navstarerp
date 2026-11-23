@@ -92,7 +92,7 @@ SELECT r.id,p.id FROM roles r JOIN permissions p ON p.permission_key IN (
 
 -- Parent and learner accounts only receive their linked-personal information.
 INSERT OR IGNORE INTO role_permissions(role_id,permission_id)
-SELECT r.id,p.id FROM roles r JOIN permissions p ON p.permission_key IN ('reports.view','profile.self')
+SELECT r.id,p.id FROM roles r JOIN permissions p ON p.permission_key IN ('profile.self')
 WHERE r.school_id IS NULL AND r.role_key IN ('parent_guardian','student_learner');
 
 CREATE TABLE IF NOT EXISTS platform_output_templates (
