@@ -1,6 +1,7 @@
 import { getSuperAdminSession } from "./auth.js";
 export async function onRequestPost({request,env}){
  const user=await getSuperAdminSession(request,env);if(!user)return Response.json({ok:false,error:"Super Admin sign-in required."},{status:403});
+ try{const done=await env.DB.prepare("SELECT 1 FROM schema_migrations WHERE version=?").bind("0004_support_desk").first();if(done)return Response.json({ok:true,alreadyApplied:true,executed:0,message:"Navstar support desk is already installed."},{headers:{"Cache-Control":"no-store"}})}catch(e){console.error("Support migration status check failed",e)}
  const sql=[
  "CREATE TABLE IF NOT EXISTS support_tickets(id TEXT PRIMARY KEY,school_id TEXT NOT NULL REFERENCES schools(id) ON DELETE CASCADE,opened_by TEXT NOT NULL REFERENCES users(id),subject TEXT NOT NULL,category TEXT NOT NULL DEFAULT 'general',priority TEXT NOT NULL DEFAULT 'normal' CHECK(priority IN ('low','normal','high','urgent')),status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open','in_progress','resolved','closed')),created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')))",
  "CREATE INDEX IF NOT EXISTS ix_support_tickets_school ON support_tickets(school_id,status,updated_at)",
