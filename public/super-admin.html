@@ -213,6 +213,56 @@ editPlan=function(name){
       }catch(error){toast(error.message||"Plan changes could not be saved.")}
     });
 };
+
+let d1Invoices=[],d1Payments=[];
+async function loadBillingRecordsFromDatabase(){
+  const collected=await Promise.all(schools.map(async school=>{
+    const [invoices,payments]=await Promise.all([
+      schoolApi("/api/data/invoices?schoolId="+encodeURIComponent(school.id)),
+      schoolApi("/api/data/payments?schoolId="+encodeURIComponent(school.id))
+    ]);
+    return {school,invoices:invoices.records||[],payments:payments.records||[]};
+  }));
+  d1Invoices=collected.flatMap(x=>x.invoices.map(row=>({...row,school_name:x.school.name,school_code:x.school.code})));
+  d1Payments=collected.flatMap(x=>x.payments.map(row=>({...row,school_name:x.school.name,school_code:x.school.code,invoice_number:d1Invoices.find(i=>i.id===row.invoice_id)?.invoice_number||"—"})));
+}
+function databaseBillingPage(){
+  const outstanding=d1Invoices.filter(x=>!["paid","void"].includes(x.status)).reduce((sum,x)=>sum+Math.max(0,Number(x.total||0)-Number(x.amount_paid||0)),0);
+  return head("REVENUE OPERATIONS","Billing & payments","Issue school invoices, record verified payments and monitor balances from central D1.","<button class='btn' data-action='new-invoice'>＋ Create invoice</button> <button class='btn light' data-action='new-payment'>＋ Record payment</button>")+
+    '<div class="stats">'+stat("Invoices",d1Invoices.length,"Stored in D1","▤")+stat("Paid",d1Invoices.filter(x=>x.status==="paid").length,"Fully settled","✓")+stat("Outstanding",money(outstanding),"Remaining invoice balances","◷")+stat("Payments",d1Payments.length,"Recorded centrally","▦")+'</div>'+
+    panel("School invoices","Invoice number, school, dates, totals and settlement status",'<div class="table-wrap"><table><thead><tr><th>Invoice</th><th>School</th><th>Issue date</th><th>Due date</th><th>Total</th><th>Paid</th><th>Balance</th><th>Status</th></tr></thead><tbody>'+(d1Invoices.map(x=>'<tr><td><b>'+esc(x.invoice_number)+'</b></td><td>'+esc(x.school_name)+'</td><td>'+esc(x.issue_date||"—")+'</td><td>'+esc(x.due_date||"—")+'</td><td>'+money(x.total)+'</td><td>'+money(x.amount_paid)+'</td><td>'+money(Math.max(0,Number(x.total||0)-Number(x.amount_paid||0)))+'</td><td>'+pill(x.status)+'</td></tr>').join("")||'<tr><td colspan="8" class="empty">No invoices have been issued.</td></tr>')+'</tbody></table></div>')+
+    panel("Payment register","Manual and provider-confirmed payments; confirmed payments update the linked invoice balance",'<div class="table-wrap"><table><thead><tr><th>Received</th><th>School</th><th>Invoice</th><th>Amount</th><th>Method</th><th>Reference</th><th>Status</th></tr></thead><tbody>'+(d1Payments.map(x=>'<tr><td>'+esc(x.received_at||x.created_at||"—")+'</td><td>'+esc(x.school_name)+'</td><td>'+esc(x.invoice_number)+'</td><td>'+money(x.amount)+'</td><td>'+esc(x.method)+'</td><td>'+esc(x.provider_reference||"—")+'</td><td>'+pill(x.status)+'</td></tr>').join("")||'<tr><td colspan="7" class="empty">No payments have been recorded.</td></tr>')+'</tbody></table></div>')+
+    '<div class="notice">Invoices and payment records are saved in D1. This register records payments; it does not initiate M-Pesa or card charges. Payment-provider integration and reconciliation remain separate work.</div>';
+}
+pages.billing=databaseBillingPage;
+function createD1Invoice(){
+  const options=schools.map(x=>'<option value="'+esc(x.id)+'">'+esc(x.name)+' · '+esc(x.code||"")+'</option>').join("");
+  openModal("Create school invoice",'<div class="form-grid"><div class="form-field"><label>School *</label><select name="school_id" required>'+options+'</select></div>'+field("Invoice number *","invoice_number","e.g. NAV-2026-0001")+field("Subtotal (KES) *","subtotal","0","number",0)+field("Discount (KES)","discount","0","number",0)+field("Tax (KES)","tax","0","number",0)+field("Issue date","issue_date","","date",new Date().toISOString().slice(0,10))+field("Due date","due_date","","date")+'<div class="form-field"><label>Invoice status</label><select name="status"><option value="draft">Draft</option><option value="issued">Issued</option></select></div></div><div class="notice">Invoice total is calculated as subtotal − discount + tax. The initial amount paid is always zero.</div>',async d=>{
+    const school=schools.find(x=>x.id===d.get("school_id")),number=d.get("invoice_number")?.trim(),subtotal=Number(d.get("subtotal")),discount=Number(d.get("discount"))||0,tax=Number(d.get("tax"))||0;
+    if(!school||!number||!Number.isFinite(subtotal)||subtotal<0||discount<0||tax<0||discount>subtotal){toast("Check the school, invoice number and amounts.");return}
+    const total=Math.round((subtotal-discount+tax)*100)/100;
+    try{
+      await schoolApi("/api/data/invoices",{method:"POST",body:JSON.stringify({school_id:school.id,subscription_id:school.billing?.subscriptionId||null,invoice_number:number,currency:"KES",subtotal,discount,tax,total,amount_paid:0,status:d.get("status"),issue_date:d.get("issue_date")||null,due_date:d.get("due_date")||null})});
+      await loadBillingRecordsFromDatabase();closeModal();render();toast("Invoice saved in D1.");
+    }catch(error){toast(error.message||"Invoice could not be saved.")}
+  });
+}
+function recordD1Payment(){
+  const schoolOptions=schools.map(x=>'<option value="'+esc(x.id)+'">'+esc(x.name)+'</option>').join("");
+  const invoiceOptions=d1Invoices.filter(x=>!["paid","void"].includes(x.status)).map(x=>'<option value="'+esc(x.id)+'" data-school="'+esc(x.school_id)+'">'+esc(x.invoice_number)+' · '+esc(x.school_name)+' · balance '+money(Math.max(0,Number(x.total||0)-Number(x.amount_paid||0)))+'</option>').join("");
+  openModal("Record school payment",'<div class="form-grid"><div class="form-field"><label>School *</label><select name="school_id" required>'+schoolOptions+'</select></div><div class="form-field"><label>Invoice *</label><select name="invoice_id" required>'+invoiceOptions+'</select></div>'+field("Amount received (KES) *","amount","0","number",0)+selectField("Payment method","method",["M-Pesa","Bank transfer","Card","Cash","Cheque","Other"],"M-Pesa")+field("Provider / receipt reference","provider_reference","Transaction reference")+field("Received date","received_at","","date",new Date().toISOString().slice(0,10))+'<div class="form-field"><label>Verification status</label><select name="status"><option value="pending">Pending verification</option><option value="confirmed">Confirmed / received</option></select></div></div><div class="notice">Only choose Confirmed after verifying the money was received. A confirmed payment is added to the invoice paid amount.</div>',async d=>{
+    const schoolId=d.get("school_id"),invoiceId=d.get("invoice_id"),invoice=d1Invoices.find(x=>x.id===invoiceId),amount=Number(d.get("amount"));
+    if(!invoice||invoice.school_id!==schoolId||!Number.isFinite(amount)||amount<=0){toast("Choose an invoice belonging to the selected school and enter a valid amount.");return}
+    try{
+      await schoolApi("/api/data/payments",{method:"POST",body:JSON.stringify({school_id:schoolId,invoice_id:invoiceId,amount,currency:"KES",method:d.get("method"),provider_reference:d.get("provider_reference"),received_at:d.get("received_at")||null,status:d.get("status")})});
+      await loadBillingRecordsFromDatabase();closeModal();render();toast("Payment record saved in D1.");
+    }catch(error){toast(error.message||"Payment could not be saved.")}
+  });
+  const schoolSelect=$('modalBody').querySelector('[name="school_id"]'),invoiceSelect=$('modalBody').querySelector('[name="invoice_id"]');
+  schoolSelect.addEventListener("change",()=>{invoiceSelect.innerHTML=invoiceOptions;[...invoiceSelect.options].forEach(option=>{if(option.value)option.hidden=option.dataset.school!==schoolSelect.value});invoiceSelect.value=""});
+  schoolSelect.dispatchEvent(new Event("change"));
+}
+document.body.addEventListener("click",e=>{const b=e.target.closest("[data-action]");if(!b)return;if(b.dataset.action==="new-invoice")createD1Invoice();if(b.dataset.action==="new-payment")recordD1Payment()});
 document.querySelectorAll('[data-page]').forEach(b=>b.onclick=()=>go(b.dataset.page));$('view').addEventListener('click',e=>{let b=e.target.closest('[data-action],[data-page-go]');if(!b)return;if(b.dataset.pageGo){go(b.dataset.pageGo);return}let a=b.dataset.action,id=b.dataset.id;if(a==='add-school')addSchool();if(a==='school-details')schoolDetails(id);if(a==='add-user')addUser();if(a==='compose')compose();if(a==='add-plan')addPlan();if(a==='edit-plan')editPlan(b.dataset.plan);if(a==='school-status'){let s=schools.find(x=>x.id===id);if(s){s.status=s.status==='Active'?'Suspended':'Active';save(KEY,schools);log('School status changed',s.name+' → '+s.status);render();toast('School status updated locally.')}}if(a==='user-status'){let u=users.find(x=>x.id===id);if(u){u.status=u.status==='Active'?'Disabled':'Active';save(USERKEY,users);log('Platform user status changed',u.email+' → '+u.status);render()}}if(a==='export-schools'){let cols=['name','code','county','category','level','curriculum','plan','status','email','phone','created'];let csv=[cols.join(','),...schools.map(s=>cols.map(k=>'"'+String(s[k]??'').replace(/"/g,'""')+'"').join(','))].join('\r\n');let url=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));let x=document.createElement('a');x.href=url;x.download='navstar-school-directory.csv';x.click();URL.revokeObjectURL(url)}});
 $('closeModal').onclick=closeModal;$('cancelModal').onclick=closeModal;$('modal').onclick=e=>{if(e.target===$('modal'))closeModal()};$('helpBtn').onclick=()=>toast('Use the left navigation to manage each platform area.');$('globalSearch').onkeydown=e=>{if(e.key==='Enter'){go('schools');setTimeout(()=>{let x=$('schoolSearch');if(x){x.value=e.target.value;x.dispatchEvent(new Event('input'))}},0)}};
 
@@ -571,6 +621,7 @@ loadSignedInUser();
     await loadPlatformUsersFromDatabase();
     await loadPlansFromDatabase();
     await loadSchoolBillingFromDatabase();
+    await loadBillingRecordsFromDatabase();
     await loadAnnouncementsFromDatabase();
     await loadAuditFromDatabase();
     await loadOverviewFromDatabase();
