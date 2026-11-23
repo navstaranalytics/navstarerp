@@ -294,10 +294,11 @@ async function loadSystemHealth(){
   try{
     const response=await fetch("/api/health",{credentials:"same-origin",cache:"no-store"}),health=await response.json();
     set("apiHealth",health.ok?"Healthy":"Unavailable",health.service||"Worker API");
-    set("databaseHealth",health.database==="connected"?"Connected":"Unavailable",health.error||"Central D1 connectivity");
+    const dbReady=health.database==="connected"&&health.schema==="ready";
+    set("databaseHealth",dbReady?"Ready":health.database==="connected"?"Schema incomplete":"Unavailable",health.error||"D1 connection and required Navstar tables");
     const apiBadge=$("apiHealthBadge"),dbBadge=$("databaseHealthBadge");
     if(apiBadge)apiBadge.innerHTML=health.ok?'<span class="pill active">Healthy</span>':'<span class="pill suspended">Unavailable</span>';
-    if(dbBadge)dbBadge.innerHTML=health.database==="connected"?'<span class="pill active">Connected</span>':'<span class="pill suspended">Unavailable</span>';
+    if(dbBadge)dbBadge.innerHTML=dbReady?'<span class="pill active">Schema ready</span>':'<span class="pill suspended">Needs attention</span>';
   }catch(error){set("apiHealth","Unavailable","Health endpoint could not be reached");set("databaseHealth","Unknown","D1 health could not be verified")}
   try{
     const response=await fetch("/api/storage/status",{credentials:"same-origin",cache:"no-store"}),data=await response.json();
