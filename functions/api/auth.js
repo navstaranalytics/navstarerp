@@ -99,6 +99,43 @@ export async function getSuperAdminSession(request, env) {
   `).bind(tokenHash).first();
   return row || null;
 }
+
+export async function getAuthenticatedSession(request, env) {
+  if (!env?.DB) return null;
+  const token=cookieValue(request,COOKIE);
+  if(!token||token.length<40)return null;
+  const tokenHash=await digest(token);
+  const row=await env.DB.prepare(`
+    SELECT u.id,u.full_name,u.username,u.email,u.phone,u.status,
+      r.role_key,r.role_name,a.school_id,a.scope_json,
+      sc.name AS school_name,sc.status AS school_status,
+      sm.membership_status
+    FROM auth_sessions s
+    JOIN users u ON u.id=s.user_id
+    JOIN user_role_assignments a ON a.user_id=u.id
+    JOIN roles r ON r.id=a.role_id
+    LEFT JOIN school_memberships sm ON sm.user_id=u.id AND sm.school_id=a.school_id
+    LEFT JOIN schools sc ON sc.id=a.school_id
+    WHERE s.token_hash=? AND s.revoked_at IS NULL
+      AND s.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now')
+      AND u.status='active'
+      AND ((a.school_id IS NULL AND r.role_key='super_admin')
+        OR (a.school_id IS NOT NULL AND sm.membership_status='active' AND sc.status='active'))
+    ORDER BY CASE WHEN r.role_key='super_admin' THEN 0 ELSE 1 END
+    LIMIT 1
+  `).bind(tokenHash).first();
+  if(!row)return null;
+  let permissions=[];
+  if(row.role_key==='super_admin')permissions=['*'];
+  else {
+    const p=await env.DB.prepare(`SELECT p.permission_key FROM role_permissions rp
+      JOIN permissions p ON p.id=rp.permission_id WHERE rp.role_id=(SELECT role_id FROM user_role_assignments WHERE user_id=? AND school_id=? LIMIT 1)`).bind(row.id,row.school_id).all();
+    permissions=(p.results||[]).map(x=>x.permission_key);
+    if(row.role_key==='school_admin')permissions.push('school.users.manage','school.settings.manage');
+  }
+  let scope={};try{scope=JSON.parse(row.scope_json||'{}')}catch{}
+  return {...row,permissions,scope,is_super_admin:row.role_key==='super_admin'};
+}
 async function issueSession(env, request, userId, remember = false) {
   const token = randomHex(32);
   const maxAge = remember ? 30 * 24 * 3600 : SESSION_HOURS * 3600;
@@ -163,65 +200,55 @@ export async function onRequestPostSetupAdmin({ request, env }) {
   }
 }
 
+
 export async function onRequestPostLogin({ request, env }) {
-  if (!env.DB) return json({ ok: false, error: "Database connection is unavailable." }, 503);
-  let body;
-  try { body = await request.json(); } catch { return json({ ok: false, error: "Enter your username and password." }, 400); }
-  const identifier = normalize(body.identifier);
-  const password = String(body.password || "");
-  if (!/^[a-z0-9._-]{3,32}$/.test(identifier) || !password || password.length > 128) {
-    return json({ ok: false, error: "Enter your username/email and password." }, 400);
-  }
+  if (!env.DB) return json({ ok:false,error:"Database connection is unavailable." },503);
+  let body;try{body=await request.json()}catch{return json({ok:false,error:"Enter your username and password."},400)}
+  const username=normalize(body.identifier),password=String(body.password||"");
+  if(!/^[a-z0-9._-]{3,32}$/.test(username)||!password||password.length>128)
+    return json({ok:false,error:"Enter your username and password."},400);
   try {
     await env.DB.prepare(`CREATE TABLE IF NOT EXISTS auth_login_attempts (
-      identifier TEXT PRIMARY KEY, failed_count INTEGER NOT NULL DEFAULT 0,
-      locked_until TEXT, updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
-    )`).run();
-    const attempt = await env.DB.prepare("SELECT failed_count, locked_until FROM auth_login_attempts WHERE identifier = ?").bind(identifier).first();
-    if (attempt?.locked_until && attempt.locked_until > new Date().toISOString()) {
-      return json({ ok: false, error: "Too many unsuccessful attempts. Please wait 15 minutes before trying again." }, 429);
+      identifier TEXT PRIMARY KEY,failed_count INTEGER NOT NULL DEFAULT 0,locked_until TEXT,
+      updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')))`).run();
+    const attempt=await env.DB.prepare("SELECT failed_count,locked_until FROM auth_login_attempts WHERE identifier=?").bind(username).first();
+    if(attempt?.locked_until&&attempt.locked_until>new Date().toISOString())
+      return json({ok:false,error:"Too many unsuccessful attempts. Please wait 15 minutes before trying again."},429);
+    const user=await env.DB.prepare(`
+      SELECT u.id,u.password_hash,u.status,r.role_key,r.role_name,a.school_id,sc.name AS school_name
+      FROM users u JOIN user_role_assignments a ON a.user_id=u.id
+      JOIN roles r ON r.id=a.role_id
+      LEFT JOIN school_memberships sm ON sm.user_id=u.id AND sm.school_id=a.school_id
+      LEFT JOIN schools sc ON sc.id=a.school_id
+      WHERE u.username_normalized=? AND
+        ((a.school_id IS NULL AND r.role_key='super_admin') OR
+         (a.school_id IS NOT NULL AND sm.membership_status='active' AND sc.status='active'))
+      ORDER BY CASE WHEN r.role_key='super_admin' THEN 0 ELSE 1 END LIMIT 1
+    `).bind(username).first();
+    const valid=user&&user.status==='active'&&await verifyPassword(password,user.password_hash);
+    if(!valid){
+      const failures=Number(attempt?.failed_count||0)+1,lockedUntil=failures>=5?new Date(Date.now()+15*60*1000).toISOString():null;
+      await env.DB.prepare(`INSERT INTO auth_login_attempts(identifier,failed_count,locked_until,updated_at)
+        VALUES(?,?,?,strftime('%Y-%m-%dT%H:%M:%fZ','now')) ON CONFLICT(identifier) DO UPDATE SET
+        failed_count=excluded.failed_count,locked_until=excluded.locked_until,updated_at=excluded.updated_at`)
+        .bind(username,failures>=5?0:failures,lockedUntil).run();
+      await audit(env,user?.id,"auth.login","denied",{reason:"invalid_credentials"});
+      return json({ok:false,error:"The username or password is incorrect, or the account is not active."},401);
     }
-    const user = await env.DB.prepare(`
-      SELECT u.id, u.password_hash, u.status
-      FROM users u
-      JOIN user_role_assignments a ON a.user_id = u.id AND a.school_id IS NULL
-      JOIN roles r ON r.id = a.role_id AND r.role_key = 'super_admin'
-      WHERE u.username_normalized = ?
-      LIMIT 1
-    `).bind(identifier).first();
-    const valid = user && user.status === "active" && await verifyPassword(password, user.password_hash);
-    if (!valid) {
-      const failures = Number(attempt?.failed_count || 0) + 1;
-      const lockedUntil = failures >= 5 ? new Date(Date.now() + 15 * 60 * 1000).toISOString() : null;
-      await env.DB.prepare(`INSERT INTO auth_login_attempts (identifier, failed_count, locked_until, updated_at)
-        VALUES (?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))
-        ON CONFLICT(identifier) DO UPDATE SET failed_count = excluded.failed_count,
-        locked_until = excluded.locked_until, updated_at = excluded.updated_at`)
-        .bind(identifier, failures >= 5 ? 0 : failures, lockedUntil).run();
-      await audit(env, user?.id, "auth.login", "denied", { reason: "invalid_credentials" });
-      return json({ ok: false, error: "The username/email or password is incorrect, or the account is not active." }, 401);
-    }
-    await env.DB.prepare("DELETE FROM auth_login_attempts WHERE identifier = ?").bind(identifier).run();
-    const issued = await issueSession(env, request, user.id, body.remember === true);
-    const token = issued.token;
-    await env.DB.prepare("UPDATE users SET last_login_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?").bind(user.id).run();
-    await audit(env, user.id, "auth.login", "success");
-    return json({ ok: true, message: "Signed in successfully.", redirect: "/super-admin.html" }, 200, {
-      "Set-Cookie": sessionCookie(token, issued.maxAge)
-    });
-  } catch {
-    return json({ ok: false, error: "Sign-in is temporarily unavailable. Please try again." }, 503);
-  }
+    await env.DB.prepare("DELETE FROM auth_login_attempts WHERE identifier=?").bind(username).run();
+    const issued=await issueSession(env,request,user.id,body.remember===true);
+    await env.DB.prepare("UPDATE users SET last_login_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?").bind(user.id).run();
+    await audit(env,user.id,"auth.login","success",{role:user.role_key,schoolId:user.school_id||null});
+    const redirect=user.role_key==='super_admin'?'/super-admin.html':'/school-portal.html';
+    return json({ok:true,message:"Signed in successfully.",redirect,user:{fullName:user.full_name,username,role:user.role_name,roleKey:user.role_key,schoolId:user.school_id||null,schoolName:user.school_name||null}},200,{"Set-Cookie":sessionCookie(issued.token,issued.maxAge)});
+  }catch(error){console.error("NAVSTAR login failure:",String(error?.message||error));return json({ok:false,error:"Sign-in is temporarily unavailable. Please try again."},503)}
 }
 
-export async function onRequestGetMe({ request, env }) {
-  const user = await getSuperAdminSession(request, env);
-  if (!user) return json({ ok: false, authenticated: false }, 401);
-  return json({ ok: true, authenticated: true, user: {
-    id: user.id, fullName: user.full_name, username: user.username, email: user.email,
-    phone: user.phone, designation: user.designation, organisationName: user.organisation_name, profilePhotoUrl: user.profile_photo_url,
-    country: user.country, timezone: user.timezone, currency: user.currency
-  } });
+
+export async function onRequestGetMe({request,env}) {
+ const user=await getAuthenticatedSession(request,env);
+ if(!user)return json({ok:false,authenticated:false},401);
+ return json({ok:true,authenticated:true,user:{id:user.id,fullName:user.full_name,username:user.username,email:user.email,phone:user.phone,role:user.role_name,roleKey:user.role_key,schoolId:user.school_id||null,schoolName:user.school_name||null,permissions:user.permissions,scope:user.scope}});
 }
 export async function onRequestPostLogout({ request, env }) {
   const token = cookieValue(request, COOKIE);
