@@ -11,7 +11,10 @@ const statements = [
 "INSERT OR IGNORE INTO role_permissions(role_id,permission_id) SELECT 'role_admissions',id FROM permissions WHERE permission_key IN ('learners.view','learners.manage','classes.manage','reports.view','profile.self')",
 "INSERT OR IGNORE INTO role_permissions(role_id,permission_id) SELECT 'role_parent',id FROM permissions WHERE permission_key IN ('portal.parent','profile.self')",
 "INSERT OR IGNORE INTO role_permissions(role_id,permission_id) SELECT 'role_student',id FROM permissions WHERE permission_key IN ('portal.learner','profile.self')",
-"INSERT OR IGNORE INTO schema_migrations(version,description) VALUES('0003_role_access_control','School administrator role and role permission catalogue')"
+"INSERT OR IGNORE INTO schema_migrations(version,description) VALUES('0003_role_access_control','School administrator role and role permission catalogue')",
+"CREATE TABLE IF NOT EXISTS learner_user_links (id TEXT PRIMARY KEY, school_id TEXT NOT NULL REFERENCES schools(id) ON DELETE CASCADE, learner_id TEXT NOT NULL REFERENCES learners(id) ON DELETE CASCADE, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, created_by TEXT REFERENCES users(id) ON DELETE SET NULL, created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')), UNIQUE(school_id,learner_id), UNIQUE(school_id,user_id))",
+"CREATE INDEX IF NOT EXISTS ix_learner_user_links_user ON learner_user_links(school_id,user_id)",
+"INSERT OR IGNORE INTO schema_migrations(version,description) VALUES('0004_learner_portal_links','Secure learner account links for learner portal')"
 ];
 export async function onRequestPost({request,env}) {
  if(!env.DB)return Response.json({ok:false,error:"Database connection is unavailable."},{status:503});
@@ -19,11 +22,10 @@ export async function onRequestPost({request,env}) {
  if(!actor)return Response.json({ok:false,error:"A Super Admin session is required."},{status:401});
  try {
   const done=await env.DB.prepare("SELECT 1 FROM schema_migrations WHERE version='0003_role_access_control'").first();
-  if(done)return Response.json({ok:true,alreadyApplied:true,executed:0});
  } catch {}
  for(let i=0;i<statements.length;i++){
   try{await env.DB.prepare(statements[i]).run();}
   catch(error){console.error("NAVSTAR role migration",i+1,error);return Response.json({ok:false,failedStatement:i+1,error:String(error?.message||"Role migration failed").slice(0,220)},{status:500});}
  }
- return Response.json({ok:true,executed:statements.length,message:"School role and permission catalogue installed."});
+ return Response.json({ok:true,alreadyApplied:!!done,executed:statements.length,message:"School role, permission and learner portal schema installed."});
 }
