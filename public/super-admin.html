@@ -279,6 +279,36 @@ saveExtra=function(){
     .then(()=>{const status=$("saveState");if(status)status.textContent="Platform workspace preferences saved centrally in D1";})
     .catch(error=>{console.error("Navstar platform workspace persistence failed:",String(error?.message||error));toast(error.message||"Platform settings could not be saved to D1.");});
 };
+
+systemPage=function(){
+  const card=(label,id,detail,icon)=>'<div class="stat"><div class="stat-label">'+label+'<span class="stat-icon">'+icon+'</span></div><b id="'+id+'">Checking…</b><small id="'+id+'Detail">'+detail+'</small></div>';
+  return head("OPERATIONS MONITORING","System health","Live checks for the Navstar Worker API, central D1 database and configured file storage.")+
+    '<div class="stats">'+card("Frontend","frontendHealth","This dashboard is currently loaded","◫")+card("Backend API","apiHealth","Checking /api/health","⌘")+card("Database","databaseHealth","Checking central D1","▤")+card("File storage","storageHealth","Checking D1 / R2 configuration","▣")+'</div>'+
+    panel("Service readiness","Current configuration and live connectivity checks",'<div class="list"><div class="list-row"><div><b>Web application</b><small>Navstar Super Admin workspace</small></div>'+pill("Loaded")+'</div><div class="list-row"><div><b>API and authentication</b><small>Cloudflare Worker routes</small></div><span id="apiHealthBadge">'+pill("Checking")+'</span></div><div class="list-row"><div><b>Tenant database</b><small>Cloudflare D1</small></div><span id="databaseHealthBadge">'+pill("Checking")+'</span></div><div class="list-row"><div><b>Document storage</b><small>R2 when bound; D1 fallback otherwise</small></div><span id="storageHealthBadge">'+pill("Checking")+'</span></div><div class="list-row"><div><b>Email delivery</b><small>Resend sender configuration; delivery must be tested with a real recipient</small></div>'+pill("Not live-tested")+'</div><div class="list-row"><div><b>Payment gateway</b><small>M-Pesa Daraja / card processing</small></div>'+pill("Not connected")+'</div></div>')+
+    panel("Incident register","Operational incidents and maintenance windows",'<div class="empty">Automated monitoring and incident alerting are not yet configured.</div>');
+};
+pages.system=systemPage;
+async function loadSystemHealth(){
+  const set=(id,value,detail)=>{const el=$(id),sub=$(id+"Detail");if(el)el.textContent=value;if(sub&&detail)sub.textContent=detail};
+  set("frontendHealth","Loaded","Current dashboard session");
+  try{
+    const response=await fetch("/api/health",{credentials:"same-origin",cache:"no-store"}),health=await response.json();
+    set("apiHealth",health.ok?"Healthy":"Unavailable",health.service||"Worker API");
+    set("databaseHealth",health.database==="connected"?"Connected":"Unavailable",health.error||"Central D1 connectivity");
+    const apiBadge=$("apiHealthBadge"),dbBadge=$("databaseHealthBadge");
+    if(apiBadge)apiBadge.innerHTML=health.ok?'<span class="pill active">Healthy</span>':'<span class="pill suspended">Unavailable</span>';
+    if(dbBadge)dbBadge.innerHTML=health.database==="connected"?'<span class="pill active">Connected</span>':'<span class="pill suspended">Unavailable</span>';
+  }catch(error){set("apiHealth","Unavailable","Health endpoint could not be reached");set("databaseHealth","Unknown","D1 health could not be verified")}
+  try{
+    const response=await fetch("/api/storage/status",{credentials:"same-origin",cache:"no-store"}),data=await response.json();
+    if(!response.ok||!data.ok)throw new Error(data.error||"Storage status unavailable");
+    const storage=data.storage;
+    set("storageHealth",storage.fileStorage,storage.message);
+    const badge=$("storageHealthBadge");if(badge)badge.innerHTML='<span class="pill '+(storage.r2Available?"active":"pending")+'">'+esc(storage.fileStorage)+'</span>';
+  }catch(error){set("storageHealth","Unknown",error.message||"Storage configuration could not be checked")}
+}
+const renderBeforeHealth=render;
+render=function(){renderBeforeHealth();if(page==="system")loadSystemHealth()};
 document.querySelectorAll('[data-page]').forEach(b=>b.onclick=()=>go(b.dataset.page));$('view').addEventListener('click',e=>{let b=e.target.closest('[data-action],[data-page-go]');if(!b)return;if(b.dataset.pageGo){go(b.dataset.pageGo);return}let a=b.dataset.action,id=b.dataset.id;if(a==='add-school')addSchool();if(a==='school-details')schoolDetails(id);if(a==='add-user')addUser();if(a==='compose')compose();if(a==='add-plan')addPlan();if(a==='edit-plan')editPlan(b.dataset.plan);if(a==='school-status'){let s=schools.find(x=>x.id===id);if(s){s.status=s.status==='Active'?'Suspended':'Active';save(KEY,schools);log('School status changed',s.name+' → '+s.status);render();toast('School status updated locally.')}}if(a==='user-status'){let u=users.find(x=>x.id===id);if(u){u.status=u.status==='Active'?'Disabled':'Active';save(USERKEY,users);log('Platform user status changed',u.email+' → '+u.status);render()}}if(a==='export-schools'){let cols=['name','code','county','category','level','curriculum','plan','status','email','phone','created'];let csv=[cols.join(','),...schools.map(s=>cols.map(k=>'"'+String(s[k]??'').replace(/"/g,'""')+'"').join(','))].join('\r\n');let url=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));let x=document.createElement('a');x.href=url;x.download='navstar-school-directory.csv';x.click();URL.revokeObjectURL(url)}});
 $('closeModal').onclick=closeModal;$('cancelModal').onclick=closeModal;$('modal').onclick=e=>{if(e.target===$('modal'))closeModal()};$('helpBtn').onclick=()=>toast('Use the left navigation to manage each platform area.');$('globalSearch').onkeydown=e=>{if(e.key==='Enter'){go('schools');setTimeout(()=>{let x=$('schoolSearch');if(x){x.value=e.target.value;x.dispatchEvent(new Event('input'))}},0)}};
 
