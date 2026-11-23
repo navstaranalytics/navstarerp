@@ -235,6 +235,7 @@ export async function onRequestGet({request,env}){
       return json({ok:true,records:rows.results||[]});
     }
     let sql="SELECT * FROM "+cfg.table+(cfg.scope?" WHERE school_id=?":"");
+    if(name==="grades"&&!a.user.is_super_admin)sql+=" AND is_active=1";
     if(cfg.scope)sql+=teacherFilter(name,a.user);
     sql+=(name==="audit"?" ORDER BY created_at DESC LIMIT 500":" ORDER BY rowid DESC LIMIT 1000");
     const rows=cfg.scope?await env.DB.prepare(sql).bind(schoolId).all():await env.DB.prepare(sql).all();
