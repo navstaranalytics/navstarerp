@@ -49,7 +49,7 @@ function configuredGradeSpecs(levels){
  if(selected.some(x=>/junior/i.test(x))||selected.some(x=>/^Grade (7|8|9)$/.test(x)))specs.push(...[7,8,9].map(n=>["G"+n,"Grade "+n,n+1,"Junior School"]));
  if(selected.some(x=>/senior/i.test(x))||selected.some(x=>/^Grade (10|11|12)$/.test(x)))specs.push(...[10,11,12].map(n=>["G"+n,"Grade "+n,n+1,"Senior School"]));
  if(selected.some(x=>/8-4-4 primary/i.test(x)))specs.push(...Array.from({length:8},(_,i)=>["STD"+(i+1),"Standard "+(i+1),i+1,"Primary"]));
- if(selected.some(x=>/8-4-4|secondary/i.test(x)))specs.push(...[1,2,3,4].map(n=>["FORM"+n,"Form "+n,20+n,"Secondary"]));
+ if(selected.some(x=>/^8-4-4 secondary$/i.test(x)||/^secondary$/i.test(x)))specs.push(...[1,2,3,4].map(n=>["FORM"+n,"Form "+n,20+n,"Secondary"]));
  for(const value of selected){const m=String(value).match(/^(Grade (?:[1-9]|1[0-2])|Form [1-4]|PP[12])$/i);if(m&&!specs.some(x=>x[0].toLowerCase()===m[1].replace(/\s/g,"").toLowerCase())){const name=m[1],code=name.replace(/\s/g,"").toUpperCase(),level=/^PP/.test(code)||/^Grade [1-6]$/i.test(name)?"Primary":/^Grade [7-9]$/i.test(name)?"Junior School":/^Grade 1[0-2]$/i.test(name)?"Senior School":"Secondary";specs.push([code,name,specs.length+1,level]);}}
  return specs;
 }
