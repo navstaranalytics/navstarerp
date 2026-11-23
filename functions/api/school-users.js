@@ -1,4 +1,4 @@
-import { getAuthenticatedSession, hashPassword, passwordPolicy } from "./auth.js";
+import { getAuthenticatedSession, hashPassword } from "./auth.js";
 const json=(data,status=200)=>Response.json(data,{status,headers:{"Cache-Control":"no-store"}});
 const id=()=>crypto.randomUUID();
 const norm=v=>String(v||"").trim().toLowerCase();
@@ -28,12 +28,12 @@ export async function onRequestPost({request,env}) {
  if(!schoolId||(!actor.is_super_admin&&actor.school_id!==schoolId))return json({ok:false,error:"You cannot create accounts in another school's workspace."},403);
  if(!actor.is_super_admin&&!actor.permissions.includes("school.users.manage"))return json({ok:false,error:"You do not have permission to manage school users."},403);
  let body;try{body=await request.json()}catch{return json({ok:false,error:"Enter valid account details."},400)}
- const fullName=clean(body.fullName),username=norm(body.username),email=norm(body.email),phone=clean(body.phone),roleKey=norm(body.roleKey),password=String(body.password||"");
- if(!fullName||fullName.length>120||!/^[a-z0-9._-]{3,32}$/.test(username)||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||email.length>190||!allowedRoles.has(roleKey)||!passwordPolicy(password))
-  return json({ok:false,error:"Enter a valid name, username, email, role and a password meeting the platform password rules."},400);
+ const fullName=clean(body.fullName),username=norm(body.username),email=norm(body.email),phone=clean(body.phone),roleKey=norm(body.roleKey);
+ if(!fullName||fullName.length>120||!/^[a-z0-9._-]{3,32}$/.test(username)||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||email.length>190||!allowedRoles.has(roleKey))
+  return json({ok:false,error:"Enter a valid name, username, email and role."},400);
  try {
   const usernameTaken=await env.DB.prepare("SELECT 1 AS found FROM users WHERE username_normalized=? LIMIT 1").bind(username).first();
-  if(usernameTaken)return json({ok:false,error:"That username is already taken across NAVSTAR. Please choose a different username."},409);
+  if(usernameTaken)return json({ok:false,error:"That username is already taken across Navstar. Please choose a different username."},409);
   const emailTaken=await env.DB.prepare("SELECT 1 AS found FROM users WHERE email_normalized=? LIMIT 1").bind(email).first();
   if(emailTaken)return json({ok:false,error:"That email address is already registered. Use a different email address."},409);
   const school=await env.DB.prepare("SELECT id,status FROM schools WHERE id=?").bind(schoolId).first();
@@ -46,7 +46,7 @@ export async function onRequestPost({request,env}) {
   if(roleKey==="student"&&learnerNumbers.length!==1)return json({ok:false,error:"A learner account must be linked to exactly one learner."},400);
   const linkedLearners=[];
   for(const admission of learnerNumbers){const learner=await env.DB.prepare("SELECT id FROM learners WHERE school_id=? AND admission_number=?").bind(schoolId,admission).first();if(!learner)return json({ok:false,error:"Learner admission number "+admission+" was not found in this school."},404);linkedLearners.push(learner.id);}
-  const userId=id(),membershipId=id(),assignmentId=id(),passwordHash=await hashPassword(password);
+  const userId=id(),membershipId=id(),assignmentId=id();\n  const bootstrapPassword=Array.from(crypto.getRandomValues(new Uint8Array(32)),b=>b.toString(16).padStart(2,"0")).join("");\n  const passwordHash=await hashPassword(bootstrapPassword);
   const statements=[
    env.DB.prepare("INSERT INTO users(id,email,email_normalized,username,username_normalized,phone,full_name,password_hash,status,password_changed_at) VALUES(?,?,?,?,?,?,?,?,'active',strftime('%Y-%m-%dT%H:%M:%fZ','now'))").bind(userId,email,email,username,username,phone||null,fullName,passwordHash),
    env.DB.prepare("INSERT INTO school_memberships(id,school_id,user_id,membership_status,job_title,joined_at) VALUES(?,?,?,'active',?,strftime('%Y-%m-%dT%H:%M:%fZ','now'))").bind(membershipId,schoolId,userId,role.role_name),
@@ -61,9 +61,22 @@ export async function onRequestPost({request,env}) {
   if(roleKey==="student")statements.push(env.DB.prepare("INSERT INTO learner_user_links(id,school_id,learner_id,user_id,created_by) VALUES(?,?,?,?,?)").bind(id(),schoolId,linkedLearners[0],userId,actor.id));
   statements.push(env.DB.prepare("INSERT INTO audit_logs(id,actor_user_id,school_id,action,resource_type,resource_id,outcome,details_json) VALUES(?,?,?,'school.user.created','user',?,'success',?)").bind(id(),actor.id,schoolId,userId,JSON.stringify({username,role:roleKey,linkedLearners:linkedLearners.length})));
   await env.DB.batch(statements);
-  return json({ok:true,message:"School account created successfully.",user:{id:userId,fullName,username,email,role:role.role_name,roleKey,schoolId}},201);
+  let emailDelivery="not_configured";
+  if(env.RESEND_API_KEY){
+   const schoolInfo=await env.DB.prepare("SELECT name,school_code,contact_email,contact_phone,county FROM schools WHERE id=?").bind(schoolId).first();
+   const from=env.MAIL_FROM||"Navstar Analytics <onboarding@resend.dev>";
+   const loginUrl=new URL("/login.html",new URL(request.url).origin).toString();
+   const safe=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+   const schoolName=schoolInfo?.name||"your school",roleName=role.role_name||roleKey;
+   const html="<div style='font-family:Arial,sans-serif;max-width:640px;margin:auto;color:#17233b'><div style='background:#10213c;color:white;padding:24px'><b style='font-size:22px'>Navstar Analytics</b><div>School management and education analytics</div></div><div style='padding:26px;border:1px solid #e5eaf2'><p>Hello "+safe(fullName)+",</p><h2>Your school account is ready</h2><p>Your account was created by the School Administrator of <b>"+safe(schoolName)+"</b>.</p><div style='background:#f3f6fb;padding:16px;border-radius:9px'><p><b>School:</b> "+safe(schoolName)+"</p><p><b>School code:</b> "+safe(schoolInfo?.school_code||"—")+"</p><p><b>School email:</b> "+safe(schoolInfo?.contact_email||"—")+"</p><p><b>School phone:</b> "+safe(schoolInfo?.contact_phone||"—")+"</p><p><b>County:</b> "+safe(schoolInfo?.county||"—")+"</p><p><b>Your name:</b> "+safe(fullName)+"</p><p><b>Username:</b> "+safe(username)+"</p><p><b>Your email:</b> "+safe(email)+"</p><p><b>Phone:</b> "+safe(phone||"—")+"</p><p><b>Role:</b> "+safe(roleName)+"</p></div><p>Sign in using your username. For security, your password is not included in this email. Select <b>Forgot password</b> and follow the one-time email code instructions to set your password.</p><p><a href='"+loginUrl+"'>Open Navstar login</a></p><p>Welcome,<br><b>Navstar Analytics</b></p></div></div>";
+   try{
+    const sent=await fetch("https://api.resend.com/emails",{method:"POST",headers:{"Authorization":"Bearer "+env.RESEND_API_KEY,"Content-Type":"application/json"},body:JSON.stringify({from,to:[email],subject:"Your "+roleName+" account · "+schoolName,html,text:"Hello "+fullName+",\\nSchool: "+schoolName+"\\nSchool code: "+(schoolInfo?.school_code||"—")+"\\nSchool email: "+(schoolInfo?.contact_email||"—")+"\\nSchool phone: "+(schoolInfo?.contact_phone||"—")+"\\nYour name: "+fullName+"\\nUsername: "+username+"\\nEmail: "+email+"\\nPhone: "+(phone||"—")+"\\nRole: "+roleName+"\\n\\nSign in at "+loginUrl+" using your username. Use Forgot password to receive an OTP and set your password.\\n\\nNavstar Analytics."})});
+    emailDelivery=sent.ok?"sent":"failed";if(!sent.ok)console.error("Navstar school user email failed:",sent.status,await sent.text());
+   }catch(error){emailDelivery="failed";console.error("Navstar school user email error:",String(error?.message||error));}
+  }
+  return json({ok:true,emailDelivery,message:"School account created. Account setup email sent where email delivery is configured.",user:{id:userId,fullName,username,email,role:role.role_name,roleKey,schoolId}},201);
  }catch(error){
   const message=String(error?.message||"");console.error("School user creation failed:",message);
-  const usernameNow=await env.DB.prepare("SELECT 1 AS found FROM users WHERE username_normalized=? LIMIT 1").bind(username).first().catch(()=>null);const emailNow=await env.DB.prepare("SELECT 1 AS found FROM users WHERE email_normalized=? LIMIT 1").bind(email).first().catch(()=>null);const conflict=/UNIQUE constraint/i.test(message);return json({ok:false,error:usernameNow?"That username is already taken across NAVSTAR. Please choose a different username.":emailNow?"That email address is already registered. Use a different email address.":conflict?"These account details are already registered. Please review the username and email.":"The school account could not be created. Check the account details and try again."},conflict?409:500);
+  const usernameNow=await env.DB.prepare("SELECT 1 AS found FROM users WHERE username_normalized=? LIMIT 1").bind(username).first().catch(()=>null);const emailNow=await env.DB.prepare("SELECT 1 AS found FROM users WHERE email_normalized=? LIMIT 1").bind(email).first().catch(()=>null);const conflict=/UNIQUE constraint/i.test(message);return json({ok:false,error:usernameNow?"That username is already taken across Navstar. Please choose a different username.":emailNow?"That email address is already registered. Use a different email address.":conflict?"These account details are already registered. Please review the username and email.":"The school account could not be created. Check the account details and try again."},conflict?409:500);
  }
 }
