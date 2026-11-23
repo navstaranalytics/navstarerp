@@ -30,7 +30,7 @@ export async function runScheduledAutomations(env,scheduledTime=new Date()){
  if(enabled.has("grace_transition")||enabled.has("suspension_enforcement")){
   const key=enabled.has("grace_transition")?"grace_transition":"suspension_enforcement";
   try{
-   const rows=await env.DB.prepare("SELECT ss.id,ss.school_id,ss.next_due_date,p.grace_period_days FROM school_subscriptions ss LEFT JOIN subscription_plans p ON p.id=ss.plan_id WHERE ss.next_due_date IS NOT NULL AND ss.next_due_date<? AND ss.status IN ('active','trial','past_due')").bind(today).all();
+   const rows=await env.DB.prepare("SELECT ss.id,ss.school_id,ss.next_due_date,p.grace_period_days FROM school_subscriptions ss JOIN schools s ON s.id=ss.school_id AND s.status='active' LEFT JOIN subscription_plans p ON p.id=ss.plan_id WHERE ss.next_due_date IS NOT NULL AND ss.next_due_date<? AND ss.status IN ('active','trial','past_due')").bind(today).all();
    let suspended=0,kept=0;
    for(const row of rows.results||[]){
     const late=Math.floor((Date.parse(today+"T00:00:00Z")-Date.parse(row.next_due_date+"T00:00:00Z"))/86400000),grace=graceDays??Number(row.grace_period_days||7);
