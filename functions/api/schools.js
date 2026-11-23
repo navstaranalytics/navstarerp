@@ -69,7 +69,7 @@ async function syncSchoolGradeLevels(db,schoolId,curriculum,levels){
 }
 function normalizeCurricula(body, fallback) {
  const allowed=["Kenyan CBE","Kenyan 8-4-4","International / Cambridge","Custom"];
- const values=Array.isArray(body.curricula)?body.curricula:(fallback?[fallback]:[]);
+ const values=Array.isArray(body.curricula)?body.curricula:(Array.isArray(fallback)?fallback:(fallback?[fallback]:[]));
  return [...new Set(values.map(clean).filter(x=>allowed.includes(x)))];
 }
 function validateCurricula(curricula,levels) {
@@ -262,7 +262,7 @@ export async function onRequestPatch({request,env}){
     try{selectedLevels=body.levels===undefined?JSON.parse(existing.school_levels_json||"[]"):(Array.isArray(body.levels)?body.levels:[])}catch{selectedLevels=[]}
     selectedLevels=[...new Set(selectedLevels.map(clean).filter(Boolean))];
     let previousCurricula=[];try{previousCurricula=JSON.parse(existing.curricula_json||"[]")}catch{}
-    const curricula=normalizeCurricula(body,previousCurricula[0]||existing.curriculum||"Kenyan CBE");
+    const curricula=normalizeCurricula(body,previousCurricula.length?previousCurricula:(existing.curriculum||"Kenyan CBE"));
     const curriculumIssue=validateCurricula(curricula,selectedLevels);if(curriculumIssue)return json({ok:false,error:curriculumIssue},400);
     const levels=JSON.stringify(selectedLevels);
     meta.modules=modulesForLevels(selectedLevels);
