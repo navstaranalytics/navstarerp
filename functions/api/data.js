@@ -104,13 +104,14 @@ async function validateTeacherWrite(db,user,name,values){
  if(name==="attendance-records"){
   const a=await db.prepare("SELECT academic_year_id,term_id,grade_level_id,stream_id FROM attendance_sessions WHERE id=? AND school_id=?").bind(values.session_id,user.school_id).first();
   if(!a)return "The attendance session is not available in your school.";
-  year=a.academic_year_id;term=a.term_id;grade=a.grade_level_id;stream=a.stream_id;area=null;pathway=null;
+  year=a.academic_year_id;term=a.term_id;grade=a.grade_level_id;stream=a.stream_id;area=null;pathway=undefined;
   const enrolled=await db.prepare("SELECT 1 FROM learner_enrollments WHERE learner_id=? AND school_id=? AND academic_year_id=? AND grade_level_id=? AND (stream_id IS ? OR stream_id=?) AND status='active'").bind(values.learner_id,user.school_id,year,grade,stream,stream).first();
   if(!enrolled)return "The learner is not enrolled in the class for this attendance session.";
  }
  if(!year||!grade)return "Academic year and grade are required for your allocated teaching scope.";
- let sql="SELECT 1 FROM teacher_allocations ta WHERE ta.school_id=? AND ta.staff_id=? AND ta.academic_year_id=? AND ta.grade_level_id=? AND (ta.stream_id IS NULL OR ta.stream_id IS ? OR ta.stream_id=?) AND (ta.term_id IS NULL OR ta.term_id=?) AND (ta.pathway IS NULL OR ta.pathway=?)";
- const args=[user.school_id,staff.id,year,grade,stream,stream,term??null,pathway??null];
+ let sql="SELECT 1 FROM teacher_allocations ta WHERE ta.school_id=? AND ta.staff_id=? AND ta.academic_year_id=? AND ta.grade_level_id=? AND (ta.stream_id IS NULL OR ta.stream_id IS ? OR ta.stream_id=?) AND (ta.term_id IS NULL OR ta.term_id=?)";
+ const args=[user.school_id,staff.id,year,grade,stream,stream,term??null];
+ if(pathway!==undefined){sql+=" AND (ta.pathway IS NULL OR ta.pathway=?)";args.push(pathway??null)}
  if(area){sql+=" AND ta.learning_area_id=?";args.push(area)}
  const allocation=await db.prepare(sql+" LIMIT 1").bind(...args).first();
  return allocation?null:"This action is outside your assigned academic year, term, grade, stream, learning area or pathway.";
