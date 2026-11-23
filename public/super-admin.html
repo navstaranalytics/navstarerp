@@ -263,6 +263,22 @@ function recordD1Payment(){
   schoolSelect.dispatchEvent(new Event("change"));
 }
 document.body.addEventListener("click",e=>{const b=e.target.closest("[data-action]");if(!b)return;if(b.dataset.action==="new-invoice")createD1Invoice();if(b.dataset.action==="new-payment")recordD1Payment()});
+
+const PLATFORM_WORKSPACES_KEY="navstar.platform.workspaces.v1";
+async function loadExtraFromDatabase(){
+  const data=await schoolApi("/api/data/settings");
+  const stored=(data.records||[]).find(x=>x.setting_key===PLATFORM_WORKSPACES_KEY);
+  if(stored?.setting_value){
+    try{extra={...extra,...JSON.parse(stored.setting_value)}}catch{throw new Error("Stored platform workspace preferences are unreadable.")}
+  }else{
+    await schoolApi("/api/data/settings",{method:"POST",body:JSON.stringify({setting_key:PLATFORM_WORKSPACES_KEY,setting_value:JSON.stringify(extra)})});
+  }
+}
+saveExtra=function(){
+  return schoolApi("/api/data/settings",{method:"POST",body:JSON.stringify({setting_key:PLATFORM_WORKSPACES_KEY,setting_value:JSON.stringify(extra)})})
+    .then(()=>{const status=$("saveState");if(status)status.textContent="Platform workspace preferences saved centrally in D1";})
+    .catch(error=>{console.error("Navstar platform workspace persistence failed:",String(error?.message||error));toast(error.message||"Platform settings could not be saved to D1.");});
+};
 document.querySelectorAll('[data-page]').forEach(b=>b.onclick=()=>go(b.dataset.page));$('view').addEventListener('click',e=>{let b=e.target.closest('[data-action],[data-page-go]');if(!b)return;if(b.dataset.pageGo){go(b.dataset.pageGo);return}let a=b.dataset.action,id=b.dataset.id;if(a==='add-school')addSchool();if(a==='school-details')schoolDetails(id);if(a==='add-user')addUser();if(a==='compose')compose();if(a==='add-plan')addPlan();if(a==='edit-plan')editPlan(b.dataset.plan);if(a==='school-status'){let s=schools.find(x=>x.id===id);if(s){s.status=s.status==='Active'?'Suspended':'Active';save(KEY,schools);log('School status changed',s.name+' → '+s.status);render();toast('School status updated locally.')}}if(a==='user-status'){let u=users.find(x=>x.id===id);if(u){u.status=u.status==='Active'?'Disabled':'Active';save(USERKEY,users);log('Platform user status changed',u.email+' → '+u.status);render()}}if(a==='export-schools'){let cols=['name','code','county','category','level','curriculum','plan','status','email','phone','created'];let csv=[cols.join(','),...schools.map(s=>cols.map(k=>'"'+String(s[k]??'').replace(/"/g,'""')+'"').join(','))].join('\r\n');let url=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));let x=document.createElement('a');x.href=url;x.download='navstar-school-directory.csv';x.click();URL.revokeObjectURL(url)}});
 $('closeModal').onclick=closeModal;$('cancelModal').onclick=closeModal;$('modal').onclick=e=>{if(e.target===$('modal'))closeModal()};$('helpBtn').onclick=()=>toast('Use the left navigation to manage each platform area.');$('globalSearch').onkeydown=e=>{if(e.key==='Enter'){go('schools');setTimeout(()=>{let x=$('schoolSearch');if(x){x.value=e.target.value;x.dispatchEvent(new Event('input'))}},0)}};
 
@@ -617,6 +633,7 @@ loadSignedInUser();
     const accessUpgrade=await accessResponse.json();
     if(!accessResponse.ok||!accessUpgrade.ok)throw new Error(accessUpgrade.error||'Role and permission setup failed.');
     await loadPlatformSettingsFromDatabase();
+    await loadExtraFromDatabase();
     await loadSchoolsFromDatabase();
     await loadPlatformUsersFromDatabase();
     await loadPlansFromDatabase();
