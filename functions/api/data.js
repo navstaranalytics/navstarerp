@@ -239,6 +239,14 @@ export async function onRequestPost({request,env}){
   if(cfg.scope&&!a.user.is_super_admin&&values.school_id&&values.school_id!==a.user.school_id)return json({ok:false,error:"You cannot create records for another school."},403);
   if(cfg.scope&&!await env.DB.prepare("SELECT 1 FROM schools WHERE id=?"+(a.user.is_super_admin?"":" AND status='active'")).bind(schoolId).first())return json({ok:false,error:"School not found or inactive."},404);
   if(cfg.scope)values.school_id=schoolId;
+  if(name==="learners"&&values.profile_json){
+    let profile;try{profile=typeof values.profile_json==="string"?JSON.parse(values.profile_json):values.profile_json}catch{return json({ok:false,error:"Learner profile details must be valid JSON."},400)}
+    const photoCode=String(profile?.photoCode||"").trim();
+    if(photoCode){
+      const duplicate=await env.DB.prepare("SELECT admission_number FROM learners WHERE school_id=? AND lower(json_extract(profile_json,'$.photoCode'))=lower(?)").bind(schoolId,photoCode).first();
+      if(duplicate)return json({ok:false,error:"That camera/passport photo code is already assigned to learner "+duplicate.admission_number+"."},409);
+    }
+  }
   const gradeError=await validateConfiguredGrade(env.DB,name,schoolId,values);if(gradeError)return json({ok:false,error:gradeError},403);
   if(name==="announcements")values.created_by=a.user.id;
   if(name==="attendance-sessions")values.taken_by=a.user.id;
