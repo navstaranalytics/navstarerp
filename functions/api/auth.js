@@ -335,7 +335,7 @@ export async function onRequestPostPasswordResetConfirm({ request, env }) {
   if(password!==confirm)return json({ok:false,error:"The new passwords do not match."},400);
   try{
     await ensurePasswordResetTable(env.DB);
-    const user=await env.DB.prepare(`SELECT u.id FROM users u JOIN user_role_assignments a ON a.user_id=u.id AND a.school_id IS NULL JOIN roles r ON r.id=a.role_id AND r.role_key='super_admin' WHERE u.username_normalized=? OR u.email_normalized=? LIMIT 1`).bind(identifier,identifier).first();
+    const user=await env.DB.prepare(`SELECT u.id FROM users u JOIN user_role_assignments a ON a.user_id=u.id AND a.school_id IS NULL JOIN roles r ON r.id=a.role_id AND r.role_key='super_admin' WHERE u.username_normalized=? LIMIT 1`).bind(identifier).first();
     if(!user)return json({ok:false,error:"The verification code is invalid or expired. Request a new code."},400);
     const reset=await env.DB.prepare("SELECT id,code_hash,expires_at,attempts FROM auth_password_resets WHERE user_id=? AND used_at IS NULL ORDER BY created_at DESC LIMIT 1").bind(user.id).first();
     if(!reset||reset.expires_at<=new Date().toISOString()||Number(reset.attempts)>=5)return json({ok:false,error:"The verification code is invalid or expired. Request a new code."},400);
