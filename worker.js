@@ -308,7 +308,7 @@ export default {
         if (data.ok && data.setupRequired) return Response.redirect(new URL("/setup-admin.html", url), 302);
       } catch {}
     }
-    const publicPages = ["/login.html", "/setup-admin.html", "/setup-database.html"];
+    const publicPages = ["/login.html", "/login", "/setup-admin.html", "/setup-admin", "/setup-database.html", "/setup-database"];
     if (!publicPages.includes(route) && !route.startsWith("/api/")) {
       const session = await getAuthenticatedSession(request, env);
       if (!session) {
