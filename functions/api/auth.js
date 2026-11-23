@@ -80,10 +80,9 @@ async function setupState(env) {
   return Number(row?.total || 0) === 0;
 }
 export async function getSuperAdminSession(request, env) {
-  if (!env?.DB) return null;
-  const token = cookieValue(request, COOKIE);
-  if (!token || token.length < 40) return null;
-  const tokenHash = await digest(token);
+  const user = await getAuthenticatedSession(request, env);
+  return user?.is_super_admin ? user : null;
+}
   const row = await env.DB.prepare(`
     SELECT u.id, u.full_name, u.username, u.email, u.phone, u.status,
            p.designation, p.organisation_name, p.profile_photo_url, p.country, p.timezone, p.currency,
@@ -113,6 +112,7 @@ export async function getAuthenticatedSession(request, env) {
   const tokenHash=await digest(token);
   const row=await env.DB.prepare(`
     SELECT u.id,u.full_name,u.username,u.email,u.phone,u.status,
+      s.created_at,s.last_seen_at,
       p.designation,p.organisation_name,COALESCE(u.profile_photo_url,p.profile_photo_url) AS profile_photo_url,p.country,p.timezone,p.currency,
       r.id AS role_id,r.role_key,r.role_name,a.school_id,a.scope_json,
       sc.name AS school_name,sc.status AS school_status,
@@ -133,6 +133,14 @@ export async function getAuthenticatedSession(request, env) {
     LIMIT 1
   `).bind(tokenHash).first();
   if(!row)return null;
+  let sessionPolicy={idle_timeout_minutes:30};
+  try{const setting=await env.DB.prepare("SELECT setting_value FROM platform_settings WHERE setting_key='session_policy'").first();if(setting?.setting_value){const parsed=JSON.parse(setting.setting_value);const minutes=Number(parsed.idle_timeout_minutes);if(Number.isInteger(minutes)&&minutes>=5&&minutes<=480)sessionPolicy={idle_timeout_minutes:minutes};}}catch(error){console.error("Session policy lookup failed:",String(error?.message||error));}
+  const lastActivity=Date.parse(row.last_seen_at||row.created_at||"");
+  if(Number.isFinite(lastActivity)&&Date.now()-lastActivity>sessionPolicy.idle_timeout_minutes*60000){
+    await env.DB.prepare("UPDATE auth_sessions SET revoked_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE token_hash=? AND revoked_at IS NULL").bind(tokenHash).run();
+    return null;
+  }
+  await env.DB.prepare("UPDATE auth_sessions SET last_seen_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE token_hash=? AND revoked_at IS NULL AND (last_seen_at IS NULL OR last_seen_at<strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 minute'))").bind(tokenHash).run();
   const roleRows=await env.DB.prepare("SELECT r.id,r.role_key,r.role_name FROM user_role_assignments a JOIN roles r ON r.id=a.role_id WHERE a.user_id=? AND a.school_id IS ? ORDER BY CASE r.role_key WHEN 'school_admin' THEN 0 WHEN 'principal' THEN 1 WHEN 'school_owner' THEN 2 WHEN 'deputy_principal' THEN 3 WHEN 'director_of_studies' THEN 4 WHEN 'deputy_director_of_studies' THEN 5 WHEN 'senior_teacher' THEN 6 WHEN 'head_of_department' THEN 7 WHEN 'teacher' THEN 8 WHEN 'class_teacher' THEN 9 WHEN 'parent_guardian' THEN 20 WHEN 'student_learner' THEN 21 ELSE 10 END").bind(row.id,row.school_id??null).all();
   const roleKeysRaw=(roleRows.results||[]).map(x=>x.role_key);
   let accessMode="full",accessNotice="",subscriptionStatus=null;
@@ -179,7 +187,7 @@ export async function getAuthenticatedSession(request, env) {
 }
 async function issueSession(env, request, userId, remember = false) {
   const token = randomHex(32);
-  const maxAge = remember ? 30 * 24 * 3600 : SESSION_HOURS * 3600;
+  const maxAge = SESSION_HOURS * 3600;
   const expiresAt = new Date(Date.now() + maxAge * 1000).toISOString();
   await env.DB.prepare(
     "INSERT INTO auth_sessions (id, user_id, token_hash, expires_at, user_agent) VALUES (?, ?, ?, ?, ?)"
@@ -284,7 +292,7 @@ export async function onRequestPostLogin({ request, env }) {
     const issued=await issueSession(env,request,user.id,body.remember===true);
     await env.DB.prepare("UPDATE users SET last_login_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?").bind(user.id).run();
     await audit(env,user.id,"auth.login","success",{role:user.role_key,schoolId:user.school_id||null});
-    const redirect=user.role_key==='super_admin'?'/super-admin.html':'/school-portal.html';
+    const redirect=user.role_key==='super_admin'?'/super-admin':'/school-portal';
     return json({ok:true,message:"Signed in successfully.",redirect,sessionToken:issued.token,user:{fullName:user.full_name,username,role:user.role_name,roleKey:user.role_key,schoolId:user.school_id||null,schoolName:user.school_name||null}});
   }catch(error){console.error("Navstar login failure:",String(error?.message||error));return json({ok:false,error:"Sign-in is temporarily unavailable. Please try again."},503)}
 }
