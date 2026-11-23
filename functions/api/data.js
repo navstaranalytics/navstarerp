@@ -279,6 +279,14 @@ export async function onRequestPost({request,env}){
       if(duplicate)return json({ok:false,error:"That camera/passport photo code is already assigned to learner "+duplicate.admission_number+"."},409);
     }
   }
+  if(["streams","classes","enrollments"].includes(name)&&values.grade_level_id){
+    const grade=await env.DB.prepare("SELECT is_active FROM grade_levels WHERE id=? AND school_id=?").bind(values.grade_level_id,schoolId).first();
+    if(!grade||Number(grade.is_active)!==1)return json({ok:false,error:"This grade is inactive or is not configured for the school. Activate it in Academic Setup first."},400);
+  }
+  if(name==="classes"&&values.stream_id&&values.grade_level_id){
+    const stream=await env.DB.prepare("SELECT grade_level_id FROM streams WHERE id=? AND school_id=?").bind(values.stream_id,schoolId).first();
+    if(!stream||stream.grade_level_id!==values.grade_level_id)return json({ok:false,error:"Choose a stream that belongs to the selected grade."},400);
+  }
   const gradeError=await validateConfiguredGrade(env.DB,name,schoolId,values);if(gradeError)return json({ok:false,error:gradeError},403);
   if(name==="announcements")values.created_by=a.user.id;
   if(name==="attendance-sessions")values.taken_by=a.user.id;
