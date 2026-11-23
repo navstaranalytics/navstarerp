@@ -41,3 +41,21 @@ A successful health response is `{"ok":true,"service":"NAVSTAR ERP API","databas
 ## Important
 
 The school directory and dashboards remain interface prototypes until their data operations are connected to authenticated, tenant-scoped server APIs. Do not enter real student or confidential school data until authentication, authorization, audit logging, backups, and tenant isolation are implemented and tested.
+
+## Scheduled automation
+
+The repository's `wrangler.jsonc` configures a daily Worker cron at 06:00 UTC (09:00 East Africa Time). The Super Admin must activate the desired tasks under **Terminology & Access Rules → Scheduled automations**. The first run occurs after the updated Worker is deployed and migration 0005 is applied.
+
+## M-Pesa Daraja secrets
+
+For online Navstar subscription payments, add these Worker variables/secrets in Cloudflare. Never commit their values:
+
+- `MPESA_CONSUMER_KEY` (secret)
+- `MPESA_CONSUMER_SECRET` (secret)
+- `MPESA_SHORTCODE`
+- `MPESA_PASSKEY` (secret)
+- `MPESA_CALLBACK_TOKEN` (secret; use a long random value)
+- `MPESA_ENV` (`sandbox` for testing, then `production`)
+- Optional: `MPESA_TRANSACTION_TYPE`
+
+See `MPESA-INTEGRATION.md` for the Daraja callback and sandbox test procedure. Online payment confirmation is not active until these values are configured and a test callback succeeds.
