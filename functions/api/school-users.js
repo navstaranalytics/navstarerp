@@ -38,7 +38,8 @@ export async function onRequestPost({request,env}) {
   if(emailTaken)return json({ok:false,error:"That email address is already registered. Use a different email address."},409);
   const school=await env.DB.prepare("SELECT id,status FROM schools WHERE id=?").bind(schoolId).first();
   if(!school||school.status!=="active")return json({ok:false,error:"The school workspace is not active."},409);
-  const role=await env.DB.prepare("SELECT id,role_name FROM roles WHERE role_key=? AND school_id IS NULL").bind(roleKey).first();
+  const databaseRoleKey=roleKey==="parent"?"parent_guardian":roleKey==="student"?"student_learner":roleKey;
+  const role=await env.DB.prepare("SELECT id,role_name FROM roles WHERE role_key=? AND school_id IS NULL").bind(databaseRoleKey).first();
   if(!role)return json({ok:false,error:"The selected role is not installed. Run the latest access-control upgrade."},503);
   if(roleKey==="student")await ensureLearnerLinkTable(env.DB);
   const learnerNumbers=Array.isArray(body.learnerAdmissionNumbers)?body.learnerAdmissionNumbers.map(clean).filter(Boolean):String(body.learnerAdmissionNumbers||"").split(",").map(clean).filter(Boolean);
