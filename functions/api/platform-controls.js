@@ -1,9 +1,9 @@
 import { getSuperAdminSession } from "./auth.js";
 const json=(data,status=200)=>Response.json(data,{status,headers:{"Cache-Control":"no-store"}});
-const allowed=new Set(["terminology","subscription_policy","scheduled_automations","system_guide"]);
+const allowed=new Set(["terminology","subscription_policy","scheduled_automations","system_guide","session_policy"]);
 export async function onRequestGet({request,env}){
  const user=await getSuperAdminSession(request,env);if(!user)return json({ok:false,error:"Only Super Admin can manage platform terminology and access policies."},403);
- try{const rows=await env.DB.prepare("SELECT setting_key,setting_value,updated_at FROM platform_settings WHERE setting_key IN ('terminology','subscription_policy','scheduled_automations','system_guide')").all();const settings={};for(const row of rows.results||[]){try{settings[row.setting_key]=JSON.parse(row.setting_value)}catch{settings[row.setting_key]=row.setting_value}}const runs=await env.DB.prepare("SELECT task_key,status,started_at,finished_at,summary_json,error_message FROM platform_automation_runs ORDER BY started_at DESC LIMIT 12").all().catch(()=>({results:[]}));return json({ok:true,settings,automationRuns:runs.results||[]})}
+ try{const rows=await env.DB.prepare("SELECT setting_key,setting_value,updated_at FROM platform_settings WHERE setting_key IN ('terminology','subscription_policy','scheduled_automations','system_guide','session_policy')").all();const settings={};for(const row of rows.results||[]){try{settings[row.setting_key]=JSON.parse(row.setting_value)}catch{settings[row.setting_key]=row.setting_value}}const runs=await env.DB.prepare("SELECT task_key,status,started_at,finished_at,summary_json,error_message FROM platform_automation_runs ORDER BY started_at DESC LIMIT 12").all().catch(()=>({results:[]}));return json({ok:true,settings,automationRuns:runs.results||[]})}
  catch(error){console.error("NAVSTAR platform controls read",error);return json({ok:false,error:"Could not load platform controls."},500)}
 }
 export async function onRequestPost({request,env}){
@@ -11,6 +11,11 @@ export async function onRequestPost({request,env}){
  let body;try{body=await request.json()}catch{return json({ok:false,error:"Invalid settings payload."},400)}
  const key=String(body.key||"");if(!allowed.has(key))return json({ok:false,error:"Unsupported platform control."},400);
  let value=body.value;if(!value||typeof value!=="object"||Array.isArray(value))return json({ok:false,error:"Settings must be a JSON object."},400);
+ if(key==="session_policy"){
+  const minutes=Number(value.idle_timeout_minutes);
+  if(!Number.isInteger(minutes)||minutes<5||minutes>480)return json({ok:false,error:"Inactive session timeout must be between 5 and 480 minutes."},400);
+  value={idle_timeout_minutes:minutes};
+ }
  if(key==="system_guide"){
   if(typeof value.title!=="string"||value.title.trim().length>140||typeof value.introduction!=="string"||value.introduction.length>3000||!Array.isArray(value.sections)||value.sections.length>20||value.sections.some(x=>!x||typeof x.heading!=="string"||x.heading.length>140||typeof x.body!=="string"||x.body.length>7000))return json({ok:false,error:"Guide title, introduction or section content is invalid."},400);
  }
