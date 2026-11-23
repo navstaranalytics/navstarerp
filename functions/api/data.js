@@ -160,7 +160,7 @@ export async function onRequestGet({request,env}){
   if(!cfg)return json({ok:false,error:"Unknown data resource."},404);
   const needed=permissionFor(name,false);if(!allowed(a.user,needed))return json({ok:false,error:"Your role does not have permission to view this resource."},403);
   if(name==="platform-users"){
-    try{const rows=await env.DB.prepare("SELECT id,full_name,username,email,phone,status,created_at,last_login_at FROM users ORDER BY created_at DESC LIMIT 1000").all();return json({ok:true,records:rows.results||[]});}
+    try{const rows=await env.DB.prepare("SELECT u.id,u.full_name,u.username,u.email,u.phone,u.status,u.created_at,u.last_login_at,r.role_key,r.role_name FROM users u JOIN user_role_assignments a ON a.user_id=u.id AND a.school_id IS NULL JOIN roles r ON r.id=a.role_id WHERE r.role_key IN ('super_admin','platform_operations','regional_administrator','finance_administrator','academic_standards_administrator','support_administrator') ORDER BY u.created_at DESC LIMIT 1000").all();return json({ok:true,records:rows.results||[]});}
     catch(error){console.error("NAVSTAR platform users read",error);return json({ok:false,error:"Could not load platform users."},500)}
   }
   if(name==="analytics"){
