@@ -150,8 +150,9 @@ export async function getAuthenticatedSession(request, env) {
     permissions=[...new Set(permissions)];
   }
   let scope={};try{scope=JSON.parse(row.scope_json||'{}')}catch{}
-  const normalizedRoleKey=row.role_key==='parent_guardian'?'parent':row.role_key==='student_learner'?'student':row.role_key;
-  return {...row,role_key:normalizedRoleKey,role_keys:roleKeys,role_names:roleNames,permissions,scope,is_super_admin:row.role_key==='super_admin'};
+  const primaryRoleKey=roleKeysRaw[0]||row.role_key,primaryRoleName=roleNames[0]||row.role_name,primaryRoleId=(roleRows.results||[])[0]?.id||row.role_id;
+  const normalizedRoleKey=primaryRoleKey==='parent_guardian'?'parent':primaryRoleKey==='student_learner'?'student':primaryRoleKey;
+  return {...row,role_id:primaryRoleId,role_name:primaryRoleName,role_key:normalizedRoleKey,role_keys:roleKeys,role_names:roleNames,permissions,scope,is_super_admin:roleKeysRaw.includes('super_admin')};
 }
 async function issueSession(env, request, userId, remember = false) {
   const token = randomHex(32);
