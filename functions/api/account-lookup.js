@@ -44,6 +44,7 @@ export async function onRequestPostUsernameAvailability({request,env}){
  if(!env.DB)return json({ok:false,error:"Username check is temporarily unavailable."},503);
  const actor=await getAuthenticatedSession(request,env);
  if(!actor)return json({ok:false,error:"Sign in to check username availability."},401);
+ if(!actor.is_super_admin&&!actor.permissions.includes("school.users.manage"))return json({ok:false,error:"You do not have permission to check account username availability."},403);
  let body;try{body=await request.json()}catch{return json({ok:false,error:"Enter a username."},400)}
  const username=norm(body.username),exclude=String(body.excludeUserId||"").trim();
  if(!/^[a-z0-9._-]{3,32}$/.test(username))return json({ok:false,available:false,error:"Use 3–32 letters, numbers, dots, underscores or hyphens."},400);
