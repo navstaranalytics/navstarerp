@@ -59,7 +59,8 @@ async function auth(request,env){
 const permissionFor=(name,write=false)=>{
   if(["plans","subscriptions","invoices","payments","regions","platform-users","analytics","settings","audit","ai-usage","integrations"].includes(name))return "platform.manage";
   if(name==="grade-boundaries")return "platform.manage";
-  if(["years","terms","grades","streams","learning-areas","classes","grading-schemes"].includes(name))return "academics.manage";
+  if(name==="classes")return "classes.manage";
+  if(["years","terms","grades","streams","learning-areas","grading-schemes"].includes(name))return "academics.manage";
   if(["staff"].includes(name))return "staff.manage";
   if(["learners","enrollments","guardians","transfers"].includes(name))return write?"learners.manage":"learners.view";
   if(name==="teacher-allocations")return "allocations.manage";
@@ -225,6 +226,8 @@ export async function onRequestPost({request,env}){
   const gradeError=await validateConfiguredGrade(env.DB,name,schoolId,values);if(gradeError)return json({ok:false,error:gradeError},403);
   if(name==="announcements")values.created_by=a.user.id;
   const refError=await validateRefs(env.DB,cfg,values,schoolId);if(refError)return json({ok:false,error:refError},400);
+    if(name==="classes"){const grade=values.grade_level_id??current.grade_level_id,streamId=values.stream_id??current.stream_id;const stream=await env.DB.prepare("SELECT grade_level_id FROM streams WHERE id=? AND school_id=?").bind(streamId,schoolId).first();if(!stream||stream.grade_level_id!==grade)return json({ok:false,error:"The selected stream must belong to the selected grade."},400);const teacherId=values.class_teacher_staff_id??current.class_teacher_staff_id;if(teacherId){const teacher=await env.DB.prepare("SELECT 1 FROM staff_profiles WHERE id=? AND school_id=? AND employment_status='active'").bind(teacherId,schoolId).first();if(!teacher)return json({ok:false,error:"Select an active staff member as class teacher."},400);}}
+  if(name==="classes"){const stream=await env.DB.prepare("SELECT grade_level_id FROM streams WHERE id=? AND school_id=?").bind(values.stream_id,schoolId).first();if(!stream||stream.grade_level_id!==values.grade_level_id)return json({ok:false,error:"The selected stream must belong to the selected grade."},400);if(values.class_teacher_staff_id){const teacher=await env.DB.prepare("SELECT 1 FROM staff_profiles WHERE id=? AND school_id=? AND employment_status='active'").bind(values.class_teacher_staff_id,schoolId).first();if(!teacher)return json({ok:false,error:"Select an active staff member as class teacher."},400);}}
   if(name==="payments"){if(values.status&&!["pending","confirmed","failed"].includes(values.status))return json({ok:false,error:"New payment status must be Pending, Confirmed or Failed. Reversals require a separate audited workflow."},400);values.recorded_by=a.user.id;values.currency=values.currency||"KES";}
   if(name==="invoices"){
     const subtotal=Number(values.subtotal??0),discount=Number(values.discount??0),tax=Number(values.tax??0),total=Number(values.total??0);
