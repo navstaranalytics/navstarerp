@@ -126,7 +126,7 @@ function addSchool(){
     if(code&&schools.some(x=>x.code?.toLowerCase()===code.toLowerCase())){toast('That institution code already exists.');return}
     const submit=$('modalForm')?.querySelector('[type="submit"]');if(submit){submit.disabled=true;submit.textContent='Saving to central database…'}
     try{
-      const payload={name,code,registrationNumber:d.get('registrationNumber'),county:d.get('county'),category:d.get('category'),ownership:d.get('ownership'),level:d.get('level'),curriculum:d.get('curriculum'),contact:d.get('contact'),email,phone:d.get('phone'),address:d.get('address'),plan:d.get('plan'),status:d.get('status'),levels:[]};
+      const payload={name,code,registrationNumber:d.get('registrationNumber'),county:d.get('county'),category:d.get('category'),ownership:d.get('ownership'),level:d.get('level'),curriculum:d.get('curriculum'),contact:d.get('contact'),email,phone:d.get('phone'),address:d.get('address'),plan:d.get('plan'),status:d.get('status'),levels:[],includeSampleData:d.get('includeSampleData')==='on'};
       const result=await schoolApi('/api/schools',{method:'POST',body:JSON.stringify(payload)});
       await loadSchoolsFromDatabase();
       const created=schools.find(x=>x.id===result.school?.id)||result.school;
