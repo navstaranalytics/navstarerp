@@ -7,12 +7,21 @@
     {
       "binding": "DB",
       "database_name": "navstar-erp-db",
-      "database_id": "7eead9ab-83ca-4867-96b1-183612dbf9e0"
+      "database_id": "7eead9ab-83ca-4867-96b1-183612dbf9e0",
+      "migrations_dir": "migrations"
     }
   ],
-  "ai": { "binding": "AI" },
+  "ai": {
+    "binding": "AI"
+  },
   "assets": {
     "directory": "./public",
-    "binding": "ASSETS"
+    "binding": "ASSETS",
+    "run_worker_first": true
+  },
+  "triggers": {
+    "crons": [
+      "0 6 * * *"
+    ]
   }
 }
