@@ -13,6 +13,7 @@ export async function onRequestPost({request,env}){
   if(!fullName||fullName.length>120||!/^[a-z0-9._-]{3,32}$/.test(username)||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||email.length>190||!phone||phone.length>40)
     return json({ok:false,error:"Enter a full name, username (3–32 letters/numbers/dots/underscores/hyphens), valid email and phone number."},400);
   try{
+    await env.DB.prepare("CREATE UNIQUE INDEX IF NOT EXISTS one_school_admin_per_school ON user_role_assignments(school_id) WHERE role_id='role_school_admin' AND school_id IS NOT NULL").run();
     const school=await env.DB.prepare("SELECT id,name,school_code,status,contact_email,contact_phone FROM schools WHERE id=?").bind(schoolId).first();
     if(!school)return json({ok:false,error:"School was not found."},404);
     const existing=await env.DB.prepare(`SELECT u.id,u.full_name,u.username,u.email,u.phone FROM school_memberships m
