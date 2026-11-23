@@ -12,7 +12,7 @@ const resources={
   terms:{table:"terms",scope:true,fields:["academic_year_id","name","start_date","end_date","status"],required:["school_id","academic_year_id","name","start_date","end_date"],refs:{academic_year_id:"academic_years"}},
   grades:{table:"grade_levels",scope:true,fields:["curriculum","stage_code","stage_name","stage_order","school_level","is_active"],required:["school_id","stage_code","stage_name"]},
   streams:{table:"streams",scope:true,fields:["grade_level_id","name","capacity","classroom","status"],required:["school_id","grade_level_id","name"],refs:{grade_level_id:"grade_levels"}},
-  "learning-areas":{table:"learning_areas",scope:true,fields:["curriculum","code","name","stage_code","pathway","is_active","subject_type","is_mandatory","source_template"],required:["school_id","name"]},
+  "learning-areas":{table:"learning_areas",scope:true,fields:["curriculum","code","name","stage_code","pathway","is_active","subject_type","is_mandatory","source_template","catalogue_code","school_customized"],required:["school_id","name"]},
   "learner-learning-areas":{table:"learner_learning_areas",scope:true,fields:["enrollment_id","learner_id","learning_area_id","selection_type","selected_by","status"],required:["school_id","enrollment_id","learner_id","learning_area_id"],refs:{enrollment_id:"learner_enrollments",learner_id:"learners",learning_area_id:"learning_areas"}},
   staff:{table:"staff_profiles",scope:true,fields:["user_id","staff_number","department","employment_type","employment_status","hire_date","profile_json"],required:["school_id"],refs:{user_id:"users"}},
   classes:{table:"classes",scope:true,fields:["academic_year_id","grade_level_id","stream_id","class_teacher_staff_id","capacity","room","status"],required:["school_id","academic_year_id","grade_level_id","stream_id"],refs:{academic_year_id:"academic_years",grade_level_id:"grade_levels",stream_id:"streams",class_teacher_staff_id:"staff_profiles"}},
@@ -271,7 +271,7 @@ export async function onRequestPost({request,env}){
   if(!cfg)return json({ok:false,error:"Unknown data resource."},404);
   if(!allowed(a.user,permissionFor(name,true)))return json({ok:false,error:"Your role does not have permission to change this resource."},403);
   if(name==="grades"&&!a.user.is_super_admin)return json({ok:false,error:"Grade levels are configured by Navstar Super Admin. School Admins may create streams only."},403);
-  if(name==="learning-areas"&&!a.user.is_super_admin)return json({ok:false,error:"Learning areas are provided by Navstar Super Admin. Schools may activate or deactivate optional areas only."},403);
+  if(name==="learning-areas"&&!a.user.is_super_admin)return json({ok:false,error:"Schools can edit existing learning-area names and codes, but only Navstar can add catalogue entries."},403);
   if(name==="grade-boundaries")await ensureGradeBoundaryScope(env.DB);
   if(cfg.readOnly)return json({ok:false,error:"This resource is read-only."},405);
   let body;try{body=await request.json()}catch{return json({ok:false,error:"Invalid record data."},400)}
@@ -453,7 +453,9 @@ export async function onRequestPatch({request,env}){
   }
   if(name==="learning-areas"&&!a.user.is_super_admin){
     let submitted;try{submitted=await request.clone().json()}catch{submitted={}}
-    if(Object.keys(submitted).some(k=>k!=="is_active")||submitted.is_active===undefined)return json({ok:false,error:"School Admins may only activate or deactivate optional learning areas supplied by Super Admin."},403);
+    const allowedFields=new Set(["is_active","name","code"]);
+    if(!Object.keys(submitted).length||Object.keys(submitted).some(k=>!allowedFields.has(k)))return json({ok:false,error:"Schools may edit only their own learning-area name, code and availability."},403);
+    if(submitted.is_active!==undefined&&Object.keys(submitted).some(k=>k!=="is_active"))return json({ok:false,error:"Save learning-area details and availability separately."},400);
   }
   if(name==="grade-boundaries")await ensureGradeBoundaryScope(env.DB);
   if(cfg.readOnly)return json({ok:false,error:"This resource is read-only."},405);
@@ -474,7 +476,14 @@ export async function onRequestPatch({request,env}){
     const current=await env.DB.prepare("SELECT * FROM "+cfg.table+" WHERE "+where).bind(...(cfg.scope?[recordId,schoolId]:[recordId])).first();
     if(!current)return json({ok:false,error:"Record not found in the selected school."},404);
     if(name==="learning-areas"&&!a.user.is_super_admin){
-      if(Number(current.is_mandatory)===1)return json({ok:false,error:"Mandatory learning areas cannot be deactivated."},403);
+      if(values.is_active!==undefined&&Number(current.is_mandatory)===1)return json({ok:false,error:"Mandatory learning areas cannot be deactivated."},403);
+      if(values.name!==undefined||values.code!==undefined){
+        const nextName=String(values.name??current.name??"").trim(),nextCode=String(values.code??current.code??"").trim().toUpperCase();
+        if(!nextName||nextName.length>160||!nextCode||nextCode.length>24||!/^[A-Z0-9_-]+$/.test(nextCode))return json({ok:false,error:"Enter a valid learning-area name and code (letters, numbers, hyphens or underscores)."},400);
+        const duplicate=await env.DB.prepare("SELECT 1 AS found FROM learning_areas WHERE school_id=? AND id<>? AND upper(code)=? LIMIT 1").bind(schoolId,recordId,nextCode).first();
+        if(duplicate)return json({ok:false,error:"That learning-area code is already used in this school."},409);
+        values.name=nextName;values.code=nextCode;values.school_customized=1;
+      }
     }
     const gradeError=await validateConfiguredGrade(env.DB,name,schoolId,values,current);if(gradeError)return json({ok:false,error:gradeError},403);
     const refError=await validateRefs(env.DB,cfg,values,schoolId);if(refError)return json({ok:false,error:refError},400);
