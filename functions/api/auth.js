@@ -108,7 +108,7 @@ export async function getAuthenticatedSession(request, env) {
   const row=await env.DB.prepare(`
     SELECT u.id,u.full_name,u.username,u.email,u.phone,u.status,
       p.designation,p.organisation_name,p.profile_photo_url,p.country,p.timezone,p.currency,
-      r.role_key,r.role_name,a.school_id,a.scope_json,
+      r.id AS role_id,r.role_key,r.role_name,a.school_id,a.scope_json,
       sc.name AS school_name,sc.status AS school_status,
       sm.membership_status
     FROM auth_sessions s
@@ -131,7 +131,7 @@ export async function getAuthenticatedSession(request, env) {
   if(row.role_key==='super_admin')permissions=['*'];
   else {
     const p=await env.DB.prepare(`SELECT p.permission_key FROM role_permissions rp
-      JOIN permissions p ON p.id=rp.permission_id WHERE rp.role_id=(SELECT role_id FROM user_role_assignments WHERE user_id=? AND school_id=? LIMIT 1)`).bind(row.id,row.school_id).all();
+      JOIN permissions p ON p.id=rp.permission_id WHERE rp.role_id=?`).bind(row.role_id).all();
     permissions=(p.results||[]).map(x=>x.permission_key);
     if(row.role_key==='school_admin')permissions.push('school.users.manage','school.settings.manage');
   }
