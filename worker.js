@@ -57,14 +57,11 @@ export default {
   },
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
-    // Resolve clean portal URLs internally instead of redirecting between
-    // extensionless and .html paths (which can loop behind the Assets binding).
-    if (url.pathname === "/login") url.pathname = "/login.html";
-    if (url.pathname === "/setup-admin") url.pathname = "/setup-admin.html";
-    if (url.pathname === "/setup-database") url.pathname = "/setup-database.html";
-    if (url.pathname === "/school-portal") url.pathname = "/school-portal.html";
-    if (url.pathname === "/super-admin") url.pathname = "/super-admin.html";
-    const route = url.pathname;
+    // Canonical public URLs never expose implementation filenames.
+    const cleanPages={"/login":"/login.html","/setup-admin":"/setup-admin.html","/setup-database":"/setup-database.html","/school-portal":"/school-portal.html","/super-admin":"/super-admin.html"};
+    const legacyToClean={"/login.html":"/login","/setup-admin.html":"/setup-admin","/setup-database.html":"/setup-database","/school-portal.html":"/school-portal","/super-admin.html":"/super-admin"};
+    if(legacyToClean[url.pathname]&&!url.pathname.startsWith("/api/"))return Response.redirect(new URL(legacyToClean[url.pathname]+url.search,url),301);
+    const route=url.pathname;
     if (route.startsWith("/api/") && !["/api/auth/login","/api/auth/me","/api/auth/logout","/api/health","/api/setup-status","/api/setup-database"].includes(route)) {
       const policySession = await getAuthenticatedSession(request, env);
       if (policySession && !policySession.is_super_admin) {
@@ -308,29 +305,31 @@ export default {
       try {
         const state = await setupStatusGet({ request, env, params: {}, data: {} });
         const data = await state.json();
-        if (data.ok && data.setupRequired) return Response.redirect(new URL("/setup-admin.html", url), 302);
+        if (data.ok && data.setupRequired) return Response.redirect(new URL("/setup-admin", url), 302);
       } catch {}
     }
-    const publicPages = ["/login.html", "/setup-admin.html", "/setup-database.html"];
+    const publicPages = ["/login", "/setup-admin", "/setup-database"];
     if (!publicPages.includes(route) && !route.startsWith("/api/") && !["/school-portal.html","/super-admin.html"].includes(route)) {
       const session = await getAuthenticatedSession(request, env);
       if (!session) {
         try {
           const state = await setupStatusGet({ request, env, params: {}, data: {} });
           const data = await state.json();
-          const destination = data.ok && data.setupRequired ? "/setup-admin.html" : "/login.html";
+          const destination = data.ok && data.setupRequired ? "/setup-admin" : "/login";
           return Response.redirect(new URL(destination, url), 302);
         } catch {
-          return Response.redirect(new URL("/login.html", url), 302);
+          return Response.redirect(new URL("/login", url), 302);
         }
       }
-      if (!session.is_super_admin && route !== "/school-portal.html")
-        return Response.redirect(new URL("/school-portal.html", url), 302);
-      if (route === "/school-portal.html" && session.is_super_admin)
-        return Response.redirect(new URL("/super-admin.html", url), 302);
+      if (!session.is_super_admin && route !== "/school-portal")
+        return Response.redirect(new URL("/school-portal", url), 302);
+      if (route === "/school-portal" && session.is_super_admin)
+        return Response.redirect(new URL("/super-admin", url), 302);
     }
     if (env.ASSETS) {
-      const assetRequest = url.href !== request.url ? new Request(url.toString(), request) : request;
+      const assetUrl=new URL(url);
+      if(cleanPages[route])assetUrl.pathname=cleanPages[route];
+      const assetRequest=assetUrl.href!==request.url?new Request(assetUrl.toString(),request):request;
       return env.ASSETS.fetch(assetRequest);
     }
     return jsonNotFound();
