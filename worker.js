@@ -59,6 +59,9 @@ export default {
     const url = new URL(request.url);
     // Resolve clean portal URLs internally instead of redirecting between
     // extensionless and .html paths (which can loop behind the Assets binding).
+    if (url.pathname === "/login") url.pathname = "/login.html";
+    if (url.pathname === "/setup-admin") url.pathname = "/setup-admin.html";
+    if (url.pathname === "/setup-database") url.pathname = "/setup-database.html";
     if (url.pathname === "/school-portal") url.pathname = "/school-portal.html";
     if (url.pathname === "/super-admin") url.pathname = "/super-admin.html";
     const route = url.pathname;
@@ -308,7 +311,7 @@ export default {
         if (data.ok && data.setupRequired) return Response.redirect(new URL("/setup-admin.html", url), 302);
       } catch {}
     }
-    const publicPages = ["/login.html", "/login", "/setup-admin.html", "/setup-admin", "/setup-database.html", "/setup-database"];
+    const publicPages = ["/login.html", "/setup-admin.html", "/setup-database.html"];
     if (!publicPages.includes(route) && !route.startsWith("/api/")) {
       const session = await getAuthenticatedSession(request, env);
       if (!session) {
