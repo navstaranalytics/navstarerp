@@ -100,6 +100,7 @@ async function syncSchoolLearningAreas(db,schoolId,curriculum,levels){
  const existing=await db.prepare("SELECT id,stage_code,code FROM learning_areas WHERE school_id=?").bind(schoolId).all();
  const byKey=new Map((existing.results||[]).map(x=>[String(x.stage_code||"")+"|"+String(x.code||""),x.id]));
  const statements=[];
+ for(const x of existing.results||[])if(!wanted.has(x.stage_code))statements.push(db.prepare("UPDATE learning_areas SET is_active=0 WHERE id=? AND school_id=?").bind(x.id,schoolId));
  for(const x of rows){
   const found=byKey.get(x.stage+"|"+x.code);
   if(found)statements.push(db.prepare("UPDATE learning_areas SET name=?,pathway=?,subject_type=?,is_mandatory=?,source_template=?,is_active=CASE WHEN ?=1 THEN 1 ELSE is_active END WHERE id=? AND school_id=?").bind(x.name,x.pathway,x.type,x.mandatory,template,x.mandatory,found,schoolId));
