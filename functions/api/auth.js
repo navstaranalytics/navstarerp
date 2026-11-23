@@ -287,7 +287,7 @@ export async function onRequestPostLogin({ request, env }) {
 export async function onRequestGetMe({request,env}) {
  const user=await getAuthenticatedSession(request,env);
  if(!user)return json({ok:false,authenticated:false},401);
- return json({ok:true,authenticated:true,user:{id:user.id,fullName:user.full_name,username:user.username,email:user.email,phone:user.phone,role:user.role_name,roleKey:user.role_key,roleKeys:user.role_keys||[user.role_key],roleNames:user.role_names||[user.role_name],schoolId:user.school_id||null,schoolName:user.school_name||null,permissions:user.permissions,scope:user.scope,designation:user.designation,organisationName:user.organisation_name,profilePhotoUrl:user.profile_photo_url,country:user.country,timezone:user.timezone,currency:user.currency}});
+ return json({ok:true,authenticated:true,user:{id:user.id,fullName:user.full_name,username:user.username,email:user.email,phone:user.phone,role:user.role_name,roleKey:user.role_key,roleKeys:user.role_keys||[user.role_key],roleNames:user.role_names||[user.role_name],schoolId:user.school_id||null,schoolName:user.school_name||null,permissions:user.permissions,scope:user.scope,designation:user.designation,organisationName:user.organisation_name,profilePhotoUrl:user.profile_photo_url,country:user.country,timezone:user.timezone,currency:user.currency,accessMode:user.access_mode||"full",accessNotice:user.access_notice||"",subscriptionStatus:user.subscription_status||null}});
 }
 export async function onRequestPostLogout({ request, env }) {
   const token = cookieValue(request, COOKIE);
