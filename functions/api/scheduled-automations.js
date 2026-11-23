@@ -34,7 +34,7 @@ export async function runScheduledAutomations(env,scheduledTime=new Date()){
    let suspended=0,kept=0;
    for(const row of rows.results||[]){
     const late=Math.floor((Date.parse(today+"T00:00:00Z")-Date.parse(row.next_due_date+"T00:00:00Z"))/86400000),grace=graceDays??Number(row.grace_period_days||7);
-    if(late>grace&&(policy.expiry_action||"suspend")==="suspend"){await env.DB.batch([env.DB.prepare("UPDATE school_subscriptions SET status='suspended',updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?").bind(row.id),env.DB.prepare("UPDATE schools SET status='suspended',updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?").bind(row.school_id)]);suspended++}else kept++;
+    if(late>grace&&(policy.expiry_action||"suspend")==="suspend"){await env.DB.batch([env.DB.prepare("UPDATE school_subscriptions SET status='suspended',updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?").bind(row.id),env.DB.prepare("UPDATE schools SET status='suspended',suspension_reason='subscription_overdue',updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?").bind(row.school_id)]);suspended++}else kept++;
    }
    await logRun(env.DB,key,"success",{suspended,stillInGraceOrAlternativePolicy:kept});result.tasks.push({key,status:"success",suspended,kept})
   }catch(e){await logRun(env.DB,key,"failed",{},String(e?.message||e));result.tasks.push({key,status:"failed"})}
