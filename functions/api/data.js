@@ -168,8 +168,8 @@ async function validateRefs(db,config,values,schoolId){
 async function validateTimetableEntry(db,schoolId,values,excludeId=null){
   if(values.start_time&&values.end_time&&values.end_time<=values.start_time)return "Lesson end time must be later than its start time.";
   if(values.stream_id){const stream=await db.prepare("SELECT grade_level_id FROM streams WHERE id=? AND school_id=?").bind(values.stream_id,schoolId).first();if(!stream||stream.grade_level_id!==values.grade_level_id)return "The selected stream must belong to the selected grade.";}
-  const args=[schoolId,values.academic_year_id,values.term_id??null,values.grade_level_id,values.stream_id??null,values.weekday,values.end_time,values.start_time];
-  let sql="SELECT id FROM timetable_entries WHERE school_id=? AND academic_year_id=? AND term_id IS ? AND grade_level_id=? AND stream_id IS ? AND weekday=? AND start_time<? AND end_time>?";
+  const args=[schoolId,values.academic_year_id,values.term_id??null,values.grade_level_id,values.stream_id??null,values.stream_id??null,values.weekday,values.end_time,values.start_time];
+  let sql="SELECT id FROM timetable_entries WHERE school_id=? AND academic_year_id=? AND term_id IS ? AND grade_level_id=? AND (stream_id IS NULL OR ? IS NULL OR stream_id=?) AND weekday=? AND start_time<? AND end_time>?";
   if(excludeId){sql+=" AND id<>?";args.push(excludeId);}
   const clash=await db.prepare(sql+" LIMIT 1").bind(...args).first();
   if(clash)return "This class or stream already has a lesson overlapping that time.";
@@ -179,6 +179,7 @@ async function validateTimetableEntry(db,schoolId,values,excludeId=null){
     if(excludeId){teacherSql+=" AND id<>?";teacherArgs.push(excludeId);}
     if(await db.prepare(teacherSql+" LIMIT 1").bind(...teacherArgs).first())return "The selected teacher already has a lesson scheduled during that time.";
   }
+  if(values.room){const roomArgs=[schoolId,values.academic_year_id,values.term_id??null,values.weekday,values.end_time,values.start_time,values.room];let roomSql="SELECT id FROM timetable_entries WHERE school_id=? AND academic_year_id=? AND term_id IS ? AND weekday=? AND start_time<? AND end_time>? AND room=?";if(excludeId){roomSql+=" AND id<>?";roomArgs.push(excludeId)}if(await db.prepare(roomSql+" LIMIT 1").bind(...roomArgs).first())return "The selected room already has a lesson during that time."}
   return null;
 }
 async function audit(db,user,schoolId,action,resource,resourceId){
