@@ -100,14 +100,19 @@ export async function getSuperAdminSession(request, env) {
   return row || null;
 }
 
+async function ensureUserProfilePhotoColumn(db){
+  const info=await db.prepare("PRAGMA table_info(users)").all();
+  if(!(info.results||[]).some(x=>x.name==="profile_photo_url"))await db.prepare("ALTER TABLE users ADD COLUMN profile_photo_url TEXT").run();
+}
 export async function getAuthenticatedSession(request, env) {
   if (!env?.DB) return null;
+  try{await ensureUserProfilePhotoColumn(env.DB)}catch(error){console.error("Profile photo column setup failed:",String(error?.message||error));return null;}
   const token=cookieValue(request,COOKIE);
   if(!token||token.length<40)return null;
   const tokenHash=await digest(token);
   const row=await env.DB.prepare(`
     SELECT u.id,u.full_name,u.username,u.email,u.phone,u.status,
-      p.designation,p.organisation_name,p.profile_photo_url,p.country,p.timezone,p.currency,
+      p.designation,p.organisation_name,COALESCE(u.profile_photo_url,p.profile_photo_url) AS profile_photo_url,p.country,p.timezone,p.currency,
       r.id AS role_id,r.role_key,r.role_name,a.school_id,a.scope_json,
       sc.name AS school_name,sc.status AS school_status,
       sm.membership_status
