@@ -18,8 +18,11 @@ export async function onRequestPost({request,env}){
  const startTime=String(b.start_time||"08:00"),days=(Array.isArray(b.days)?b.days:[1,2,3,4,5]).map(Number).filter(x=>x>=1&&x<=7);
  const periods=Math.max(2,Math.min(12,Math.floor(Number(b.periods_per_day)||8)));
  const duration=Math.max(25,Math.min(120,Math.floor(Number(b.period_minutes)||40)));
- const breakAfter=Math.max(0,Math.min(periods-1,Math.floor(Number(b.break_after)||0)));
- const breakMinutes=Math.max(0,Math.min(90,Math.floor(Number(b.break_minutes)||0)));
+ const rawBreaks=Array.isArray(b.breaks)?b.breaks:(Number(b.break_after)>0?[{after_period:Number(b.break_after),duration_minutes:Number(b.break_minutes)||0,label:"Break"}]:[]);
+ const breaks=rawBreaks.map(x=>({after_period:Math.floor(Number(x.after_period)),duration_minutes:Math.floor(Number(x.duration_minutes)),label:String(x.label||"Break").trim().slice(0,40)})).filter(x=>x.duration_minutes>0);
+ const blockLessons=b.block_lessons===true||b.block_lessons===1||b.block_lessons==="1";
+ if(breaks.length>3||breaks.some(x=>!Number.isInteger(x.after_period)||x.after_period<1||x.after_period>=periods||!Number.isInteger(x.duration_minutes)||x.duration_minutes<1||x.duration_minutes>90)||new Set(breaks.map(x=>x.after_period)).size!==breaks.length)return json({ok:false,error:"Configure up to three breaks. Each must have a unique period number between 1 and the last teaching period, and a duration from 1 to 90 minutes."},400);
+ breaks.sort((a,b)=>a.after_period-b.after_period);
  const lessons=Math.max(1,Math.min(8,Math.floor(Number(b.lessons_per_allocation)||3)));
  if(!schoolId||!yearId||!days.length||new Set(days).size!==days.length||!/^([01]\d|2[0-3]):[0-5]\d$/.test(startTime))return json({ok:false,error:"Select an academic year, at least one valid school day and a valid start time."},400);
  try{
@@ -33,7 +36,7 @@ export async function onRequestPost({request,env}){
   const existingRows=await env.DB.prepare("SELECT grade_level_id,stream_id,staff_id,weekday,start_time,end_time,room FROM timetable_entries WHERE school_id=? AND academic_year_id=? AND (term_id IS ? OR term_id IS NULL)").bind(schoolId,yearId,termId).all();
   const occupied=(existingRows.results||[]).map(x=>({...x,start:timeToMinutes(x.start_time),end:timeToMinutes(x.end_time)}));
   const slots=[];
-  for(const day of days)for(let p=0;p<periods;p++){const mins=timeToMinutes(startTime)+p*duration+(p>=breakAfter&&breakAfter>0?breakMinutes:0);if(mins+duration>1439)return json({ok:false,error:"The selected school day extends beyond midnight. Reduce periods or adjust the start time."},400);slots.push({weekday:day,start_time:toTime(mins),end_time:toTime(mins+duration),start:mins,end:mins+duration,period:p+1})}
+  for(const day of days)for(let p=0;p<periods;p++){const after=breaks.filter(x=>x.after_period<=p).reduce((sum,x)=>sum+x.duration_minutes,0);const mins=timeToMinutes(startTime)+p*duration+after;if(mins+duration>1439)return json({ok:false,error:"The selected school day extends beyond midnight. Reduce periods, breaks or adjust the start time."},400);slots.push({weekday:day,start_time:toTime(mins),end_time:toTime(mins+duration),start:mins,end:mins+duration,period:p+1})}
   const planned=[],unplaced=[];
   for(const allocation of allocations){
    const alreadyDays=new Set();
@@ -43,9 +46,11 @@ export async function onRequestPost({request,env}){
      if(alreadyDays.has(slot.weekday))continue;
      const clash=occupied.some(x=>{
       const overlap=slot.start<x.end&&slot.end>x.start;if(!overlap||Number(x.weekday)!==slot.weekday)return false;
-      const sameClass=x.grade_level_id===allocation.grade_level_id&&(x.stream_id===allocation.stream_id||!x.stream_id||!allocation.stream_id);
+      const sameGrade=x.grade_level_id===allocation.grade_level_id;
+      const sameClass=sameGrade&&(x.stream_id===allocation.stream_id||!x.stream_id||!allocation.stream_id);
+      const parallelOptions=blockLessons&&sameGrade&&x.pathway&&allocation.pathway&&x.pathway!==allocation.pathway&&x.stream_id===allocation.stream_id;
       const sameTeacher=allocation.staff_id&&x.staff_id===allocation.staff_id;
-      return sameClass||sameTeacher;
+      return (sameClass&&!parallelOptions)||sameTeacher;
      });
      if(!clash){found=slot;break}
     }
@@ -54,7 +59,7 @@ export async function onRequestPost({request,env}){
    }
   }
   if(unplaced.length)return json({ok:false,generated:0,required:allocations.length*lessons,unplaced:unplaced.length,details:unplaced.slice(0,30),error:"The timetable could not fit every allocated lesson without a collision. No timetable entries were saved. Increase available periods/days or reduce lessons per allocation."},409);
-  const runId=id(),config={days,periods_per_day:periods,period_minutes:duration,start_time:startTime,break_after:breakAfter,break_minutes:breakMinutes,lessons_per_allocation:lessons};
+  const runId=id(),config={days,periods_per_day:periods,period_minutes:duration,start_time:startTime,breaks,block_lessons:blockLessons,lessons_per_allocation:lessons};
   const statements=[env.DB.prepare("INSERT INTO timetable_generation_runs(id,school_id,academic_year_id,term_id,config_json,created_by) VALUES(?,?,?,?,?,?)").bind(runId,schoolId,yearId,termId,JSON.stringify(config),actor.id)];
   for(const x of planned)statements.push(env.DB.prepare("INSERT INTO timetable_entries(id,school_id,academic_year_id,term_id,grade_level_id,stream_id,learning_area_id,staff_id,weekday,start_time,end_time,room,generated_run_id) VALUES(?,?,?,?,?,?,?,?,?,?,?,NULL,?)").bind(id(),schoolId,yearId,termId,x.grade_level_id,x.stream_id,x.learning_area_id,x.staff_id,x.weekday,x.start_time,x.end_time,runId));
   await env.DB.batch(statements);
