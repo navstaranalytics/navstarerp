@@ -1,4 +1,4 @@
-import { getSuperAdminSession } from "./auth.js";
+import { getSuperAdminSession, getAuthenticatedSession } from "./auth.js";
 const json=(d,s=200)=>Response.json(d,{status:s,headers:{"Cache-Control":"no-store"}});
 const LOGO_KEY="platform-logo";
 const R2_LOGO_KEY="platform/logo";
@@ -133,4 +133,46 @@ export async function onRequestPostLoginBackground({request,env}){
   await env.DB.prepare("INSERT INTO platform_branding_assets(asset_key,content_type,image_data,storage_provider,object_key,updated_by,updated_at) VALUES(?,?,?,'d1',NULL,?,strftime('%Y-%m-%dT%H:%M:%fZ','now')) ON CONFLICT(asset_key) DO UPDATE SET content_type=excluded.content_type,image_data=excluded.image_data,storage_provider='d1',object_key=NULL,updated_by=excluded.updated_by,updated_at=excluded.updated_at").bind(LOGIN_BACKGROUND_KEY,file.type,bytes,actor.id).run();
   return json({ok:true,backgroundUrl:"/api/branding/login-background",storage:"D1",message:"Login background saved centrally in D1."});
  }catch{return json({ok:false,error:"Background upload failed. Please try again."},500)}
+}
+
+const MAX_PROFILE_PHOTO_BYTES=1800*1024;
+export async function onRequestPostProfilePhoto({request,env}){
+ if(!env.DB)return json({ok:false,error:"Database unavailable."},503);
+ const actor=await getAuthenticatedSession(request,env);
+ if(!actor)return json({ok:false,error:"Sign in to upload your profile picture."},401);
+ let form;try{form=await request.formData()}catch{return json({ok:false,error:"Choose a profile picture."},400)}
+ const file=form.get("photo");
+ if(!file||typeof file.arrayBuffer!=="function")return json({ok:false,error:"Choose a profile picture."},400);
+ if(!{"image/png":1,"image/jpeg":1,"image/webp":1}[file.type])return json({ok:false,error:"Use a PNG, JPG or WebP image."},400);
+ if(file.size<1||file.size>MAX_PROFILE_PHOTO_BYTES)return json({ok:false,error:"Profile picture must be 1.8 MB or smaller."},400);
+ try{
+  await ensureLogoTable(env.DB);
+  const key="profile-"+actor.id,r2Key="profiles/"+actor.id,bytes=new Uint8Array(await file.arrayBuffer());
+  if(env.R2){
+   await env.R2.put(r2Key,bytes,{httpMetadata:{contentType:file.type,cacheControl:"private, no-store"}});
+   await env.DB.prepare("INSERT INTO platform_branding_assets(asset_key,content_type,image_data,storage_provider,object_key,updated_by,updated_at) VALUES(?,?,X'','r2',?,?,strftime('%Y-%m-%dT%H:%M:%fZ','now')) ON CONFLICT(asset_key) DO UPDATE SET content_type=excluded.content_type,image_data=X'',storage_provider='r2',object_key=excluded.object_key,updated_by=excluded.updated_by,updated_at=excluded.updated_at").bind(key,file.type,r2Key,actor.id).run();
+  }else{
+   await env.DB.prepare("INSERT INTO platform_branding_assets(asset_key,content_type,image_data,storage_provider,object_key,updated_by,updated_at) VALUES(?,?,?,'d1',NULL,?,strftime('%Y-%m-%dT%H:%M:%fZ','now')) ON CONFLICT(asset_key) DO UPDATE SET content_type=excluded.content_type,image_data=excluded.image_data,storage_provider='d1',object_key=NULL,updated_by=excluded.updated_by,updated_at=excluded.updated_at").bind(key,file.type,bytes,actor.id).run();
+  }
+  const photoUrl="/api/auth/profile-photo";
+  await env.DB.prepare("UPDATE users SET profile_photo_url=?,updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?").bind(photoUrl,actor.id).run();
+  return json({ok:true,profilePhotoUrl:photoUrl+"?v="+Date.now(),storage:env.R2?"R2":"D1",message:"Profile picture uploaded successfully."});
+ }catch(error){console.error("NAVSTAR profile photo upload failed:",String(error?.message||error));return json({ok:false,error:"Profile picture upload failed. Please try again."},500)}
+}
+export async function onRequestGetProfilePhoto({request,env}){
+ if(!env.DB)return new Response("Database unavailable.",{status:503});
+ const actor=await getAuthenticatedSession(request,env);
+ if(!actor)return new Response("Sign in required.",{status:401,headers:{"Cache-Control":"no-store"}});
+ try{
+  await ensureLogoTable(env.DB);
+  const row=await env.DB.prepare("SELECT content_type,image_data,storage_provider,object_key FROM platform_branding_assets WHERE asset_key=?").bind("profile-"+actor.id).first();
+  if(!row)return new Response("Profile picture not found.",{status:404,headers:{"Cache-Control":"no-store"}});
+  if(row.storage_provider==="r2"){
+   if(!env.R2||!row.object_key)return new Response("Profile picture storage unavailable.",{status:503});
+   const object=await env.R2.get(row.object_key);if(!object)return new Response("Profile picture not found.",{status:404});
+   return new Response(object.body,{headers:{"Content-Type":row.content_type,"Cache-Control":"private, no-store","X-Content-Type-Options":"nosniff","Content-Security-Policy":"default-src 'none'; sandbox"}});
+  }
+  const bytes=row.image_data instanceof Uint8Array?row.image_data:new Uint8Array(row.image_data||[]);
+  return new Response(bytes,{headers:{"Content-Type":row.content_type,"Content-Length":String(bytes.byteLength),"Cache-Control":"private, no-store","X-Content-Type-Options":"nosniff","Content-Security-Policy":"default-src 'none'; sandbox"}});
+ }catch{return new Response("Could not load profile picture.",{status:500})}
 }
