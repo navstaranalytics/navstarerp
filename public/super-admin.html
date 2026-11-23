@@ -285,20 +285,27 @@ async function loadOverviewFromDatabase(){
 }
 
 addSchool=function(){
-  openModal("Register a school tenant",'<div class="form-grid">'+field("Official school name *","name","Full registered name")+field("Institution / EMIS code","code","School code")+field("Registration number","registrationNumber","Ministry / registration reference")+selectField("County *","county",counties)+selectField("Institution category","category",["Public","Private","Community","Faith-based","International","Other"])+selectField("Ownership / sponsor","ownership",["Government","Private individual","Company / organisation","Faith-based sponsor","Community / trust","NGO / charitable organisation","Other"],"Government")+selectField("School level","level",["Pre-primary","Primary","Junior School","Senior School","Mixed","Special Needs"])+selectField("Curriculum framework","curriculum",["Kenyan CBC","Kenyan 8-4-4","International / Cambridge","Custom"])+field("Contact person","contact","Headteacher / principal")+field("Official email","email","admin@school.ac.ke","email")+field("Phone number","phone","+254…","tel")+field("Postal / physical address","address","Town, address")+selectField("Subscription plan","plan",plans.map(p=>p.name))+selectField("Initial status","status",["Pending","Active"])+'</div><div class="notice">This record will be saved to the central NAVSTAR database and shared across authorised Super Admin sessions.</div>',async d=>{
+  openModal("Register a school tenant",'<div class="form-grid">'+field("Official school name *","name","Full registered name")+field("Institution / EMIS code","code","School code")+field("Registration number","registrationNumber","Ministry / registration reference")+selectField("County *","county",counties)+selectField("Institution category","category",["Public","Private","Community","Faith-based","International","Other"])+selectField("Ownership / sponsor","ownership",["Government","Private individual","Company / organisation","Faith-based sponsor","Community / trust","NGO / charitable organisation","Other"],"Government")+selectField("School level","level",["Pre-primary","Primary","Junior School","Senior School","Mixed","Special Needs"])+selectField("Curriculum framework","curriculum",["Kenyan CBC","Kenyan 8-4-4","International / Cambridge","Custom"])+field("School Administrator full name *","contact","Headteacher / principal")+field("Administrator email *","email","admin@school.ac.ke","email")+field("Administrator phone *","phone","+254…","tel")+field("Postal / physical address","address","Town, address")+selectField("Subscription plan","plan",plans.map(p=>p.name))+selectField("Initial status","status",["Pending","Active"])+'</div><div class="notice">The School Administrator account will be created automatically from the name, email and phone above. A unique username will be generated, and a branded welcome email will explain how to set a password using the same NAVSTAR login gate.</div>',async d=>{
     const name=d.get("name")?.trim(),county=d.get("county");
     if(!name||!county){toast("School name and county are required.");return}
     const submit=$("saveModal");if(submit){submit.disabled=true;submit.textContent="Saving…"}
     try{
       const result=await schoolApi("/api/schools",{method:"POST",body:JSON.stringify({name,code:d.get("code"),registrationNumber:d.get("registrationNumber"),county,category:d.get("category"),ownership:d.get("ownership"),level:d.get("level"),curriculum:d.get("curriculum"),contact:d.get("contact"),email:d.get("email"),phone:d.get("phone"),address:d.get("address"),plan:d.get("plan"),status:d.get("status"),levels:[],modules:["Core"]})});
-      schools.unshift(result.school);closeModal();render();toast("School saved successfully to the central database.");
+      schools.unshift(result.school);closeModal();render();const a=result.schoolAdmin||{};toast("School saved. School Admin username: "+(a.username||"generated")+" · welcome email: "+(result.emailDelivery==="sent"?"sent":result.emailDelivery==="failed"?"delivery failed":"email not configured"));
     }catch(error){toast(error.message||"School could not be saved.");if(submit){submit.disabled=false;submit.textContent="Save record"}}
   });
 };
 const localSchoolDetails=schoolDetails;
 schoolDetails=function(id){
   localSchoolDetails(id);
-  const school=schools.find(x=>x.id===id),form=$("modalForm");if(!school||!form)return;
+  const school=schools.find(x=>x.id===id),form=$("modalForm");
+  const admin=school?.schoolAdmin;
+  const adminPanel=document.createElement("div");
+  adminPanel.className="notice";
+  adminPanel.innerHTML=admin
+    ? "<b>Automatically assigned School Administrator</b><br>Name: "+esc(admin.fullName)+"<br>Username: <b>"+esc(admin.username)+"</b><br>Email: "+esc(admin.email)+"<br>Phone: "+esc(admin.phone)+"<br>Role: "+esc(admin.role||"School Administrator")+"<br><small>This account was generated during school registration. Super Admin can view these details but cannot create or manage this school account.</small>"
+    : "<b>School Administrator</b><br>No School Administrator account is linked to this school yet. New school registrations create this account automatically.";
+  $("modalBody").appendChild(adminPanel);if(!school||!form)return;
   form.onsubmit=async e=>{
     e.preventDefault();const d=new FormData(form),submit=$("saveModal");
     const payload={name:d.get("name"),code:d.get("code"),contact:d.get("contact"),email:d.get("email"),phone:d.get("phone"),address:d.get("address"),registrationNumber:d.get("registrationNumber"),county:d.get("county"),category:d.get("category"),ownership:d.get("ownership"),curriculum:d.get("curriculum"),plan:d.get("plan"),status:d.get("status"),expiry:d.get("expiry"),learnerCount:Number(d.get("learnerCount"))||0,teacherCount:Number(d.get("teacherCount"))||0,levels:d.getAll("levels"),modules:d.getAll("modules")};
