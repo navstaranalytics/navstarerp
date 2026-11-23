@@ -261,7 +261,7 @@ export async function onRequestPostLogin({ request, env }) {
       LEFT JOIN schools sc ON sc.id=a.school_id
       WHERE u.username_normalized=? AND
         ((a.school_id IS NULL AND r.role_key='super_admin') OR
-         (a.school_id IS NOT NULL AND sm.membership_status='active' AND sc.status='active'))
+         (a.school_id IS NOT NULL AND sm.membership_status='active' AND sc.status IN ('active','suspended')))
       ORDER BY CASE WHEN r.role_key='super_admin' THEN 0 ELSE 1 END LIMIT 1
     `).bind(username).first();
     const valid=user&&user.status==='active'&&await verifyPassword(password,user.password_hash);
