@@ -141,7 +141,8 @@ export async function getAuthenticatedSession(request, env) {
     if(row.role_key==='school_admin')permissions.push('school.users.manage','school.settings.manage');
   }
   let scope={};try{scope=JSON.parse(row.scope_json||'{}')}catch{}
-  return {...row,permissions,scope,is_super_admin:row.role_key==='super_admin'};
+  const normalizedRoleKey=row.role_key==='parent_guardian'?'parent':row.role_key==='student_learner'?'student':row.role_key;
+  return {...row,role_key:normalizedRoleKey,permissions,scope,is_super_admin:row.role_key==='super_admin'};
 }
 async function issueSession(env, request, userId, remember = false) {
   const token = randomHex(32);
