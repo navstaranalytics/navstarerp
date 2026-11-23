@@ -457,5 +457,5 @@ export async function onRequestPostUsernameRecoveryConfirm({ request, env }) {
     ]);
     await audit(env,user.id,"auth.username_recovery.completed","success",{username});
     return json({ok:true,username,message:"Your username has been updated. Use your new username and existing password to sign in."});
-  } catch(error) { console.error("Username recovery confirmation failed:",String(error?.message||error)); return json({ok:false,error:"Your username could not be updated. Please try again."},503); }
+  } catch(error) { const message=String(error?.message||error);console.error("Username recovery confirmation failed:",message);if(/UNIQUE constraint/i.test(message))return json({ok:false,error:"That username has just been taken. Please choose another username."},409);return json({ok:false,error:"Your username could not be updated. Please try again."},503); }
 }
