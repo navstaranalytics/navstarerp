@@ -36,6 +36,9 @@ jobs:
         with:
           node-version: "22"
 
+      - name: Validate dashboard JavaScript syntax
+        run: node scripts/validate-dashboard-syntax.mjs
+
       - name: Verify Cloudflare credentials
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
