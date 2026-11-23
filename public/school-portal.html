@@ -30,13 +30,13 @@ async function loadAllocations(){
  try{
   const [staff,years,terms,grades,streams,areas,allocs]=await Promise.all(["staff","years","terms","grades","streams","learning-areas","teacher-allocations"].map(x=>api("/api/data/"+x+"?schoolId="+encodeURIComponent(schoolId))));
   const fill=(name,rows,idField,labelFn,first)=>{const el=document.querySelector('[name="'+name+'"]');el.innerHTML='<option value="">'+first+'</option>'+rows.map(x=>'<option value="'+esc(x[idField])+'">'+esc(labelFn(x))+'</option>').join("")};
-  fill("staff_id",staff.records||[],"id",x=>x.staff_number||x.id.slice(0,8),"Select staff");
+  fill("staff_id",staff.records||[],"id",x=>x.full_name||x.staff_number||x.id.slice(0,8),"Select staff");
   fill("academic_year_id",years.records||[],"id",x=>x.name,"Select year");
   fill("term_id",terms.records||[],"id",x=>x.name,"All terms");
   fill("grade_level_id",grades.records||[],"id",x=>x.stage_name||x.stage_code,"Select grade");
   fill("stream_id",streams.records||[],"id",x=>x.name,"All streams");
   fill("learning_area_id",areas.records||[],"id",x=>x.name,"Select learning area");
-  const names={};for(const [key,rows] of [["staff",staff.records],["years",years.records],["terms",terms.records],["grades",grades.records],["streams",streams.records],["areas",areas.records]])for(const x of rows||[])names[x.id]=x.staff_number||x.name||x.stage_name||x.stage_code||x.id;
+  const names={};for(const [key,rows] of [["staff",staff.records],["years",years.records],["terms",terms.records],["grades",grades.records],["streams",streams.records],["areas",areas.records]])for(const x of rows||[])names[x.id]=x.full_name||x.staff_number||x.name||x.stage_name||x.stage_code||x.id;
   const rows=allocs.records||[];
   $("allocationTable").innerHTML=rows.length?'<table><thead><tr><th>Staff</th><th>Academic year</th><th>Term</th><th>Grade</th><th>Stream</th><th>Learning area</th><th>Pathway</th></tr></thead><tbody>'+rows.map(x=>'<tr><td>'+esc(names[x.staff_id])+'</td><td>'+esc(names[x.academic_year_id])+'</td><td>'+esc(names[x.term_id]||"All")+'</td><td>'+esc(names[x.grade_level_id])+'</td><td>'+esc(names[x.stream_id]||"All")+'</td><td>'+esc(names[x.learning_area_id])+'</td><td>'+esc(x.pathway||"All")+'</td></tr>').join("")+'</tbody></table>':'<div class="empty">No teacher allocations have been created.</div>';
  }catch(e){$("allocationTable").innerHTML='<div class="empty">'+esc(e.message)+'</div>'}
