@@ -73,7 +73,8 @@ const permissionFor=(name,write=false)=>{
   if(["staff"].includes(name))return "staff.manage";
   if(["learners","enrollments","guardians","transfers"].includes(name))return write?"learners.manage":"learners.view";
   if(name==="teacher-allocations")return "allocations.manage";
-  if(["assessments","assessment-results","competency-frameworks","rubric-criteria","competency-assessments","competency-observations"].includes(name))return write?"assessments.manage":"assessments.view";
+  if(["competency-frameworks","rubric-criteria"].includes(name))return write?"academics.manage":"assessments.view";
+  if(["assessments","assessment-results","competency-assessments","competency-observations"].includes(name))return write?"assessments.manage":"assessments.view";
   if(["attendance-sessions","attendance-records"].includes(name))return write?"attendance.manage":"attendance.view";
   if(name==="timetable")return write?"academics.manage":"timetable.view";
   if(["fee-structures","learner-fee-accounts","finance-transactions","fee-adjustments"].includes(name))return write?"finance.manage":"finance.view";
