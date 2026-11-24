@@ -220,6 +220,12 @@ export default {
       if (request.method === "POST") return schoolsPost({ request, env });
       return new Response("Method not allowed", { status: 405, headers: { Allow: "GET, POST" } });
     }
+    // School profile configuration and status updates use /api/schools/:id.
+    // Route PATCH explicitly so the D1-backed school settings handler is reachable.
+    if (/^\\/api\\/schools\\/[^/]+$/.test(route)) {
+      if (request.method === "PATCH") return schoolsPatch({ request, env });
+      return new Response("Method not allowed", { status: 405, headers: { Allow: "PATCH" } });
+    }
     if (route.startsWith("/api/schools/") && route.endsWith("/users")) {
       if (request.method === "GET") return schoolUsersGet({ request, env });
       if (request.method === "POST") return schoolUsersPost({ request, env });
