@@ -30,7 +30,7 @@ export async function onRequestGet({request,env}){
   }
   const learners=[];
   for(const learner of links.results||[]){
-   const enrollment=await env.DB.prepare(`SELECT e.academic_year_id,e.grade_level_id,e.stream_id,g.stage_name AS grade_name,st.name AS stream_name,y.name AS academic_year
+   const enrollment=await env.DB.prepare(`SELECT e.academic_year_id,e.grade_level_id,e.stream_id,CASE WHEN lower(COALESCE(g.curriculum,'')) LIKE '%cbe%' OR lower(COALESCE(g.curriculum,'')) LIKE '%cbc%' OR lower(COALESCE(g.curriculum,'')) LIKE '%competency%' THEN replace(g.stage_name,'Grade ','Class ') ELSE g.stage_name END AS grade_name,st.name AS stream_name,y.name AS academic_year
     FROM learner_enrollments e LEFT JOIN grade_levels g ON g.id=e.grade_level_id
     LEFT JOIN streams st ON st.id=e.stream_id LEFT JOIN academic_years y ON y.id=e.academic_year_id
     WHERE e.learner_id=? AND e.school_id=? AND e.status='active' ORDER BY e.enrolled_at DESC LIMIT 1`).bind(learner.id,user.school_id).first();
