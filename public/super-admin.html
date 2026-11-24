@@ -796,8 +796,11 @@ $('editProfile').addEventListener('click',()=>{
 });
 async function loadSupportTickets(){
  const host=$('supportTicketList');if(!host)return;
- host.textContent='Loading support requests…';
+ host.textContent='Checking support desk and loading issues…';
  try{
+  // Ensure the idempotent support-desk schema upgrade has run before reading tickets.
+  const setup=await fetch('/api/system/support-upgrade',{method:'POST',credentials:'same-origin',cache:'no-store'});
+  const setupData=await setup.json();if(!setup.ok||!setupData.ok)throw new Error(setupData.error||'Support desk setup is not ready.');
   const r=await fetch('/api/support',{credentials:'same-origin',cache:'no-store'});
   const d=await r.json();if(!r.ok||!d.ok)throw new Error(d.error||'Could not load support requests.');
   const tickets=d.tickets||[],messages=d.messages||[];
