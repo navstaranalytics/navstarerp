@@ -13,7 +13,7 @@ import { onRequestGet as sampleDataGet, onRequestDelete as sampleDataDelete } fr
 import { onRequestGet as terminologyGet } from "./functions/api/terminology.js";
 import { onRequestGet as systemGuideGet } from "./functions/api/system-guide.js";
 import { runScheduledAutomations } from "./functions/api/scheduled-automations.js";
-import { onRequestPostStk as mpesaStkPost, onRequestPostCallback as mpesaCallbackPost } from "./functions/api/mpesa-payments.js";
+import { onRequestPostStk as mpesaStkPost, onRequestPostCallback as mpesaCallbackPost, onRequestPostSoda as mpesaSodaPost, onRequestGetSoda as mpesaSodaGet } from "./functions/api/mpesa-payments.js";
 import { onRequestGet as paymentProviderStatusGet } from "./functions/api/payment-provider-status.js";
 import { onRequestGet as schoolLogoGet, onRequestPost as schoolLogoPost } from "./functions/api/school-branding.js";
 import { onRequestGetSettings as admissionSettingsGet, onRequestPostSettings as admissionSettingsPost, onRequestPostNextAdmissionNumber as nextAdmissionNumberPost, onRequestPostPhotos as learnerPhotosPost, onRequestGetPhoto as learnerPhotoGet } from "./functions/api/learner-photos.js";
@@ -66,8 +66,8 @@ export default {
       const policySession = await getAuthenticatedSession(request, env);
       if (policySession && !policySession.is_super_admin) {
         const mode = policySession.access_mode || "full";
-        const billingAllowed = ["/api/auth/me","/api/auth/logout","/api/school-workspace-summary","/api/terminology","/api/system-guide","/api/support","/api/payments/mpesa/stkpush"].includes(route) || /^\/api\/data\/(invoices|payments|subscriptions)$/.test(route);
-        const readOnlyPaymentAllowed = route === "/api/payments/mpesa/stkpush" || route === "/api/support";
+        const billingAllowed = ["/api/auth/me","/api/auth/logout","/api/school-workspace-summary","/api/terminology","/api/system-guide","/api/support","/api/payments/mpesa/stkpush","/api/payments/mpesa/soda"].includes(route) || /^\/api\/data\/(invoices|payments|subscriptions)$/.test(route);
+        const readOnlyPaymentAllowed = route === "/api/payments/mpesa/stkpush" || route === "/api/payments/mpesa/soda" || route === "/api/support";
         const locked = mode === "block_all" || (mode === "billing_only" && !billingAllowed) || (mode === "read_only" && !["GET","HEAD","OPTIONS"].includes(request.method) && !readOnlyPaymentAllowed);
         if (locked) return Response.json({ ok:false, error: policySession.access_notice || "This school account is restricted by its subscription policy. Contact Navstar Analytics or open Billing & Support.", accessMode:mode }, { status:423, headers:{"Cache-Control":"no-store"} });
       }
@@ -85,6 +85,7 @@ export default {
       if (request.method !== "POST") return new Response("Method not allowed", { status: 405, headers: { Allow: "POST" } });
       return mpesaStkPost({ request, env });
     }
+    if (route === "/api/payments/mpesa/soda") { if(request.method==="POST")return mpesaSodaPost({request,env});if(request.method==="GET")return mpesaSodaGet({request,env});return new Response("Method not allowed",{status:405,headers:{Allow:"GET, POST"}}); }
     if (route === "/api/payments/mpesa/callback") {
       if (request.method !== "POST") return new Response("Method not allowed", { status: 405, headers: { Allow: "POST" } });
       return mpesaCallbackPost({ request, env });
