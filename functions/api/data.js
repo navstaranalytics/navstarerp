@@ -208,8 +208,15 @@ function bodyFields(body,config){
   for(const field of config.fields)if(body[field]!==undefined){const v=clean(body[field]);values[field]=v===""?null:v;}
   return values;
 }
+function isPrimaryOrJuniorClass(grade){
+ const level=String(grade?.school_level||"").toLowerCase(),code=String(grade?.stage_code||"").toUpperCase();
+ return /pre-primary|primary|junior/.test(level)||/^PP[12]$/.test(code)||/^G[1-9]$/.test(code)||/^STD[1-8]$/.test(code);
+}
 async function syncCompulsoryLearningAreas(db,schoolId,enrollmentId=null){
- const sql="INSERT INTO learner_learning_areas(id,school_id,enrollment_id,learner_id,learning_area_id,selection_type,status) SELECT lower(hex(randomblob(16))),e.school_id,e.id,e.learner_id,la.id,'mandatory','active' FROM learner_enrollments e JOIN grade_levels g ON g.id=e.grade_level_id AND g.school_id=e.school_id AND g.is_active=1 JOIN learning_areas la ON la.school_id=e.school_id AND la.curriculum=g.curriculum AND la.stage_code=g.stage_code AND la.is_active=1 WHERE e.school_id=? AND e.status='active' AND (? IS NULL OR e.id=?) AND (lower(COALESCE(g.school_level,'')) LIKE '%primary%' OR lower(COALESCE(g.school_level,'')) LIKE '%junior%' OR upper(g.stage_code) GLOB 'G[1-9]' OR upper(g.stage_code) GLOB 'PP[12]' OR upper(g.stage_code) GLOB 'STD[1-8]' OR la.is_mandatory=1) ON CONFLICT(enrollment_id,learning_area_id) DO UPDATE SET selection_type='mandatory',status='active'";
+ // In pre-primary, primary and junior school, every area enabled by the school
+ // is compulsory for every learner. In senior school, only catalogue-mandatory
+ // areas are auto-assigned; pathway/elective areas remain learner-specific.
+ const sql="INSERT INTO learner_learning_areas(id,school_id,enrollment_id,learner_id,learning_area_id,selection_type,status) SELECT lower(hex(randomblob(16))),e.school_id,e.id,e.learner_id,la.id,'mandatory','active' FROM learner_enrollments e JOIN learners l ON l.id=e.learner_id AND l.school_id=e.school_id JOIN grade_levels g ON g.id=e.grade_level_id AND g.school_id=e.school_id AND g.is_active=1 JOIN learning_areas la ON la.school_id=e.school_id AND la.curriculum=g.curriculum AND la.stage_code=g.stage_code AND la.is_active=1 WHERE e.school_id=? AND e.status='active' AND (? IS NULL OR e.id=?) AND (lower(COALESCE(g.school_level,'')) LIKE '%primary%' OR lower(COALESCE(g.school_level,'')) LIKE '%pre-primary%' OR lower(COALESCE(g.school_level,'')) LIKE '%junior%' OR upper(g.stage_code) GLOB 'G[1-9]' OR upper(g.stage_code) GLOB 'PP[12]' OR upper(g.stage_code) GLOB 'STD[1-8]' OR la.is_mandatory=1) ON CONFLICT(enrollment_id,learning_area_id) DO UPDATE SET selection_type='mandatory',status='active'";
  await db.prepare(sql).bind(schoolId,enrollmentId,enrollmentId).run();
 }
 function gradeBelongsToSelectedLevels(grade,levels){
@@ -615,7 +622,10 @@ export async function onRequestPatch({request,env}){
     const calendarError=await validateAcademicCalendarDates(env.DB,name,schoolId,{...current,...values},recordId);if(calendarError)return json({ok:false,error:calendarError},400);
     if(name.startsWith("competency-")||name==="rubric-criteria"){const competencyError=await validateCompetencyRecord(env.DB,name,schoolId,{...current,...values},a.user);if(competencyError)return json({ok:false,error:competencyError},400)}
     if(name==="learning-areas"&&!a.user.is_super_admin){
-      if(values.is_active!==undefined&&Number(current.is_mandatory)===1)return json({ok:false,error:"Mandatory learning areas cannot be deactivated."},403);
+      if(values.is_active!==undefined&&Number(values.is_active)===0){
+        const grade=await env.DB.prepare("SELECT school_level,stage_code FROM grade_levels WHERE school_id=? AND curriculum=? AND stage_code=? AND is_active=1 LIMIT 1").bind(schoolId,current.curriculum,current.stage_code).first();
+        if(Number(current.is_mandatory)===1||isPrimaryOrJuniorClass(grade))return json({ok:false,error:"This learning area is compulsory for every learner at this school level and cannot be disabled. Only Senior School optional areas may be switched off."},403);
+      }
       if(values.name!==undefined||values.code!==undefined){
         const nextName=String(values.name??current.name??"").trim(),nextCode=String(values.code??current.code??"").trim().toUpperCase();
         if(!nextName||nextName.length>160||!nextCode||nextCode.length>24||!/^[A-Z0-9_-]+$/.test(nextCode))return json({ok:false,error:"Enter a valid learning-area name and code (letters, numbers, hyphens or underscores)."},400);
