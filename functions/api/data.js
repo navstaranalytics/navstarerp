@@ -480,7 +480,7 @@ export async function onRequestDelete({request,env}){
   const a=await auth(request,env);if(a.error)return a.error;
   const parts=new URL(request.url).pathname.split("/"),name=parts[parts.length-2],recordId=decodeURIComponent(parts[parts.length-1]||""),cfg=resources[name];
   if(!cfg||!recordId)return json({ok:false,error:"Unknown resource or record."},404);
-  if(!["years","terms"].includes(name))return json({ok:false,error:"Deletion is not enabled for this resource."},405);
+  if(!["years","terms","school-events"].includes(name))return json({ok:false,error:"Deletion is not enabled for this resource."},405);
   if(!allowed(a.user,permissionFor(name,true)))return json({ok:false,error:"Your role does not have permission to delete this record."},403);
   const requested=new URL(request.url).searchParams.get("schoolId")||"";
   const schoolId=cfg.scope?(a.user.is_super_admin?requested:a.user.school_id):"";
@@ -491,10 +491,10 @@ export async function onRequestDelete({request,env}){
     if(!current)return json({ok:false,error:"Record not found in this school."},404);
     await env.DB.prepare("DELETE FROM "+cfg.table+" WHERE id=? AND school_id=?").bind(recordId,schoolId).run();
     await audit(env.DB,a.user,schoolId,"record.deleted",name,recordId);
-    return json({ok:true,message:name==="years"?"Academic year deleted.":"Term deleted."});
+    return json({ok:true,message:name==="years"?"Academic year deleted.":name==="terms"?"Term deleted.":"School event deleted."});
   }catch(error){
-    console.error("NAVSTAR academic record delete",name,error);
-    return json({ok:false,error:"This record is still linked to classes, learners, assessments, attendance, timetable or other school records. Remove or reassign those records first."},409);
+    console.error("NAVSTAR record delete",name,error);
+    return json({ok:false,error:"This record is still linked to other school records and cannot be deleted safely."},409);
   }
 }
 export async function onRequestPatch({request,env}){
