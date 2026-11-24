@@ -26,7 +26,7 @@ import { onRequestGet as healthGet } from "./functions/api/health.js";
 import { onRequestGet as setupStatusGet } from "./functions/api/setup-status.js";
 import { onRequestPost as setupDatabasePost } from "./functions/api/setup-database.js";
 import { onRequestGet as schoolsGet, onRequestPost as schoolsPost, onRequestPatch as schoolsPatch } from "./functions/api/schools.js";
-import { onRequestGet as dataGet, onRequestPost as dataPost, onRequestPatch as dataPatch } from "./functions/api/data.js";
+import { onRequestGet as dataGet, onRequestPost as dataPost, onRequestPatch as dataPatch, onRequestDelete as dataDelete } from "./functions/api/data.js";
 import { onRequestPost as upgradePost } from "./functions/api/upgrade.js";
 import { onRequestPost as accessUpgradePost } from "./functions/api/access-upgrade.js";
 import { onRequestPost as schoolAdminPost, onRequestPatch as schoolAdminPatch } from "./functions/api/school-admin.js";
@@ -198,7 +198,8 @@ export default {
       if (request.method === "GET") return dataGet({ request, env });
       if (request.method === "POST") return dataPost({ request, env });
       if (request.method === "PATCH") return dataPatch({ request, env });
-      return new Response("Method not allowed", { status: 405, headers: { Allow: "GET, POST, PATCH" } });
+      if (request.method === "DELETE") return dataDelete({ request, env });
+      return new Response("Method not allowed", { status: 405, headers: { Allow: "GET, POST, PATCH, DELETE" } });
     }
     if (route === "/api/recovery" || route.startsWith("/api/recovery/")) {
       if (request.method === "GET") return recoveryGet({ request, env });
