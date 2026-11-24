@@ -10,3 +10,7 @@ for (const file of ["public/school-portal.html","public/super-admin.html"]) {
   });
   console.log(file+": "+scripts.length+" inline script(s) passed");
 }
+
+const pdfCheck=spawnSync(process.execPath,["--check","public/navstar-pdf.js"],{encoding:"utf8"});
+if(pdfCheck.status!==0) throw new Error("public/navstar-pdf.js syntax error:\n"+pdfCheck.stderr);
+console.log("public/navstar-pdf.js: syntax passed");
