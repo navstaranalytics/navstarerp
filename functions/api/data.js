@@ -99,6 +99,42 @@ async function schoolScope(request,user,cfg){
   return {schoolId};
 }
 function teacherLimited(user){const roles=user.role_keys||[user.role_key];return !user.is_super_admin&&roles.some(r=>["teacher","class_teacher"].includes(r))&&!user.permissions.includes("academics.manage")&&!user.permissions.includes("allocations.manage")}
+
+async function validateCompetencyRecord(db,name,schoolId,values,user){
+ const one=async(table,recordId)=>recordId?db.prepare("SELECT * FROM "+table+" WHERE id=? AND school_id=?").bind(recordId,schoolId).first():null;
+ if(name==="competency-frameworks"){
+  const grade=values.grade_level_id?await one("grade_levels",values.grade_level_id):null,area=values.learning_area_id?await one("learning_areas",values.learning_area_id):null;
+  if(values.grade_level_id&&!grade)return "Choose a grade belonging to this school.";
+  if(values.learning_area_id&&!area)return "Choose a learning area belonging to this school.";
+  if(grade&&grade.curriculum!==values.curriculum)return "The rubric curriculum must match its selected grade.";
+  if(area&&area.curriculum!==values.curriculum)return "The rubric curriculum must match its selected learning area.";
+  let levels=[];try{levels=JSON.parse(values.levels_json||"[]")}catch{}
+  if(!Array.isArray(levels)||levels.length<2||levels.length>8||levels.some(x=>!String(x.label||"").trim()))return "Configure between 2 and 8 achievement levels, each with a label.";
+ }
+ if(name==="rubric-criteria"&&!await one("competency_frameworks",values.framework_id))return "The selected rubric framework does not belong to this school.";
+ if(name==="competency-assessments"){
+  const [year,grade,area,framework]=await Promise.all([one("academic_years",values.academic_year_id),one("grade_levels",values.grade_level_id),one("learning_areas",values.learning_area_id),one("competency_frameworks",values.framework_id)]);
+  if(!year||!grade||!area||!framework)return "Select an academic year, grade, learning area and rubric from this school.";
+  if(grade.curriculum!==framework.curriculum)return "The rubric curriculum does not match this class curriculum.";
+  if(framework.grade_level_id&&framework.grade_level_id!==grade.id)return "This rubric is configured for a different grade.";
+  if(framework.learning_area_id&&framework.learning_area_id!==area.id)return "This rubric is configured for a different learning area.";
+  if(area.curriculum!==grade.curriculum)return "The learning area and class must use the same curriculum.";
+  if(values.stream_id){const stream=await one("streams",values.stream_id);if(!stream||stream.grade_level_id!==grade.id)return "Choose a stream linked to the selected grade."}
+ }
+ if(name==="competency-observations"){
+  const [assessment,learner,criterion]=await Promise.all([one("competency_assessments",values.competency_assessment_id),one("learners",values.learner_id),one("rubric_criteria",values.criterion_id)]);
+  if(!assessment||!learner||!criterion)return "The learner, rubric criterion and competency assessment must belong to this school.";
+  const framework=await one("competency-frameworks",assessment.framework_id);
+  if(criterion.framework_id!==assessment.framework_id)return "This criterion belongs to a different rubric.";
+  let levels=[];try{levels=JSON.parse(framework?.levels_json||"[]")}catch{}
+  if(!levels.some(x=>String(x.label)===String(values.achievement_level)))return "Choose an achievement level defined in the selected rubric.";
+  const enrolled=await db.prepare("SELECT 1 FROM learner_enrollments WHERE school_id=? AND learner_id=? AND academic_year_id=? AND grade_level_id=? AND (stream_id IS ? OR stream_id=?) AND status='active' LIMIT 1").bind(schoolId,learner.id,assessment.academic_year_id,assessment.grade_level_id,assessment.stream_id||null,assessment.stream_id||null).first();
+  if(!enrolled)return "The learner is not actively enrolled in this assessment class and stream.";
+  values.assessed_by=user.id;
+ }
+ return null;
+}
+
 async function ensureGradeBoundaryScope(db){
  const info=await db.prepare("PRAGMA table_info(grade_boundaries)").all();
  if(!(info.results||[]).some(x=>x.name==="school_id"))await db.prepare("ALTER TABLE grade_boundaries ADD COLUMN school_id TEXT REFERENCES schools(id) ON DELETE CASCADE").run();
@@ -109,8 +145,9 @@ async function validateTeacherWrite(db,user,name,values){
  const staff=await db.prepare("SELECT id FROM staff_profiles WHERE user_id=? AND school_id=? AND employment_status='active'").bind(user.id,user.school_id).first();
  if(!staff)return "Your staff profile is not active.";
  let year=values.academic_year_id,term=values.term_id,grade=values.grade_level_id,stream=values.stream_id,area=values.learning_area_id,pathway=values.pathway;
- if(name==="assessment-results"){
-  const a=await db.prepare("SELECT academic_year_id,term_id,grade_level_id,stream_id,learning_area_id,pathway FROM assessments WHERE id=? AND school_id=?").bind(values.assessment_id,user.school_id).first();
+ if(name==="competency-assessments"){year=values.academic_year_id;term=values.term_id;grade=values.grade_level_id;stream=values.stream_id;area=values.learning_area_id;}
+ if(name==="assessment-results"||name==="competency-observations"){
+  const isCompetency=name==="competency-observations";const a=await db.prepare("SELECT academic_year_id,term_id,grade_level_id,stream_id,learning_area_id"+(isCompetency?"":",pathway")+" FROM "+(isCompetency?"competency_assessments":"assessments")+" WHERE id=? AND school_id=?").bind(isCompetency?values.competency_assessment_id:values.assessment_id,user.school_id).first();
   if(!a)return "The assessment is not available in your school.";
   year=a.academic_year_id;term=a.term_id;grade=a.grade_level_id;stream=a.stream_id;area=a.learning_area_id;pathway=a.pathway;
   const enrolled=await db.prepare("SELECT 1 FROM learner_enrollments le JOIN learners l ON l.id=le.learner_id AND l.school_id=le.school_id WHERE le.learner_id=? AND le.school_id=? AND le.academic_year_id=? AND le.grade_level_id=? AND (le.stream_id IS ? OR le.stream_id=?) AND le.status='active' AND (? IS NULL OR l.pathway=?)").bind(values.learner_id,user.school_id,year,grade,stream,stream,pathway,pathway).first();
@@ -282,6 +319,7 @@ export async function onRequestPost({request,env}){
   if(cfg.scope&&!a.user.is_super_admin&&values.school_id&&values.school_id!==a.user.school_id)return json({ok:false,error:"You cannot create records for another school."},403);
   if(cfg.scope&&!await env.DB.prepare("SELECT 1 FROM schools WHERE id=?"+(a.user.is_super_admin?"":" AND status='active'")).bind(schoolId).first())return json({ok:false,error:"School not found or inactive."},404);
   if(cfg.scope)values.school_id=schoolId;
+  if(name.startsWith("competency-")||name==="rubric-criteria"){const competencyError=await validateCompetencyRecord(env.DB,name,schoolId,values,a.user);if(competencyError)return json({ok:false,error:competencyError},400)}
   if(name==="grading-schemes"&&values.level_key==="__ALL__"){const curriculum=String(values.curriculum||"").trim();const configured=await env.DB.prepare("SELECT 1 FROM grade_levels WHERE school_id=? AND curriculum=? AND is_active=1 LIMIT 1").bind(schoolId,curriculum).first();if(!configured)return json({ok:false,error:"This curriculum has no active grades configured for this school."},400);values.level_key=null;values.stage_code="ALL";}
   if(name==="learners"&&values.profile_json){
     let profile;try{profile=typeof values.profile_json==="string"?JSON.parse(values.profile_json):values.profile_json}catch{return json({ok:false,error:"Learner profile details must be valid JSON."},400)}
@@ -468,6 +506,7 @@ export async function onRequestPatch({request,env}){
   if(name==="payments")return json({ok:false,error:"Payment records are immutable. Record a separate reversal or correction instead."},405);
   let body;try{body=await request.json()}catch{return json({ok:false,error:"Invalid record update."},400)}
   if(name==="invoices"&&body.amount_paid!==undefined)return json({ok:false,error:"Invoice payments must be recorded through the payment register."},403);
+  if(name.startsWith("competency-")||name==="rubric-criteria"){const competencyError=await validateCompetencyRecord(env.DB,name,schoolId,values,a.user);if(competencyError)return json({ok:false,error:competencyError},400)}
   if(name==="invoices"&&["paid","part_paid"].includes(String(body.status||"")))return json({ok:false,error:"Invoice settlement status is calculated from confirmed payments."},403);
   const values=bodyFields(body,cfg);delete values.school_id;
   if(name==="grading-schemes"&&values.level_key==="__ALL__"){values.level_key=null;values.stage_code="ALL";}
