@@ -27,7 +27,7 @@ export async function onRequestGet({request,env}){
   const settled=await Promise.allSettled([
     env.DB.prepare("SELECT id,name,start_date,end_date,status FROM academic_years WHERE school_id=? AND (status='active' OR (start_date<=? AND end_date>=?)) ORDER BY CASE WHEN status='active' THEN 0 ELSE 1 END,start_date DESC LIMIT 1").bind(schoolId,now,now).first(),
     env.DB.prepare("SELECT t.id,t.name,t.start_date,t.end_date,t.status,y.name AS academic_year FROM terms t JOIN academic_years y ON y.id=t.academic_year_id AND y.school_id=t.school_id WHERE t.school_id=? AND (t.status='active' OR (t.start_date<=? AND t.end_date>=?)) ORDER BY CASE WHEN t.status='active' THEN 0 ELSE 1 END,t.start_date DESC LIMIT 1").bind(schoolId,now,now).first(),
-    env.DB.prepare("SELECT ss.status,ss.next_due_date,ss.estimated_amount_kes,ss.preferred_payment_method,p.name AS plan_name,p.grace_period_days FROM school_subscriptions ss LEFT JOIN subscription_plans p ON p.id=ss.plan_id WHERE ss.school_id=? ORDER BY ss.updated_at DESC LIMIT 1").bind(schoolId).first(),
+    env.DB.prepare("SELECT ss.id,ss.status,ss.next_due_date,ss.estimated_amount_kes,ss.preferred_payment_method,ss.payment_plan,ss.billing_cycle,p.name AS plan_name,p.grace_period_days,p.rate_kes,p.billing_model,p.capabilities_json,p.school_levels_json,p.payment_methods_json FROM school_subscriptions ss LEFT JOIN subscription_plans p ON p.id=ss.plan_id WHERE ss.school_id=? ORDER BY ss.updated_at DESC LIMIT 1").bind(schoolId).first(),
     env.DB.prepare("SELECT COUNT(*) AS total FROM learners WHERE school_id=? AND status='active'").bind(schoolId).first(),
     env.DB.prepare("SELECT COUNT(*) AS total FROM staff_profiles WHERE school_id=? AND employment_status='active'").bind(schoolId).first(),
     env.DB.prepare("SELECT COUNT(*) AS total FROM classes WHERE school_id=? AND status='active'").bind(schoolId).first(),
@@ -56,6 +56,6 @@ export async function onRequestGet({request,env}){
   const unavailable=settled.map((x,i)=>x.status==="rejected"?["academicYear","currentTerm","subscription","learners","staff","classes","attendanceSessions","attendanceToday","attendanceBreakdown","financeThisMonth","feeAccounts","assessments","assessmentResults"][i]:null).filter(Boolean);
   const due=subscription?.next_due_date||null;
   const daysRemaining=due?Math.ceil((new Date(due+"T00:00:00Z").getTime()-new Date(now+"T00:00:00Z").getTime())/86400000):null;
-  return json({ok:true,academicYear:year||null,currentTerm:term||null,subscription:subscription?{...subscription,daysRemaining}:null,schoolMotto:value(13)?.motto||"",counts,insights,unavailable,asOf:now});
+  return json({ok:true,academicYear:year||null,currentTerm:term||null,subscription:subscription?{...subscription,daysRemaining,capabilities:(()=>{try{return JSON.parse(subscription.capabilities_json||"[]")}catch{return []}})(),schoolLevels:(()=>{try{return JSON.parse(subscription.school_levels_json||"[]")}catch{return []}})(),paymentMethods:(()=>{try{return JSON.parse(subscription.payment_methods_json||"[]")}catch{return []}})()}:null,schoolMotto:value(13)?.motto||"",counts,insights,unavailable,asOf:now});
  }catch(error){console.error("NAVSTAR school workspace summary",error);return json({ok:false,error:"Could not load the school calendar and subscription status."},500)}
 }
