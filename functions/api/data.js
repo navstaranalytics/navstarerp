@@ -218,6 +218,9 @@ function gradeBelongsToSelectedLevels(grade,levels){
  const level=String(grade.school_level||"").trim().toLowerCase().replace(/\s+school$/,"");
  if(level&&selected.includes(level))return true;
  const code=String(grade.stage_code||"").toLowerCase();
+ const stageName=String(grade.stage_name||"").trim().toLowerCase();
+ if(stageName&&selected.includes(stageName))return true;
+ if(code&&selected.includes(code))return true;
  if(/^pp[12]$/.test(code))return selected.includes("pre-primary")||selected.includes("pre primary");
  if(/^g[1-6]$/.test(code))return selected.includes("primary");
  if(/^g[7-9]$/.test(code))return selected.includes("junior")||selected.includes("junior school");
