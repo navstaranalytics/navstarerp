@@ -81,7 +81,6 @@ jobs:
           MPESA_PASSKEY: ${{ secrets.MPESA_PASSKEY }}
           MPESA_CALLBACK_TOKEN: ${{ secrets.MPESA_CALLBACK_TOKEN }}
           MPESA_ENVIRONMENT: ${{ secrets.MPESA_ENVIRONMENT }}
-          MPESA_ENV: ${{ secrets.MPESA_ENV }}
           MPESA_TRANSACTION_TYPE: ${{ secrets.MPESA_TRANSACTION_TYPE }}
         run: |
           set -eu
@@ -98,7 +97,6 @@ jobs:
           put_secret MPESA_PASSKEY "$MPESA_PASSKEY"
           put_secret MPESA_CALLBACK_TOKEN "$MPESA_CALLBACK_TOKEN"
           put_secret MPESA_ENVIRONMENT "$MPESA_ENVIRONMENT"
-          put_secret MPESA_ENV "$MPESA_ENV"
           put_secret MPESA_TRANSACTION_TYPE "$MPESA_TRANSACTION_TYPE"
 
       - name: Deploy Navstar Worker
