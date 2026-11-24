@@ -214,8 +214,8 @@ async function syncCompulsoryLearningAreas(db,schoolId,enrollmentId=null){
 }
 function gradeBelongsToSelectedLevels(grade,levels){
  if(!Array.isArray(levels)||!levels.length)return true;
- const selected=levels.map(x=>String(x||"").trim().toLowerCase().replace(/\\s+school$/,""));
- const level=String(grade.school_level||"").trim().toLowerCase().replace(/\\s+school$/,"");
+ const selected=levels.map(x=>String(x||"").trim().toLowerCase().replace(/\s+school$/,""));
+ const level=String(grade.school_level||"").trim().toLowerCase().replace(/\s+school$/,"");
  if(level&&selected.includes(level))return true;
  const code=String(grade.stage_code||"").toLowerCase();
  if(/^pp[12]$/.test(code))return selected.includes("pre-primary")||selected.includes("pre primary");
