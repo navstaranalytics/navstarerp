@@ -276,6 +276,7 @@ export async function onRequestPost({request,env}){
   if(cfg.readOnly)return json({ok:false,error:"This resource is read-only."},405);
   let body;try{body=await request.json()}catch{return json({ok:false,error:"Invalid record data."},400)}
   const values=bodyFields(body,cfg);
+  if(name==="grading-schemes"&&values.level_key==="__ALL__"){const curriculum=String(values.curriculum||"").trim();const configured=await env.DB.prepare("SELECT 1 FROM grade_levels WHERE school_id=? AND curriculum=? AND is_active=1 LIMIT 1").bind(schoolId,curriculum).first();if(!configured)return json({ok:false,error:"This curriculum has no active grades configured for this school."},400);values.level_key=null;values.stage_code="ALL";}
   for(const key of cfg.required)if(values[key]===undefined||values[key]===null||values[key]==="")return json({ok:false,error:key+" is required."},400);
   const schoolId=cfg.scope?(a.user.is_super_admin?values.school_id:a.user.school_id):(values.school_id||null);
   if(cfg.scope&&!schoolId)return json({ok:false,error:"School workspace is required."},400);
@@ -469,6 +470,7 @@ export async function onRequestPatch({request,env}){
   if(name==="invoices"&&body.amount_paid!==undefined)return json({ok:false,error:"Invoice payments must be recorded through the payment register."},403);
   if(name==="invoices"&&["paid","part_paid"].includes(String(body.status||"")))return json({ok:false,error:"Invoice settlement status is calculated from confirmed payments."},403);
   const values=bodyFields(body,cfg);delete values.school_id;
+  if(name==="grading-schemes"&&values.level_key==="__ALL__"){values.level_key=null;values.stage_code="ALL";}
   if(!Object.keys(values).length)return json({ok:false,error:"No editable fields were supplied."},400);
   try{
     const where=cfg.scope?"id=? AND school_id=?":"id=?";
