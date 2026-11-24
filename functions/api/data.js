@@ -522,7 +522,7 @@ export async function onRequestPatch({request,env}){
 
   if(name==="invoices"&&["paid","part_paid"].includes(String(body.status||"")))return json({ok:false,error:"Invoice settlement status is calculated from confirmed payments."},403);
   const values=bodyFields(body,cfg);delete values.school_id;
-  if(name==="grading-schemes"&&String(values.level_key||"").startsWith("__LEVEL__")){values.level_key=null;values.stage_code="LEVEL:"+String(values.level_key).slice(9);}else if(name==="grading-schemes"&&values.level_key==="__ALL__"){values.level_key=null;values.stage_code="ALL";}
+  if(name==="grading-schemes"&&String(values.level_key||"").startsWith("__LEVEL__")){const level=String(values.level_key).slice(9);values.level_key=null;values.stage_code="LEVEL:"+level;}else if(name==="grading-schemes"&&values.level_key==="__ALL__"){values.level_key=null;values.stage_code="ALL";}
   if(!Object.keys(values).length)return json({ok:false,error:"No editable fields were supplied."},400);
   try{
     const where=cfg.scope?"id=? AND school_id=?":"id=?";
