@@ -171,6 +171,7 @@ function mapSchool(row){
   let meta={};
   try{meta=JSON.parse(row.settings_json||"{}").navstar_school_meta||{}}catch{}
   let levels=[];try{levels=JSON.parse(row.school_levels_json||"[]")}catch{}
+  const configuredLevels=[...levels];
   let curricula=[];try{curricula=JSON.parse(row.curricula_json||"[]")}catch{} if(!curricula.length&&row.curriculum)curricula=[row.curriculum];
   if(Array.isArray(levels)&&levels.some(x=>/^Grade |^Form |^PP[12]$/i.test(String(x)))){
     const legacy=levels.map(String),groups=[];
@@ -186,7 +187,7 @@ function mapSchool(row){
     category:meta.category||row.institution_type||"",level:meta.level||"",ownership:row.ownership||"",county:row.county||"",
     subCounty:row.sub_county||"",town:row.town||"",contact:row.contact_person||"",email:row.contact_email||"",
     phone:row.contact_phone||"",address:row.physical_address||"",curriculum:row.curriculum||"Kenyan CBE",curricula,
-    curriculumLabel:meta.curriculumLabel||row.curriculum||"Kenyan CBE",levels,plan:meta.plan||"Starter",
+    curriculumLabel:meta.curriculumLabel||row.curriculum||"Kenyan CBE",levels,configuredLevels,plan:meta.plan||"Starter",
     status:displayStatus(row.status),expiry:meta.expiry||"",modules:Array.isArray(meta.modules)?meta.modules:modulesForLevels(levels),
     learnerCount:Number(meta.learnerCount||0),teacherCount:Number(meta.teacherCount||0),created:row.created_at,schoolAdmin:row.admin_user_id?{id:row.admin_user_id,fullName:row.admin_full_name,username:row.admin_username,email:row.admin_email,phone:row.admin_phone,status:row.admin_status,role:"School Administrator"}:null};
 }
