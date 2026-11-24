@@ -480,13 +480,26 @@ export async function onRequestDelete({request,env}){
   const a=await auth(request,env);if(a.error)return a.error;
   const parts=new URL(request.url).pathname.split("/"),name=parts[parts.length-2],recordId=decodeURIComponent(parts[parts.length-1]||""),cfg=resources[name];
   if(!cfg||!recordId)return json({ok:false,error:"Unknown resource or record."},404);
-  if(!["years","terms","school-events"].includes(name))return json({ok:false,error:"Deletion is not enabled for this resource."},405);
+  if(!["years","terms","school-events","grading-schemes"].includes(name))return json({ok:false,error:"Deletion is not enabled for this resource."},405);
   if(!allowed(a.user,permissionFor(name,true)))return json({ok:false,error:"Your role does not have permission to delete this record."},403);
   const requested=new URL(request.url).searchParams.get("schoolId")||"";
   const schoolId=cfg.scope?(a.user.is_super_admin?requested:a.user.school_id):"";
   if(cfg.scope&&!schoolId)return json({ok:false,error:"School workspace is required."},400);
   if(cfg.scope&&!a.user.is_super_admin&&requested&&requested!==a.user.school_id)return json({ok:false,error:"You cannot delete records in another school."},403);
   try{
+    if(name==="grading-schemes"){
+      await ensureGradeBoundaryScope(env.DB);
+      const scheme=await env.DB.prepare("SELECT id,name FROM grading_schemes WHERE id=? AND school_id=?").bind(recordId,schoolId).first();
+      if(!scheme)return json({ok:false,error:"Grading scheme not found in this school."},404);
+      const linked=await env.DB.prepare("SELECT id FROM report_cards WHERE school_id=? AND json_extract(report_data_json,'$.gradingScheme')=? LIMIT 1").bind(schoolId,scheme.name).first();
+      if(linked)return json({ok:false,error:"This grading scheme is already recorded on report cards. Deactivate it instead so historical reports remain protected."},409);
+      await env.DB.batch([
+        env.DB.prepare("DELETE FROM grade_boundaries WHERE scheme_id=? AND school_id=?").bind(recordId,schoolId),
+        env.DB.prepare("DELETE FROM grading_schemes WHERE id=? AND school_id=?").bind(recordId,schoolId)
+      ]);
+      await audit(env.DB,a.user,schoolId,"record.deleted",name,recordId);
+      return json({ok:true,message:"Grading scheme and its grade boundaries deleted."});
+    }
     const current=await env.DB.prepare("SELECT id FROM "+cfg.table+" WHERE id=? AND school_id=?").bind(recordId,schoolId).first();
     if(!current)return json({ok:false,error:"Record not found in this school."},404);
     await env.DB.prepare("DELETE FROM "+cfg.table+" WHERE id=? AND school_id=?").bind(recordId,schoolId).run();
