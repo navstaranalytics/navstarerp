@@ -91,10 +91,10 @@ grade_catalog AS (
  WHERE gl.is_active=1
 )
 INSERT OR IGNORE INTO learning_areas
- (id,school_id,curriculum,code,name,stage_code,pathway,is_active,subject_type,is_mandatory,source_template,catalogue_code,school_customized)
+ (id,school_id,curriculum,code,name,stage_code,pathway,is_active,is_mandatory,source_template,catalogue_code)
 SELECT lower(hex(randomblob(16))), g.school_id, g.curriculum, c.code, c.name, g.stage_code, c.pathway,
-       CASE WHEN c.mandatory=1 THEN 1 ELSE 0 END, 'learning_area', c.mandatory,
-       'navstar-standard-catalogue', c.code, 0
+       CASE WHEN c.mandatory=1 THEN 1 ELSE 0 END, c.mandatory,
+       'navstar-standard-catalogue', c.code
 FROM grade_catalog g
 JOIN catalog c ON c.stage_group=g.stage_group
  AND ((c.curriculum_key='CBE' AND lower(g.curriculum) LIKE '%cbe%')
