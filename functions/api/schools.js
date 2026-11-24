@@ -76,8 +76,8 @@ function normalizeCurricula(body, fallback) {
 }
 function validateCurricula(curricula,levels) {
  if(!curricula.length)return "Select at least one curriculum framework.";
- if(levels.some(x=>/^8-4-4/.test(x))&&!curricula.includes("Kenyan 8-4-4"))return "Select Kenyan 8-4-4 to offer Standards 1–8 or Forms 1–4.";
- if(levels.some(x=>/^(Pre-Primary|Primary|Junior School|Senior School)$/.test(x))&&!curricula.includes("Kenyan CBE"))return "Select Kenyan CBE to offer CBE school divisions.";
+ if(levels.some(x=>/^8-4-4/i.test(x)||/^Form [1-4]$/i.test(x))&&!curricula.includes("Kenyan 8-4-4"))return "Select Kenyan 8-4-4 to offer Standards 1–8 or Forms 1–4.";
+ if(levels.some(x=>/^(Pre-Primary|Primary|Junior School|Senior School|Grade (?:[1-9]|1[0-2])|PP[12])$/i.test(x))&&!curricula.includes("Kenyan CBE"))return "Select Kenyan CBE to offer CBE school classes.";
  return null;
 }
 async function syncSchoolCurricula(db,schoolId,curricula,levels) {
@@ -88,8 +88,8 @@ async function syncSchoolCurricula(db,schoolId,curricula,levels) {
 }
 function curriculumSelectionError(curriculum,levels){
  const is844=/8-4-4/i.test(String(curriculum||"")),isCbe=/cbe|cbc|competenc/i.test(String(curriculum||""));
- const legacy=(levels||[]).some(x=>/^8-4-4/i.test(String(x)));
- const modern=(levels||[]).some(x=>/^(Pre-Primary|Primary|Junior School|Senior School)$/i.test(String(x)));
+ const legacy=(levels||[]).some(x=>/^8-4-4/i.test(String(x))||/^Form [1-4]$/i.test(String(x)));
+ const modern=(levels||[]).some(x=>/^(Pre-Primary|Primary|Junior School|Senior School|Grade (?:[1-9]|1[0-2])|PP[12])$/i.test(String(x)));
  if(is844&&modern)return "For Kenyan 8-4-4, select 8-4-4 Primary and/or 8-4-4 Secondary divisions only.";
  if(isCbe&&legacy)return "For Kenyan CBE, select Pre-Primary, Primary, Junior School and/or Senior School divisions only.";
  if(!is844&&!isCbe&&legacy)return "8-4-4 divisions require the Kenyan 8-4-4 curriculum framework.";
