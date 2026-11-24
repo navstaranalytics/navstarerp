@@ -28,7 +28,7 @@ The application constructs this URL from the current Navstar origin and the Work
 
 ## Test sequence
 
-1. Apply `migrations/0005_samples_automation_payments.sql` to the production D1 database.
+1. Apply all pending migrations to the D1 database. The voluntary soda contribution ledger is created by `migrations/0010_school_contributions.sql`; the deployment workflow applies pending migrations automatically.
 2. Add your Daraja consumer key, consumer secret, shortcode and Lipa Na M-Pesa passkey as protected Cloudflare Worker secrets. Set `MPESA_ENVIRONMENT=sandbox` first and use Safaricom sandbox credentials and test MSISDNs. Switch to `production` only after the sandbox flow and callback are verified and Safaricom has approved production access.
 3. For subscription testing, create a Navstar subscription invoice. For the voluntary soda test, sign in as a School Admin and open **Buy Navstar a soda**; choose KES 10–5,000 and enter a test phone number. The soda contribution is stored separately from all school fees and invoices.
 4. Sign in to that school and open the Navstar subscription payment panel.
