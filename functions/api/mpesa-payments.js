@@ -18,6 +18,7 @@ export async function onRequestPostStk({request,env}){const user=await getAuthen
 export async function onRequestPostSoda({request,env}){
  const user=await getAuthenticatedSession(request,env);
  if(!user?.school_id)return json({ok:false,error:"School sign-in is required."},401);
+ if(!user.role_keys?.includes("school_admin")&&!user.permissions?.includes("school.settings.manage"))return json({ok:false,error:"School Administrator access is required for voluntary contributions."},403);
  if(user.access_mode==="block_all")return json({ok:false,error:"Online payments are unavailable under the current account access policy."},423);
  const required=["MPESA_CONSUMER_KEY","MPESA_CONSUMER_SECRET","MPESA_SHORTCODE","MPESA_PASSKEY","MPESA_CALLBACK_TOKEN"];
  if(required.some(k=>!env[k]))return json({ok:false,error:"Daraja is not configured. Ask the Navstar platform administrator to configure the protected Cloudflare M-Pesa secrets."},503);
@@ -26,7 +27,7 @@ export async function onRequestPostSoda({request,env}){
  if(!phone)return json({ok:false,error:"Enter a valid Kenyan Safaricom number, for example 07XXXXXXXX."},400);
  if(!Number.isSafeInteger(amount)||amount<10||amount>5000)return json({ok:false,error:"Choose an amount between KES 10 and KES 5,000."},400);
  try{
-  const pending=await env.DB.prepare("SELECT id FROM school_contributions WHERE school_id=? AND status='pending' AND created_at>=datetime('now','-10 minutes') LIMIT 1").bind(user.school_id).first();
+  const pending=await env.DB.prepare("SELECT id FROM school_contributions WHERE school_id=? AND status='pending' AND created_at>=strftime('%Y-%m-%dT%H:%M:%fZ','now','-10 minutes') LIMIT 1").bind(user.school_id).first();
   if(pending)return json({ok:false,error:"A contribution request is already awaiting confirmation. Please verify it before starting another."},409);
   const {token,base}=await accessToken(env),shortcode=String(env.MPESA_SHORTCODE),timestamp=new Date().toISOString().replace(/[-:TZ.]/g,"").slice(0,14),password=btoa(shortcode+String(env.MPESA_PASSKEY)+timestamp),origin=new URL(request.url).origin,callback=origin+"/api/payments/mpesa/callback?token="+encodeURIComponent(env.MPESA_CALLBACK_TOKEN);
   const payload={BusinessShortCode:shortcode,Password:password,Timestamp:timestamp,TransactionType:env.MPESA_TRANSACTION_TYPE||"CustomerPayBillOnline",Amount:amount,PartyA:phone,PartyB:shortcode,PhoneNumber:phone,CallBackURL:callback,AccountReference:"NAVSODA",TransactionDesc:"Voluntary Navstar soda appreciation"};
@@ -44,6 +45,7 @@ export async function onRequestPostSoda({request,env}){
 export async function onRequestGetSoda({request,env}){
  const user=await getAuthenticatedSession(request,env);
  if(!user?.school_id)return json({ok:false,error:"School sign-in is required."},401);
+ if(!user.role_keys?.includes("school_admin")&&!user.permissions?.includes("school.settings.manage"))return json({ok:false,error:"School Administrator access is required to view this contribution."},403);
  const idValue=new URL(request.url).searchParams.get("id")||"";
  if(!idValue)return json({ok:false,error:"Contribution reference is required."},400);
  const row=await env.DB.prepare("SELECT id,amount,status,mpesa_receipt_number,transaction_date,result_description,created_at,confirmed_at,checkout_request_id FROM school_contributions WHERE id=? AND school_id=?").bind(idValue,user.school_id).first();
