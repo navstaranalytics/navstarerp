@@ -372,7 +372,7 @@ export async function onRequestPost({request,env}){
   if(!cfg)return json({ok:false,error:"Unknown data resource."},404);
   if(!allowed(a.user,permissionFor(name,true)))return json({ok:false,error:"Your role does not have permission to change this resource."},403);
   if(name==="grades"&&!a.user.is_super_admin)return json({ok:false,error:"Classes are configured by Navstar Super Admin. School Admins may create streams only."},403);
-  if(name==="classes"&&!a.user.is_super_admin)return json({ok:false,error:"School Admins do not create classes. Select an assigned class and manage its streams instead."},403);
+  if(name==="classes")return json({ok:false,error:"Class groups are no longer created. Classes are centrally configured; manage streams under each class instead."},405);
   if(name==="learning-areas"&&!a.user.is_super_admin)return json({ok:false,error:"Schools can edit existing learning-area names and codes, but only Navstar can add catalogue entries."},403);
   if(name==="grade-boundaries")await ensureGradeBoundaryScope(env.DB);
   if(cfg.readOnly)return json({ok:false,error:"This resource is read-only."},405);
@@ -585,7 +585,7 @@ export async function onRequestPatch({request,env}){
     let submitted;try{submitted=await request.clone().json()}catch{submitted={}}
     if(Object.keys(submitted).some(k=>k!=="is_active")||submitted.is_active===undefined)return json({ok:false,error:"School Admins may only activate or deactivate classes assigned by Super Admin."},403);
   }
-  if(name==="classes"&&!a.user.is_super_admin)return json({ok:false,error:"School Admins do not create or edit classes. Manage streams under assigned classes instead."},403);
+  if(name==="classes")return json({ok:false,error:"Class groups are no longer edited. Classes are centrally configured; manage streams under each class instead."},405);
   if(name==="learning-areas"&&!a.user.is_super_admin){
     let submitted;try{submitted=await request.clone().json()}catch{submitted={}}
     const allowedFields=new Set(["is_active"]);
