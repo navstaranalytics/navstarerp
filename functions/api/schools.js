@@ -129,6 +129,21 @@ function curriculumLearningAreas(curriculum,levels){
 }
 async function syncSchoolLearningAreas(db,schoolId,curriculum,levels){
  const {template,rows}=curriculumLearningAreas(curriculum,levels);
+ // Apply the platform-wide learning-area catalogue to each school tenant.
+ // Existing curriculum templates remain the fallback; Super Admin additions and
+ // compulsory/optional changes are then synchronized into the school's D1 records.
+ const central=await db.prepare("SELECT setting_value FROM platform_settings WHERE setting_key='learning_area_catalogue'").first().catch(()=>null);
+ let catalogue=[];try{catalogue=JSON.parse(central?.setting_value||"{}").areas||[]}catch{}
+ const stageSet=new Set(configuredGradeSpecs(levels).map(x=>x[0]));
+ for(const item of catalogue){
+  if(item.curriculum!==curriculum||!stageSet.has(String(item.level||"")))continue;
+  const code=String(item.code||"").trim().toUpperCase(),name=String(item.name||"").trim();
+  if(!code||!name)continue;
+  const mandatory=Number(item.mandatory)===1?1:0;
+  const found=rows.find(x=>x.stage===item.level&&(x.code===code||String(x.name).toLowerCase()===name.toLowerCase()));
+  if(found){found.code=code;found.name=name;found.pathway=item.pathway||null;found.type=mandatory?"mandatory":"optional";found.mandatory=mandatory;}
+  else rows.push({stage:item.level,code,name,pathway:item.pathway||null,type:mandatory?"mandatory":"optional",mandatory});
+ }
  const wanted=new Set(rows.map(x=>x.stage));
  // Do not deactivate other curriculum rows; a school may offer CBE and 8-4-4 concurrently.
  const existing=await db.prepare("SELECT id,stage_code,code,name,catalogue_code,school_customized FROM learning_areas WHERE school_id=?").bind(schoolId).all();
