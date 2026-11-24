@@ -67,7 +67,8 @@ async function auth(request,env){
 }
 const permissionFor=(name,write=false)=>{
   if(["plans","regions","platform-users","analytics","settings","audit","ai-usage","integrations"].includes(name))return "platform.manage";
-  if(["subscriptions","invoices","payments"].includes(name))return "school.settings.manage";
+  if(name==="subscriptions")return "school.settings.manage";
+  if(["invoices","payments"].includes(name))return write?"platform.manage":"school.settings.manage";
   if(name==="grade-boundaries")return "academics.manage";
   if(name==="school-events")return write?"school.settings.manage":"school.settings.manage";
   if(name==="classes")return "classes.manage";
