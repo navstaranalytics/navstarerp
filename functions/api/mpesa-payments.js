@@ -60,7 +60,7 @@ export async function onRequestPostCallback({request,env}){if(!env.MPESA_CALLBAC
   await env.DB.prepare("INSERT INTO payment_provider_events(id,provider,provider_event_id,payment_id,school_id,status,payload_json) VALUES(?,'mpesa',?,?,?,?,?)").bind(uid(),eventId,payment.id,payment.school_id,success?"confirmed":"failed",JSON.stringify(body)).run();
   const contribution=await env.DB.prepare("SELECT id FROM school_contributions WHERE payment_id=?").bind(payment.id).first();
   if(contribution){
-   const rawDate=get("TransactionDate"),transactionDate=rawDate?String(rawDate).replace(/^(\\d{4})(\\d{2})(\\d{2})(\\d{2})(\\d{2})(\\d{2})$/,"$1-$2-$3T$4:$5:$6"):null;
+   const rawDate=get("TransactionDate"),transactionDate=rawDate?String(rawDate).replace(/^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})$/,"$1-$2-$3T$4:$5:$6"):null;
    if(success)await env.DB.batch([
     env.DB.prepare("UPDATE payments SET status='confirmed',received_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=? AND status='pending'").bind(payment.id),
     env.DB.prepare("UPDATE school_contributions SET status='confirmed',mpesa_receipt_number=?,transaction_date=?,result_code=?,result_description=?,confirmed_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=? AND status='pending'").bind(receipt,transactionDate,Number(callback.ResultCode),String(callback.ResultDesc||"Payment confirmed"),contribution.id)
