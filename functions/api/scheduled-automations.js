@@ -39,5 +39,25 @@ export async function runScheduledAutomations(env,scheduledTime=new Date()){
    await logRun(env.DB,key,"success",{suspended,stillInGraceOrAlternativePolicy:kept});result.tasks.push({key,status:"success",suspended,kept})
   }catch(e){await logRun(env.DB,key,"failed",{},String(e?.message||e));result.tasks.push({key,status:"failed"})}
  }
+
+ // School calendar reminders are delivered to active school portal users by audience.
+ try{
+  const now=new Date(scheduledTime).toISOString(),windowStart=new Date(new Date(scheduledTime).getTime()-15*60*1000).toISOString();
+  const due=await env.DB.prepare("SELECT e.id,e.school_id,e.title,e.description,e.start_at,e.audience,e.reminder_minutes,s.name AS school_name,s.contact_email FROM school_calendar_events e JOIN schools s ON s.id=e.school_id WHERE e.status='scheduled' AND e.reminder_minutes>0 AND e.reminder_sent_at IS NULL AND datetime(e.start_at,'-'||e.reminder_minutes||' minutes')<=datetime(?) AND datetime(e.start_at,'-'||e.reminder_minutes||' minutes')>datetime(?)").bind(now,windowStart).all();
+  let sent=0,skipped=0;
+  for(const event of due.results||[]){
+   const audience=String(event.audience||"all");
+   const roles=audience==="teachers"?["teacher","class_teacher"]:audience==="administration"?["school_admin","deputy_headteacher","deputy_principal","principal"]:audience==="learners"?["learner","student"]:audience==="parents"?["parent","guardian"]:[];
+   let recipients=[];
+   if(roles.length){const marks=roles.map(()=>"?").join(",");const q=await env.DB.prepare("SELECT DISTINCT u.email FROM school_memberships sm JOIN users u ON u.id=sm.user_id JOIN user_role_assignments ura ON ura.user_id=u.id AND ura.school_id=sm.school_id JOIN roles r ON r.id=ura.role_id WHERE sm.school_id=? AND sm.membership_status='active' AND u.status='active' AND u.email IS NOT NULL AND r.role_key IN ("+marks+")").bind(event.school_id,...roles).all();recipients=(q.results||[]).map(x=>x.email).filter(Boolean)}
+   else{const q=await env.DB.prepare("SELECT DISTINCT u.email FROM school_memberships sm JOIN users u ON u.id=sm.user_id WHERE sm.school_id=? AND sm.membership_status='active' AND u.status='active' AND u.email IS NOT NULL").bind(event.school_id).all();recipients=(q.results||[]).map(x=>x.email).filter(Boolean)}
+   if(!recipients.length&&event.contact_email)recipients=[event.contact_email];
+   if(!recipients.length||!env.RESEND_API_KEY){skipped++;continue}
+   const when=new Date(event.start_at).toLocaleString("en-KE",{timeZone:"Africa/Nairobi",dateStyle:"full",timeStyle:"short"});
+   const resp=await sendNavstarEmail(env,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({to:[...new Set(recipients)],subject:"School reminder: "+event.title,text:"Reminder from "+event.school_name+": "+event.title+" is scheduled for "+when+". "+(event.description||"")+" This is an automated Navstar school calendar reminder."})});
+   if(resp.ok){await env.DB.prepare("UPDATE school_calendar_events SET reminder_sent_at=?,updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=? AND reminder_sent_at IS NULL").bind(now,event.id).run();sent++}else skipped++;
+  }
+  if((due.results||[]).length){await logRun(env.DB,"school_calendar_reminders","success",{sent,skipped,eligible:due.results.length});result.tasks.push({key:"school_calendar_reminders",status:"success",sent,skipped})}
+ }catch(e){await logRun(env.DB,"school_calendar_reminders","failed",{},String(e?.message||e));result.tasks.push({key:"school_calendar_reminders",status:"failed"})}
  return result;
 }
