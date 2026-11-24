@@ -276,6 +276,7 @@ async function loadAssessmentRegister(id){
 let competencyFrameworkRows=[],rubricCriterionRows=[],competencyAssessmentRows=[],competencyObservationRows=[];
 function competencyFill(el,rows,label,empty){if(!el)return;const old=el.value;el.innerHTML='<option value="">'+empty+'</option>'+rows.map(x=>'<option value="'+esc(x.id)+'">'+esc(label(x))+'</option>').join('');if(old&&rows.some(x=>x.id===old))el.value=old;}
 function competencyFrameworkLevels(f){try{return JSON.parse(f?.levels_json||"[]")}catch{return []}}
+function refreshCompetencyPlanOptions(){const f=$("competencyAssessmentForm"),grade=assessmentGrades.find(x=>x.id===f.elements.grade_level_id.value),oldStream=f.elements.stream_id.value,oldArea=f.elements.learning_area_id.value,oldFramework=f.elements.framework_id.value;competencyFill(f.elements.stream_id,assessmentStreams.filter(x=>!grade||x.grade_level_id===grade.id),x=>x.name,"All streams");if(oldStream&&assessmentStreams.some(x=>x.id===oldStream&&(!grade||x.grade_level_id===grade.id)))f.elements.stream_id.value=oldStream;const areas=assessmentAreas.filter(x=>!grade||x.curriculum===grade.curriculum);competencyFill(f.elements.learning_area_id,areas,x=>x.name,"Select learning area");if(oldArea&&areas.some(x=>x.id===oldArea))f.elements.learning_area_id.value=oldArea;const area=f.elements.learning_area_id.value;const frameworks=competencyFrameworkRows.filter(x=>x.status!=="inactive"&&x.status!=="archived"&&(!grade||x.curriculum===grade.curriculum)&&(!x.grade_level_id||!grade||x.grade_level_id===grade.id)&&(!x.learning_area_id||!area||x.learning_area_id===area));competencyFill(f.elements.framework_id,frameworks,x=>x.name+" · "+x.curriculum,"Select matching rubric");if(oldFramework&&frameworks.some(x=>x.id===oldFramework))f.elements.framework_id.value=oldFramework;}
 function competencyClassLearners(a){const enrolled=assessmentEnrollments.filter(x=>x.academic_year_id===a.academic_year_id&&x.grade_level_id===a.grade_level_id&&(!a.stream_id||x.stream_id===a.stream_id)&&x.status==="active");const ids=new Set(enrolled.map(x=>x.learner_id));return assessmentLearners.filter(x=>ids.has(x.id));}
 async function loadCompetencyWorkspace(){
  const hosts=["competencyFrameworksTable","rubricCriteriaTable","competencyAssessmentsTable","competencyObservationsTable"];
@@ -284,6 +285,7 @@ async function loadCompetencyWorkspace(){
   competencyFrameworkRows=fw.records||[];rubricCriterionRows=cr.records||[];competencyAssessmentRows=ca.records||[];competencyObservationRows=ob.records||[];
   const curricula=[...new Set(assessmentGrades.map(x=>x.curriculum).filter(Boolean))];
   const ff=$("competencyFrameworkForm");
+  ff.classList.toggle("hidden",!has("academics.manage"));$("rubricCriterionForm").classList.toggle("hidden",!has("academics.manage"));$("competencyAssessmentForm").classList.toggle("hidden",!has("assessments.manage"));$("competencyObservationForm").classList.toggle("hidden",!has("assessments.manage"));
   ff.elements.curriculum.innerHTML=curricula.map(x=>'<option value="'+esc(x)+'">'+esc(x)+'</option>').join("");
   competencyFill(ff.elements.grade_level_id,assessmentGrades.filter(x=>!ff.elements.curriculum.value||x.curriculum===ff.elements.curriculum.value),x=>x.stage_name||x.stage_code,"All grades in this curriculum");
   competencyFill(ff.elements.learning_area_id,assessmentAreas.filter(x=>!ff.elements.curriculum.value||x.curriculum===ff.elements.curriculum.value),x=>x.name,"All learning areas");
@@ -293,7 +295,7 @@ async function loadCompetencyWorkspace(){
   competencyFill($("competencyAssessmentForm").elements.grade_level_id,assessmentGrades,x=>x.stage_name||x.stage_code,"Select grade");
   competencyFill($("competencyAssessmentForm").elements.stream_id,assessmentStreams,x=>x.name,"All streams");
   competencyFill($("competencyAssessmentForm").elements.learning_area_id,assessmentAreas,x=>x.name,"Select learning area");
-  competencyFill($("competencyAssessmentForm").elements.framework_id,competencyFrameworkRows.filter(x=>x.status!=="inactive"&&x.status!=="archived"),x=>x.name+" · "+x.curriculum,"Select matching rubric");
+  refreshCompetencyPlanOptions();
   competencyFill($("competencyObservationForm").elements.competency_assessment_id,competencyAssessmentRows,x=>x.title,"Select assessment");
   $("competencyFrameworksTable").innerHTML=competencyFrameworkRows.length?'<table><thead><tr><th>Rubric</th><th>Curriculum</th><th>Grade</th><th>Learning area</th><th>Achievement levels</th><th></th></tr></thead><tbody>'+competencyFrameworkRows.map(x=>'<tr><td>'+esc(x.name)+'</td><td>'+esc(x.curriculum)+'</td><td>'+esc(assessmentGrades.find(g=>g.id===x.grade_level_id)?.stage_name||"All grades")+'</td><td>'+esc(assessmentAreas.find(a=>a.id===x.learning_area_id)?.name||"All areas")+'</td><td>'+esc(competencyFrameworkLevels(x).map(l=>l.label).join(" → "))+'</td><td><button class="btn" type="button" data-edit-competency-framework="'+esc(x.id)+'">Edit</button></td></tr>').join("")+'</tbody></table>':'<div class="empty">No rubric frameworks yet. Create one above.</div>';
   const selectedFramework=$("rubricCriterionForm").elements.framework_id.value;
@@ -327,6 +329,8 @@ $("clearRubricCriterion").addEventListener("click",clearRubricCriterion);
 $("competencyFrameworkForm").elements.curriculum.addEventListener("change",e=>{const cur=e.target.value,f=$("competencyFrameworkForm");competencyFill(f.elements.grade_level_id,assessmentGrades.filter(x=>x.curriculum===cur),x=>x.stage_name||x.stage_code,"All grades in this curriculum");competencyFill(f.elements.learning_area_id,assessmentAreas.filter(x=>x.curriculum===cur),x=>x.name,"All learning areas")});
 $("rubricCriterionForm").elements.framework_id.addEventListener("change",()=>{const id=$("rubricCriterionForm").elements.framework_id.value;$("rubricCriteriaTable").innerHTML=rubricCriterionRows.filter(x=>x.framework_id===id).map(x=>'<p>'+esc(x.criterion)+'</p>').join("")||'<div class="empty">No criteria for this rubric yet.</div>'});
 $("competencyObservationForm").elements.competency_assessment_id.addEventListener("change",loadCompetencyObservationRegister);
+$("competencyAssessmentForm").elements.grade_level_id.addEventListener("change",refreshCompetencyPlanOptions);
+$("competencyAssessmentForm").elements.learning_area_id.addEventListener("change",refreshCompetencyPlanOptions);
 
 $("assessmentsRefresh").addEventListener("click",loadAssessments);
 $("assessmentSelect").addEventListener("change",e=>loadAssessmentRegister(e.target.value));
