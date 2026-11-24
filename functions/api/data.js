@@ -532,6 +532,10 @@ export async function onRequestPost({request,env}){
     if(name==="enrollments"){
       await syncCompulsoryLearningAreas(env.DB,schoolId,recordId);
     }
+    if(name==="learning-areas"){
+      const area=await env.DB.prepare("SELECT is_active FROM learning_areas WHERE id=? AND school_id=?").bind(recordId,schoolId).first();
+      if(Number(area?.is_active)===1)await syncCompulsoryLearningAreas(env.DB,schoolId);
+    }
     const record=await env.DB.prepare("SELECT * FROM "+cfg.table+" WHERE id=?").bind(recordId).first();
     await audit(env.DB,a.user,schoolId,"record.created",name,recordId);
     return json({ok:true,record},201);
