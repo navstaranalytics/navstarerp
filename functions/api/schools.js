@@ -225,9 +225,11 @@ export async function onRequestPost({request,env}){
       env.DB.prepare("INSERT INTO audit_logs (id,actor_user_id,school_id,action,resource_type,resource_id,outcome,details_json) VALUES (?,?,?,'school.created','school',?,'success',?)").bind(makeId(),auth.user.id,id,id,JSON.stringify({name,schoolCode:code,levels}))
     ]);
     let sampleData={created:false};
-    if(body.includeSampleData!==false){
+    if(body.includeSampleData!==false&&curricula.length===1){
       try{sampleData={created:true,...await seedSchoolSampleData(env.DB,id,curricula[0]||curriculum,levels)};}
       catch(error){console.error("Navstar sample data seed failed",error);sampleData={created:false,error:"Sample data could not be seeded. Confirm migration 0005 is applied before retrying."}}
+    }else if(body.includeSampleData!==false&&curricula.length>1){
+      sampleData={created:false,message:"Sample data is skipped for schools offering multiple curricula so each class and learning-area catalogue remains separate."};
     }
     await syncSchoolCurricula(env.DB,id,curricula,levels);
     let emailDelivery="not_configured";
