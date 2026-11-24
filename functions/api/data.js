@@ -266,6 +266,25 @@ async function validateRefs(db,config,values,schoolId){
   }
   return null;
 }
+function normalizePathway(value){return String(value||"").toLowerCase().replace(/&/g,"and").replace(/[^a-z0-9]+/g," ").trim();}
+async function validateLearningAreaClassAndPathway(db,name,schoolId,values,current={}){
+ if(!["assessments","teacher-allocations","timetable","competency-assessments"].includes(name))return null;
+ const gradeId=values.grade_level_id??current.grade_level_id,areaId=values.learning_area_id??current.learning_area_id;
+ if(!gradeId||!areaId)return null;
+ const [grade,area]=await Promise.all([
+  db.prepare("SELECT curriculum,stage_code,school_level FROM grade_levels WHERE id=? AND school_id=? AND is_active=1").bind(gradeId,schoolId).first(),
+  db.prepare("SELECT curriculum,stage_code,pathway,is_mandatory FROM learning_areas WHERE id=? AND school_id=? AND is_active=1").bind(areaId,schoolId).first()
+ ]);
+ if(!grade||!area)return "Select an active class and an enabled learning area belonging to this school.";
+ if(area.curriculum!==grade.curriculum||area.stage_code!==grade.stage_code)return "This learning area is not assigned to the selected class.";
+ const areaPath=normalizePathway(area.pathway),selectedPath=normalizePathway(values.pathway??current.pathway),allPathways=!areaPath||areaPath==="all"||areaPath==="all pathways";
+ const senior=/senior|secondary/i.test(String(grade.school_level||""))||/^(G1[0-2]|FORM[1-4])$/i.test(String(grade.stage_code||""));
+ if(!senior&&selectedPath)return "Pathways apply to Senior School classes only.";
+ if(!allPathways&&!senior)return "This pathway learning area is only available in Senior School.";
+ if(!allPathways&&name!=="teacher-allocations"&&name!=="assessments")return "Choose a pathway-specific learning area through its Senior School pathway workflow.";
+ if(!allPathways&&(!selectedPath||selectedPath!==areaPath))return "The selected learning area belongs to the "+area.pathway+" pathway. Select the matching pathway first.";
+ return null;
+}
 async function validateGradeBoundary(db,schoolId,values,excludeId=null){
  const min=Number(values.min_score),max=Number(values.max_score);
  if(!Number.isFinite(min)||!Number.isFinite(max)||min<0||max>100||max<min)return "Grade boundaries must be between 0 and 100, and the maximum must not be below the minimum.";
@@ -430,7 +449,7 @@ export async function onRequestPost({request,env}){
     if(/primary|pre-primary|junior/i.test(String(grade.school_level||""))||/^(PP[12]|G[1-9]|STD[1-8])$/i.test(String(grade.stage_code||"")))return json({ok:false,error:"All learning areas enabled by the school are compulsory for every learner in Primary and Junior School; individual elective selection is not available."},403);
     if(Number(area.is_mandatory)===1)return json({ok:false,error:"This learning area is compulsory and is assigned automatically."},403);
   }
-  const refError=await validateRefs(env.DB,cfg,values,schoolId);if(refError)return json({ok:false,error:refError},400);
+  const refError=await validateRefs(env.DB,cfg,values,schoolId);if(refError)return json({ok:false,error:refError},400);const pathwayError=await validateLearningAreaClassAndPathway(env.DB,name,schoolId,values,current);if(pathwayError)return json({ok:false,error:pathwayError},400);const pathwayError=await validateLearningAreaClassAndPathway(env.DB,name,schoolId,values);if(pathwayError)return json({ok:false,error:pathwayError},400);
   if(name==="assessment-results"){
     const assessment=await env.DB.prepare("SELECT academic_year_id,grade_level_id,stream_id,pathway,max_score FROM assessments WHERE id=? AND school_id=?").bind(values.assessment_id,schoolId).first();
     if(!assessment)return json({ok:false,error:"Assessment not found in this school."},400);
