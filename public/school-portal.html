@@ -631,23 +631,19 @@ async function loadAcademicSetup(){
    if(c.includes("cbe")||c.includes("competency")){
     let stage=level;
     if(!stage){if(["G7","G8","G9","GRADE 7","GRADE 8","GRADE 9"].includes(code))stage="Junior School";if(["G10","G11","G12","GRADE 10","GRADE 11","GRADE 12"].includes(code))stage="Senior School";}
-    if(stage.toLowerCase().includes("junior"))stage="Junior School";else if(stage.toLowerCase().includes("senior"))stage="Senior School";else continue;
-    const key=curriculum+"|"+stage;if(!stageGroups.has(key))stageGroups.set(key,{curriculum,stage,bands:cbeBands,kind:"CBE"});
+    if(stage.toLowerCase().includes("junior")){const key=curriculum+"|"+stage;if(!stageGroups.has(key))stageGroups.set(key,{curriculum,stage,label:"Junior School",bands:cbeBands,kind:"CBE"})}else if(stage.toLowerCase().includes("senior")){const key=curriculum+"|"+stage;if(!stageGroups.has(key))stageGroups.set(key,{curriculum,stage,label:"Senior School",bands:cbeBands,kind:"CBE"})}else continue;
    }else if(c.includes("8-4-4")||c.includes("844")){
     if(!(code.startsWith("FORM")||level.toLowerCase().includes("secondary")))continue;
     const stage=level||"Secondary",key=curriculum+"|"+stage;if(!stageGroups.has(key))stageGroups.set(key,{curriculum,stage,bands:kcseBands,kind:"8-4-4"});
    }
   }
   for(const group of stageGroups.values()){
-   const schemeName=group.kind==="CBE"?"CBE "+group.stage+" · 8-point achievement scale":"8-4-4 "+group.stage+" · KCSE 12-point scale";
-   if(sets.schemes.some(x=>x.curriculum===group.curriculum&&x.name===schemeName))continue;
+   const groupLabel=group.label||group.stage,schemeName=group.kind==="CBE"?"CBE "+groupLabel+" · 8-point achievement scale":"8-4-4 "+groupLabel+" · KCSE 12-point scale";
    try{
-    const created=await api("/api/data/grading-schemes",{method:"POST",body:JSON.stringify({school_id:schoolId,curriculum:group.curriculum,level_key:"__LEVEL__"+group.stage,name:schemeName,description:group.kind==="CBE"?"KNEC EE1–BE2 achievement levels and 8–1 points. Percentage bands are editable internal assessment conversions; official result reporting uses the achievement level and points.":"KNEC KCSE letter grades, descriptors and 12–1 points.",is_active:1})});
-    const schemeId=created.record&&created.record.id;if(!schemeId)throw new Error("The grading scheme was created but no ID was returned.");
-    for(const band of group.bands)await api("/api/data/grade-boundaries",{method:"POST",body:JSON.stringify({school_id:schoolId,scheme_id:schemeId,label:band[0],min_score:band[1],max_score:band[2],points:band[3],descriptor:band[4]})});
-    sets.schemes.push(created.record);
-    for(const band of group.bands)sets.boundaries.push({id:"new-"+schemeId+"-"+band[0],scheme_id:schemeId,label:band[0],min_score:band[1],max_score:band[2],points:band[3],descriptor:band[4]});
-   }catch(seedError){console.warn("Navstar Kenyan grading setup",group.stage,seedError);message("notice","Could not complete the default "+group.stage+" grading scheme: "+seedError.message,true)}
+    let scheme=sets.schemes.find(x=>x.curriculum===group.curriculum&&x.name===schemeName);
+    if(!scheme){const created=await api("/api/data/grading-schemes",{method:"POST",body:JSON.stringify({school_id:schoolId,curriculum:group.curriculum,level_key:"__LEVEL__"+group.stage,name:schemeName,description:group.kind==="CBE"?"KNEC EE1–BE2 achievement levels and 8–1 points. Percentage bands are editable internal assessment conversions; official KNEC result reporting defines the achievement levels and points.":"KNEC KCSE letter grades, descriptors and 12–1 points.",is_active:1})});scheme=created.record;if(!scheme?.id)throw new Error("The grading scheme was created but no ID was returned.");sets.schemes.push(scheme)}
+    for(const band of group.bands){if(sets.boundaries.some(x=>x.scheme_id===scheme.id&&x.label===band[0]))continue;const createdBoundary=await api("/api/data/grade-boundaries",{method:"POST",body:JSON.stringify({school_id:schoolId,scheme_id:scheme.id,label:band[0],min_score:band[1],max_score:band[2],points:band[3],descriptor:band[4]})});sets.boundaries.push(createdBoundary.record||{id:"new-"+scheme.id+"-"+band[0],scheme_id:scheme.id,label:band[0],min_score:band[1],max_score:band[2],points:band[3],descriptor:band[4]})}
+   }catch(seedError){console.warn("Navstar Kenyan grading setup",group.stage,seedError);message("notice","Could not complete the default "+groupLabel+" grading scheme: "+seedError.message,true)}
   }
 
   const fill=(selector,rows,id,label,first)=>{document.querySelectorAll(selector).forEach(el=>{const selected=el.value;el.innerHTML='<option value="">'+first+'</option>'+rows.map(x=>'<option value="'+esc(x[id])+'">'+esc(label(x))+'</option>').join("");if(selected)el.value=selected})};
