@@ -298,7 +298,9 @@ export async function onRequestPost({request,env}){
     const stream=await env.DB.prepare("SELECT grade_level_id FROM streams WHERE id=? AND school_id=?").bind(values.stream_id,schoolId).first();
     if(!stream||stream.grade_level_id!==values.grade_level_id)return json({ok:false,error:"Choose a stream that belongs to the selected grade."},400);
   }
-  const gradeError=await validateConfiguredGrade(env.DB,name,schoolId,values);if(gradeError)return json({ok:false,error:gradeError},403);
+  if(name==="grading-schemes"&&values.level_key){const grade=await env.DB.prepare("SELECT curriculum FROM grade_levels WHERE id=? AND school_id=? AND is_active=1").bind(values.level_key,schoolId).first();if(!grade)return json({ok:false,error:"Select an active grade or level belonging to this school."},400);if(values.curriculum&&values.curriculum!==grade.curriculum)return json({ok:false,error:"The grading curriculum must match the selected grade or level."},400);values.curriculum=grade.curriculum;values.stage_code=values.stage_code||values.level_key;}
+   if(name==="streams"&&values.grade_level_id&&values.name){const duplicate=await env.DB.prepare("SELECT id FROM streams WHERE school_id=? AND grade_level_id=? AND lower(name)=lower(?) LIMIT 1").bind(schoolId,values.grade_level_id,values.name).first();if(duplicate)return json({ok:false,error:"A stream with this name already exists under the selected grade. Edit the existing stream instead.",existing_stream_id:duplicate.id},409)}
+   const gradeError=await validateConfiguredGrade(env.DB,name,schoolId,values);if(gradeError)return json({ok:false,error:gradeError},403);
   if(name==="announcements")values.created_by=a.user.id;
   if(name==="attendance-sessions")values.taken_by=a.user.id;
   if(name==="attendance-records")values.marked_by=a.user.id;
@@ -486,7 +488,10 @@ export async function onRequestPatch({request,env}){
         values.name=nextName;values.code=nextCode;values.school_customized=1;
       }
     }
-    const gradeError=await validateConfiguredGrade(env.DB,name,schoolId,values,current);if(gradeError)return json({ok:false,error:gradeError},403);
+    if(name==="grading-schemes"&&values.level_key){const grade=await env.DB.prepare("SELECT curriculum FROM grade_levels WHERE id=? AND school_id=? AND is_active=1").bind(values.level_key,schoolId).first();if(!grade)return json({ok:false,error:"Select an active grade or level belonging to this school."},400);if(values.curriculum&&values.curriculum!==grade.curriculum)return json({ok:false,error:"The grading curriculum must match the selected grade or level."},400);values.curriculum=grade.curriculum;}
+     if(name==="streams"&&values.grade_level_id){const grade=await env.DB.prepare("SELECT 1 FROM grade_levels WHERE id=? AND school_id=? AND is_active=1").bind(values.grade_level_id,schoolId).first();if(!grade)return json({ok:false,error:"Select an active grade or level from this school."},400);if(values.name){const duplicate=await env.DB.prepare("SELECT id FROM streams WHERE school_id=? AND grade_level_id=? AND lower(name)=lower(?) AND id<>? LIMIT 1").bind(schoolId,values.grade_level_id,values.name,recordId).first();if(duplicate)return json({ok:false,error:"Another stream with this name already exists under the selected grade."},409)}}
+     if(name==="classes"&&values.stream_id){const stream=await env.DB.prepare("SELECT grade_level_id FROM streams WHERE id=? AND school_id=?").bind(values.stream_id,schoolId).first();const gradeId=values.grade_level_id||current.grade_level_id;if(!stream||stream.grade_level_id!==gradeId)return json({ok:false,error:"Choose a stream that belongs to the selected grade."},400);}
+     const gradeError=await validateConfiguredGrade(env.DB,name,schoolId,values,current);if(gradeError)return json({ok:false,error:gradeError},403);
     const refError=await validateRefs(env.DB,cfg,values,schoolId);if(refError)return json({ok:false,error:refError},400);
     if(name==="timetable"){const issue=await validateTimetableEntry(env.DB,schoolId,{...current,...values},recordId);if(issue)return json({ok:false,error:issue},400);}
     if(name==="grade-boundaries"){const issue=await validateGradeBoundary(env.DB,schoolId,{...current,...values},recordId);if(issue)return json({ok:false,error:issue},400)}
