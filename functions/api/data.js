@@ -323,6 +323,7 @@ export async function onRequestGet({request,env}){
     }
     let sql="SELECT * FROM "+cfg.table+(cfg.scope?" WHERE school_id=?":"");
     if(name==="grades"&&!a.user.is_super_admin&&!url.searchParams.has("includeInactive"))sql+=" AND is_active=1";
+    if(name==="streams"&&!a.user.is_super_admin&&!url.searchParams.has("includeInactive"))sql+=" AND status='active'";
     if(name==="learning-areas"&&!a.user.is_super_admin){
       if(!url.searchParams.has("includeInactive"))sql+=" AND is_active=1";
       sql+=" AND EXISTS (SELECT 1 FROM grade_levels gl WHERE gl.school_id=learning_areas.school_id AND gl.curriculum=learning_areas.curriculum AND gl.stage_code=learning_areas.stage_code AND gl.is_active=1)";
@@ -544,9 +545,16 @@ export async function onRequestDelete({request,env}){
     if(name==="streams"){
       const stream=await env.DB.prepare("SELECT id,name FROM streams WHERE id=? AND school_id=?").bind(recordId,schoolId).first();
       if(!stream)return json({ok:false,error:"Stream not found in this school."},404);
-      await env.DB.prepare("DELETE FROM streams WHERE id=? AND school_id=?").bind(recordId,schoolId).run();
-      await audit(env.DB,a.user,schoolId,"record.deleted","streams",recordId);
-      return json({ok:true,message:"Stream deleted. You may create another stream under this class whenever needed."});
+      try{
+        await env.DB.prepare("DELETE FROM streams WHERE id=? AND school_id=?").bind(recordId,schoolId).run();
+        await audit(env.DB,a.user,schoolId,"record.deleted","streams",recordId);
+        return json({ok:true,message:"Stream deleted. You may create another stream under this class whenever needed."});
+      }catch(deleteError){
+        const archivedName=stream.name+" [archived "+recordId.slice(0,6)+"]";
+        await env.DB.prepare("UPDATE streams SET name=?,status='archived' WHERE id=? AND school_id=?").bind(archivedName,recordId,schoolId).run();
+        await audit(env.DB,a.user,schoolId,"record.archived","streams",recordId);
+        return json({ok:true,message:"This stream is linked to existing school records, so it was archived to preserve those records. You can now create a replacement stream with the original name."});
+      }
     }
     if(name==="grading-schemes"){
       const scheme=await env.DB.prepare("SELECT id,name FROM grading_schemes WHERE id=? AND school_id=?").bind(recordId,schoolId).first();
