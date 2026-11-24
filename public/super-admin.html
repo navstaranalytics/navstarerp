@@ -227,9 +227,10 @@ function schoolDetails(id){let s=schools.find(x=>x.id===id);if(!s)return;openMod
   const submit=$('modalForm')?.querySelector('[type="submit"]');if(submit){submit.disabled=true;submit.textContent='Saving to central database…'}
   try{
     const payload={name:nextName,code:nextCode,contact:d.get('contact'),email:d.get('email'),phone:d.get('phone'),address:d.get('address'),registrationNumber:d.get('registrationNumber'),county:d.get('county'),category:d.get('category'),ownership:d.get('ownership'),curricula:d.getAll('curricula'),curriculum:d.getAll('curricula')[0]||'Kenyan CBE',plan:d.get('plan'),status:d.get('status'),expiry:d.get('expiry'),learnerCount:Number(d.get('learnerCount'))||0,teacherCount:Number(d.get('teacherCount'))||0,levels:d.getAll('levels')};
-    await schoolApi('/api/schools/'+encodeURIComponent(s.id),{method:'PATCH',body:JSON.stringify(payload)});
+    const saved=await schoolApi('/api/schools/'+encodeURIComponent(s.id),{method:'PATCH',body:JSON.stringify(payload)});
     await loadSchoolsFromDatabase();
-    closeModal();render();toast('School profile and offered levels saved permanently in D1.');
+    closeModal();render();
+    toast(saved.warning||'School profile and offered levels saved permanently in D1.');
   }catch(error){
     if(submit){submit.disabled=false;submit.textContent='Save record'}
     toast(error.message||'School profile could not be saved to the central database.');
