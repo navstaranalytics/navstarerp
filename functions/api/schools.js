@@ -282,7 +282,7 @@ export async function onRequestPatch({request,env}){
     const curricula=normalizeCurricula(body,previousCurricula.length?previousCurricula:(existing.curriculum||"Kenyan CBE"));
     const curriculumIssue=validateCurricula(curricula,selectedLevels);if(curriculumIssue)return json({ok:false,error:curriculumIssue},400);
     const levels=JSON.stringify(selectedLevels);
-    meta.modules=modulesForLevels(selectedLevels);
+    meta.modules=Array.isArray(body.modules)?[...new Set(body.modules.map(clean).filter(Boolean))]:modulesForLevels(selectedLevels);
     const curriculum=curricula.length>1?"Multiple curricula":(curricula[0]||existing.curriculum);
     await env.DB.batch([
       env.DB.prepare(`UPDATE schools SET school_code=?,name=?,registration_number=?,institution_type=?,ownership=?,county=?,sub_county=?,town=?,physical_address=?,contact_person=?,contact_email=?,contact_phone=?,curriculum=?,curricula_json=?,school_levels_json=?,status=?,activated_at=CASE WHEN ?='active' THEN COALESCE(activated_at,strftime('%Y-%m-%dT%H:%M:%fZ','now')) ELSE activated_at END,updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?`)
