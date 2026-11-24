@@ -19,11 +19,11 @@ async function download(options){
  }catch(e){popup.close();throw e}
 }
 
-async function loadPdfLibrary(url){if(window.jspdf?.jsPDF)return;await new Promise((resolve,reject)=>{const x=document.createElement("script");x.src=url;x.onload=resolve;x.onerror=()=>reject(new Error("PDF library could not be loaded. Check your internet connection and try again."));document.head.appendChild(x)})}
+async function loadPdfLibrary(url,ready){if(ready())return;await new Promise((resolve,reject)=>{const x=document.createElement("script");x.src=url;x.onload=resolve;x.onerror=()=>reject(new Error("PDF library could not be loaded. Check your internet connection and try again."));document.head.appendChild(x)});if(!ready())throw new Error("PDF report components did not initialise correctly.")}
 async function downloadLandscape(options){
- await loadPdfLibrary("https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.2/jspdf.umd.min.js");
+ await loadPdfLibrary("https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.2/jspdf.umd.min.js",()=>!!window.jspdf?.jsPDF);
  if(!window.jspdf?.jsPDF)throw new Error("PDF generator is unavailable.");
- await loadPdfLibrary("https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.4/jspdf.plugin.autotable.min.js");
+ await loadPdfLibrary("https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.4/jspdf.plugin.autotable.min.js",()=>!!window.jspdf?.jsPDF?.API?.autoTable);
  const o=options||{},doc=new window.jspdf.jsPDF({orientation:"landscape",unit:"mm",format:"a4",compress:true});
  const pageW=297,pageH=210,margin=13,accent=[23,59,109],school=String(o.schoolName||"School"),title=String(o.title||"School report"),subtitle=String(o.subtitle||"");
  const drawHeader=()=>{doc.setFillColor(...accent);doc.rect(0,0,pageW,29,"F");doc.setTextColor(255,255,255);doc.setFont("helvetica","bold");doc.setFontSize(17);doc.text(school,margin,12);doc.setFontSize(11);doc.text(title,margin,20);doc.setFont("helvetica","normal");doc.setFontSize(8);doc.text(subtitle.slice(0,150),margin,26);doc.setTextColor(35,48,68)};
@@ -32,7 +32,7 @@ async function downloadLandscape(options){
   if(y>pageH-24){doc.addPage();drawHeader();y=37}
   doc.setFont("helvetica","bold");doc.setFontSize(11);doc.setTextColor(...accent);doc.text(String(section.heading||"").slice(0,150),margin,y);y+=5;doc.setTextColor(35,48,68);
   for(const p of section.paragraphs||[]){doc.setFont("helvetica","normal");doc.setFontSize(9);const lines=doc.splitTextToSize(String(p),pageW-margin*2);if(y+lines.length*4.5>pageH-18){doc.addPage();drawHeader();y=37}doc.text(lines,margin,y);y+=lines.length*4.5+2}
-  if(section.rows?.length){doc.autoTable({startY:y,head:section.header?[section.rows[0].map(String)]:[],body:(section.header?section.rows.slice(1):section.rows).map(row=>row.map(v=>String(v??"—"))),theme:"grid",margin:{left:margin,right:margin,bottom:17,top:35},styles:{font:"helvetica",fontSize:8,cellPadding:2.1,overflow:"linebreak",lineColor:[218,226,238],lineWidth:.15,textColor:[35,48,68]},headStyles:{fillColor:accent,textColor:[255,255,255],fontStyle:"bold"},alternateRowStyles:{fillColor:[246,249,253]},didDrawPage:()=>{drawHeader()}});y=doc.lastAutoTable.finalY+10}
+  if(section.rows?.length){doc.autoTable({startY:y,head:section.header?[section.rows[0].map(String)]:[],body:(section.header?section.rows.slice(1):section.rows).map(row=>row.map(v=>String(v??"—"))),theme:"grid",margin:{left:margin,right:margin,bottom:17,top:35},styles:{font:"helvetica",fontSize:8,cellPadding:2.1,overflow:"linebreak",lineColor:[218,226,238],lineWidth:.15,textColor:[35,48,68]},headStyles:{fillColor:accent,textColor:[255,255,255],fontStyle:"bold"},alternateRowStyles:{fillColor:[246,249,253]},willDrawPage:()=>{drawHeader()}});y=doc.lastAutoTable.finalY+10}
  }
  const pages=doc.internal.getNumberOfPages();for(let p=1;p<=pages;p++){doc.setPage(p);doc.setFont("helvetica","normal");doc.setFontSize(7);doc.setTextColor(105,119,139);doc.text("Navstar Analytics · Confidential school report",margin,pageH-7);doc.text("Page "+p+" of "+pages,pageW-margin,pageH-7,{align:"right"})}
  const slug=title.toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"")||"school-report";doc.save(slug+".pdf");return{pages};
