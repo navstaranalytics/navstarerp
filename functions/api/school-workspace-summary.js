@@ -1,5 +1,22 @@
 import { getAuthenticatedSession } from "./auth.js";
 const json=(data,status=200)=>Response.json(data,{status,headers:{"Cache-Control":"no-store"}});
+
+export async function onRequestPostMotto({request,env}){
+ const user=await getAuthenticatedSession(request,env);
+ if(!user?.school_id)return json({ok:false,error:"A school account is required."},401);
+ if(!user.permissions?.includes("school.settings.manage"))return json({ok:false,error:"School settings permission is required."},403);
+ let body;try{body=await request.json()}catch{return json({ok:false,error:"Invalid school motto."},400)}
+ const motto=String(body.motto||"").trim();
+ if(motto.length>120)return json({ok:false,error:"The school motto must be 120 characters or fewer."},400);
+ try{
+  const row=await env.DB.prepare("SELECT settings_json FROM school_settings WHERE school_id=?").bind(user.school_id).first();
+  let settings={};try{settings=JSON.parse(row?.settings_json||"{}")}catch{}
+  if(motto)settings.school_motto=motto;else delete settings.school_motto;
+  await env.DB.prepare("INSERT INTO school_settings(school_id,timezone,currency,settings_json) VALUES(?,'Africa/Nairobi','KES',?) ON CONFLICT(school_id) DO UPDATE SET settings_json=excluded.settings_json,updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now')").bind(user.school_id,JSON.stringify(settings)).run();
+  return json({ok:true,schoolMotto:motto,message:"School motto saved."});
+ }catch(error){console.error("NAVSTAR school motto update",error);return json({ok:false,error:"Could not save the school motto."},500)}
+}
+
 export async function onRequestGet({request,env}){
  const user=await getAuthenticatedSession(request,env);
  if(!user||!user.school_id)return json({ok:false,error:"A school account is required."},401);
@@ -20,7 +37,8 @@ export async function onRequestGet({request,env}){
     env.DB.prepare("SELECT COALESCE(SUM(CASE WHEN transaction_type='income' THEN amount ELSE 0 END),0) AS income,COALESCE(SUM(CASE WHEN transaction_type='expense' THEN amount ELSE 0 END),0) AS expenses,COUNT(*) AS transactions FROM finance_transactions WHERE school_id=? AND transaction_date>=? AND transaction_date<=?").bind(schoolId,monthStart,now).first(),
     env.DB.prepare("SELECT COALESCE(SUM(amount_due),0) AS due,COALESCE(SUM(amount_paid),0) AS paid,COALESCE(SUM(balance),0) AS balance,COUNT(*) AS accounts FROM learner_fee_accounts WHERE school_id=?").bind(schoolId).first(),
     env.DB.prepare("SELECT COUNT(*) AS total FROM assessments WHERE school_id=?").bind(schoolId).first(),
-    env.DB.prepare("SELECT COUNT(*) AS total FROM assessment_results WHERE school_id=?").bind(schoolId).first()
+    env.DB.prepare("SELECT COUNT(*) AS total FROM assessment_results WHERE school_id=?").bind(schoolId).first(),
+    env.DB.prepare("SELECT json_extract(settings_json,'$.school_motto') AS motto FROM school_settings WHERE school_id=?").bind(schoolId).first()
   ]);
   const value=i=>settled[i].status==="fulfilled"?settled[i].value:null;
   const year=value(0),term=value(1),subscription=value(2);
@@ -38,6 +56,6 @@ export async function onRequestGet({request,env}){
   const unavailable=settled.map((x,i)=>x.status==="rejected"?["academicYear","currentTerm","subscription","learners","staff","classes","attendanceSessions","attendanceToday","attendanceBreakdown","financeThisMonth","feeAccounts","assessments","assessmentResults"][i]:null).filter(Boolean);
   const due=subscription?.next_due_date||null;
   const daysRemaining=due?Math.ceil((new Date(due+"T00:00:00Z").getTime()-new Date(now+"T00:00:00Z").getTime())/86400000):null;
-  return json({ok:true,academicYear:year||null,currentTerm:term||null,subscription:subscription?{...subscription,daysRemaining}:null,counts,insights,unavailable,asOf:now});
+  return json({ok:true,academicYear:year||null,currentTerm:term||null,subscription:subscription?{...subscription,daysRemaining}:null,schoolMotto:value(13)?.motto||"",counts,insights,unavailable,asOf:now});
  }catch(error){console.error("NAVSTAR school workspace summary",error);return json({ok:false,error:"Could not load the school calendar and subscription status."},500)}
 }
