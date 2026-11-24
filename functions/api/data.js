@@ -5,7 +5,7 @@ const id=()=>crypto.randomUUID();
 const clean=v=>typeof v==="string"?v.trim():v;
 const resources={
   plans:{table:"subscription_plans",scope:false,fields:["plan_code","name","description","billing_model","rate_kes","max_learners","storage_gb","ai_credits","onboarding_fee_kes","grace_period_days","learner_count_basis","capabilities_json","school_levels_json","payment_methods_json","is_active"],required:["plan_code","name","billing_model"]},
-  subscriptions:{table:"school_subscriptions",scope:true,fields:["plan_id","billing_model_override","rate_override_kes","learner_count","learner_count_basis","discount_percent","contract_start_date","next_due_date","preferred_payment_method","payment_terms","status","estimated_amount_kes"],required:["school_id"],refs:{plan_id:"subscription_plans"}},
+  subscriptions:{table:"school_subscriptions",scope:true,fields:["plan_id","billing_model_override","rate_override_kes","learner_count","learner_count_basis","discount_percent","contract_start_date","next_due_date","preferred_payment_method","payment_terms","payment_plan","billing_cycle","last_payment_confirmed_at","status","estimated_amount_kes"],required:["school_id"],refs:{plan_id:"subscription_plans"}},
   invoices:{table:"invoices",scope:true,fields:["subscription_id","invoice_number","currency","subtotal","discount","tax","total","amount_paid","status","issue_date","due_date"],required:["school_id","invoice_number"],refs:{subscription_id:"school_subscriptions"}},
   payments:{table:"payments",scope:true,fields:["invoice_id","amount","currency","method","provider_reference","status","received_at","recorded_by"],required:["school_id","amount","method"],refs:{invoice_id:"invoices"}},
   years:{table:"academic_years",scope:true,fields:["name","start_date","end_date","status"],required:["school_id","name","start_date","end_date"]},
@@ -66,7 +66,8 @@ async function auth(request,env){
   return user?{user}:{error:json({ok:false,error:"A valid active account session is required."},401)};
 }
 const permissionFor=(name,write=false)=>{
-  if(["plans","subscriptions","invoices","payments","regions","platform-users","analytics","settings","audit","ai-usage","integrations"].includes(name))return "platform.manage";
+  if(["plans","regions","platform-users","analytics","settings","audit","ai-usage","integrations"].includes(name))return "platform.manage";
+  if(["subscriptions","invoices","payments"].includes(name))return "school.settings.manage";
   if(name==="grade-boundaries")return "academics.manage";
   if(name==="school-events")return write?"school.settings.manage":"school.settings.manage";
   if(name==="classes")return "classes.manage";
