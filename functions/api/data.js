@@ -213,7 +213,7 @@ async function syncCompulsoryLearningAreas(db,schoolId,enrollmentId=null){
  await db.prepare(sql).bind(schoolId,enrollmentId,enrollmentId).run();
 }
 function gradeBelongsToSelectedLevels(grade,levels){
- if(!Array.isArray(levels)||!levels.length)return true;
+ if(!Array.isArray(levels)||!levels.length)return false;
  const selected=levels.map(x=>String(x||"").trim().toLowerCase().replace(/\s+school$/,""));
  const level=String(grade.school_level||"").trim().toLowerCase().replace(/\s+school$/,"");
  if(level&&selected.includes(level))return true;
@@ -231,7 +231,7 @@ async function validateConfiguredGrade(db,name,schoolId,values,current={}){
  const school=await db.prepare("SELECT school_levels_json FROM schools WHERE id=?").bind(schoolId).first();
  if(!school)return "School workspace was not found.";
  let selected=[];try{selected=JSON.parse(school.school_levels_json||"[]")}catch{}
- if(!Array.isArray(selected)||!selected.length)return null;
+ if(!Array.isArray(selected)||!selected.length)return "No school levels have been assigned by Navstar Super Admin yet.";
  const stageName=String(values.stage_name??current.stage_name??"").trim().toLowerCase();
  const stageCode=String(values.stage_code??current.stage_code??"").trim().toLowerCase();
  const allowed=new Set(selected.map(x=>String(x).trim().toLowerCase()));
@@ -310,8 +310,8 @@ export async function onRequestGet({request,env}){
     }catch(error){console.error("NAVSTAR analytics read",error);return json({ok:false,error:"Could not load platform analytics."},500)}
   }
   const scope=await schoolScope(request,a.user,cfg);if(scope.error)return scope.error;const schoolId=scope.schoolId;
-  if(name==="enrollments"&&cfg.scope)await syncCompulsoryLearningAreas(env.DB,schoolId);
   if(cfg.scope&&!await env.DB.prepare("SELECT 1 FROM schools WHERE id=?"+(a.user.is_super_admin?"":" AND status='active'")).bind(schoolId).first())return json({ok:false,error:"School not found or inactive."},404);
+  if(name==="enrollments"&&cfg.scope&&(a.user.is_super_admin||a.user.permissions.includes("learners.manage")||a.user.permissions.includes("academics.manage")))await syncCompulsoryLearningAreas(env.DB,schoolId);
   try{
     if(name==="settings"){
       const rows=await env.DB.prepare("SELECT setting_key,setting_value,updated_at FROM platform_settings ORDER BY setting_key").all();
@@ -333,7 +333,7 @@ export async function onRequestGet({request,env}){
     if(name==="grades"){
       const school=await env.DB.prepare("SELECT curriculum,school_levels_json FROM schools WHERE id=?").bind(schoolId).first();
       let levels=[];try{levels=JSON.parse(school?.school_levels_json||"[]")}catch{}
-      return json({ok:true,records:(rows.results||[]).filter(g=>gradeBelongsToSelectedLevels(g,levels)),school:{curriculum:school?.curriculum||"Kenyan CBE",levels}});
+      return json({ok:true,records:a.user.is_super_admin?(rows.results||[]):(rows.results||[]).filter(g=>gradeBelongsToSelectedLevels(g,levels)),school:{curriculum:school?.curriculum||"Kenyan CBE",levels}});
     }
     if(name==="learning-areas"&&!a.user.is_super_admin){
       const school=await env.DB.prepare("SELECT school_levels_json FROM schools WHERE id=?").bind(schoolId).first();
