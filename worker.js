@@ -22,6 +22,8 @@ import { onRequestGet as paymentProviderStatusGet } from "./functions/api/paymen
 import { onRequestGet as schoolLogoGet, onRequestPost as schoolLogoPost } from "./functions/api/school-branding.js";
 import { onRequestGetSettings as admissionSettingsGet, onRequestPostSettings as admissionSettingsPost, onRequestPostNextAdmissionNumber as nextAdmissionNumberPost, onRequestPostPhotos as learnerPhotosPost, onRequestGetPhoto as learnerPhotoGet } from "./functions/api/learner-photos.js";
 import { onRequestGet as recoveryGet, onRequestPost as recoveryPost } from "./functions/api/recovery.js";
+import { onRequestGet as academicPeriodGet } from "./functions/api/academic-period.js";
+import { onRequestGet as schoolOutputPreferencesGet, onRequestPost as schoolOutputPreferencesPost } from "./functions/api/school-output-preferences.js";
 import { onRequestGet as healthGet } from "./functions/api/health.js";
 import { onRequestGet as setupStatusGet } from "./functions/api/setup-status.js";
 import { onRequestPost as setupDatabasePost } from "./functions/api/setup-database.js";
@@ -115,6 +117,15 @@ export default {
     if (route === "/api/school-workspace-summary") {
       if (request.method !== "GET") return new Response("Method not allowed", { status: 405, headers: { Allow: "GET" } });
       return schoolWorkspaceSummaryGet({ request, env });
+    }
+    if (route === "/api/academic-period") {
+      if (request.method !== "GET") return new Response("Method not allowed", { status: 405, headers: { Allow: "GET" } });
+      return academicPeriodGet({ request, env });
+    }
+    if (route === "/api/school-output-preferences") {
+      if (request.method === "GET") return schoolOutputPreferencesGet({ request, env });
+      if (request.method === "POST") return schoolOutputPreferencesPost({ request, env });
+      return new Response("Method not allowed", { status: 405, headers: { Allow: "GET, POST" } });
     }
     if (route === "/api/health") {
       if (request.method !== "GET") return new Response("Method not allowed", { status: 405, headers: { Allow: "GET" } });
