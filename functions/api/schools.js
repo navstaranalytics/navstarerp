@@ -207,12 +207,8 @@ export async function onRequestGet({request,env}){
       (SELECT u.phone FROM school_memberships m JOIN users u ON u.id=m.user_id JOIN user_role_assignments a ON a.user_id=u.id AND a.school_id=s.id JOIN roles r ON r.id=a.role_id AND r.role_key='school_admin' WHERE m.school_id=s.id AND m.membership_status IN ('active','invited') ORDER BY m.created_at LIMIT 1) AS admin_phone,
       (SELECT u.status FROM school_memberships m JOIN users u ON u.id=m.user_id JOIN user_role_assignments a ON a.user_id=u.id AND a.school_id=s.id JOIN roles r ON r.id=a.role_id AND r.role_key='school_admin' WHERE m.school_id=s.id AND m.membership_status IN ('active','invited') ORDER BY m.created_at LIMIT 1) AS admin_status
       FROM schools s LEFT JOIN school_settings ss ON ss.school_id=s.id ORDER BY s.created_at DESC`).all();
-    for(const row of rows.results||[]){
-      let levels=[],curricula=[];try{levels=JSON.parse(row.school_levels_json||"[]")}catch{}try{curricula=JSON.parse(row.curricula_json||"[]")}catch{}
-      if(!levels.length)continue;
-      if(!curricula.length)curricula=[row.curriculum||"Kenyan CBE"];
-      await syncSchoolCurricula(env.DB,row.id,curricula,levels);
-    }
+    // Listing schools must be read-only. Provisioning/synchronization belongs in
+    // explicit create/update writes, never in a GET that can block directory loading.
     return json({ok:true,schools:(rows.results||[]).map(mapSchool)});
   }catch{return json({ok:false,error:"School records could not be loaded from the database."},500)}
 }
@@ -246,7 +242,9 @@ export async function onRequestPost({request,env}){
     }else if(body.includeSampleData!==false&&curricula.length>1){
       sampleData={created:false,message:"Sample data is skipped for schools offering multiple curricula so each class and learning-area catalogue remains separate."};
     }
-    await syncSchoolCurricula(env.DB,id,curricula,levels);
+    let syncWarning=null;
+    try{await syncSchoolCurricula(env.DB,id,curricula,levels)}
+    catch(error){syncWarning="School was registered, but academic setup synchronization needs attention: "+String(error?.message||"Please retry academic setup.");console.error("Navstar new-school academic sync failed:",error)}
     let emailDelivery="not_configured";
     if(env.RESEND_API_KEY && body.suppressWelcomeEmail!==true){
       const from=env.MAIL_FROM||"Navstar Analytics <no-reply@mail.navstardigitalhub.co.ke>",loginUrl=new URL("/login.html",new URL(request.url).origin).toString();
@@ -256,7 +254,7 @@ export async function onRequestPost({request,env}){
       catch(error){emailDelivery="failed";console.error("Navstar school welcome email error:",String(error?.message||error));}
     }
     const row=await env.DB.prepare("SELECT s.*,ss.settings_json FROM schools s LEFT JOIN school_settings ss ON ss.school_id=s.id WHERE s.id=?").bind(id).first();
-    return json({ok:true,school:mapSchool(row),emailDelivery,sampleData,message:"School registered. Add its School Administrator from the school profile."},201);
+    return json({ok:true,school:mapSchool(row),emailDelivery,sampleData,warning:syncWarning,message:"School registered. Add its School Administrator from the school profile."},201);
   }catch(error){
     const msg=String(error?.message||"");console.error("Navstar school registration failed:",msg);
     if(/UNIQUE constraint/i.test(msg))return json({ok:false,error:"That school code is already registered. Use a different institution code."},409);
@@ -292,7 +290,9 @@ export async function onRequestPatch({request,env}){
       env.DB.prepare("INSERT INTO school_settings (school_id,settings_json) VALUES (?,?) ON CONFLICT(school_id) DO UPDATE SET settings_json=excluded.settings_json,updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now')")
         .bind(id,JSON.stringify({...current,navstar_school_meta:meta}))
     ]);
-    await syncSchoolCurricula(env.DB,id,curricula,selectedLevels);
+    let syncWarning=null;
+    try{await syncSchoolCurricula(env.DB,id,curricula,selectedLevels)}
+    catch(error){syncWarning="School profile was saved, but academic setup synchronization needs attention: "+String(error?.message||"Please retry academic setup.");console.error("Navstar school profile academic sync failed:",error)}
     const row=await env.DB.prepare(`SELECT s.*,ss.settings_json,
       (SELECT u.id FROM school_memberships m JOIN users u ON u.id=m.user_id JOIN user_role_assignments a ON a.user_id=u.id AND a.school_id=s.id JOIN roles r ON r.id=a.role_id AND r.role_key='school_admin' WHERE m.school_id=s.id AND m.membership_status IN ('active','invited') ORDER BY m.created_at LIMIT 1) AS admin_user_id,
       (SELECT u.full_name FROM school_memberships m JOIN users u ON u.id=m.user_id JOIN user_role_assignments a ON a.user_id=u.id AND a.school_id=s.id JOIN roles r ON r.id=a.role_id AND r.role_key='school_admin' WHERE m.school_id=s.id AND m.membership_status IN ('active','invited') ORDER BY m.created_at LIMIT 1) AS admin_full_name,
@@ -303,7 +303,7 @@ export async function onRequestPatch({request,env}){
       FROM schools s LEFT JOIN school_settings ss ON ss.school_id=s.id WHERE s.id=?`).bind(id).first();
     await env.DB.prepare("INSERT INTO audit_logs (id,actor_user_id,school_id,action,resource_type,resource_id,outcome,details_json) VALUES (?,?,?,'school.updated','school',?,'success',?)")
       .bind(makeId(),auth.user.id,id,id,JSON.stringify({status})).run().catch(()=>{});
-    return json({ok:true,school:mapSchool(row),message:"School changes saved to the central database."});
+    return json({ok:true,school:mapSchool(row),message:"School changes saved to the central database.",warning:syncWarning});
   }catch(error){
     if(/UNIQUE constraint/i.test(String(error?.message||"")))return json({ok:false,error:"That institution code is already assigned to another school."},409);
     return json({ok:false,error:"School changes could not be saved. Please try again."},500);
