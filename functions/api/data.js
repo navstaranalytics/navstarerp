@@ -315,6 +315,23 @@ export async function onRequestGet({request,env}){
     return json({ok:true,records:rows.results||[]});
   }catch(error){console.error("NAVSTAR data read",name,error);return json({ok:false,error:"Could not load "+name+" from the database."},500)}
 }
+async function validateAcademicCalendarDates(db,name,schoolId,values,currentId=null){
+ if(!["years","terms"].includes(name))return null;
+ const start=String(values.start_date||""),end=String(values.end_date||"");
+ if(!/^\\d{4}-\\d{2}-\\d{2}$/.test(start)||!/^\\d{4}-\\d{2}-\\d{2}$/.test(end)||!Number.isFinite(Date.parse(start+"T00:00:00Z"))||!Number.isFinite(Date.parse(end+"T00:00:00Z")))return "Enter valid start and end dates.";
+ if(start>end)return "The start date must be on or before the end date.";
+ if(name==="years"){
+  const overlap=await db.prepare("SELECT id,name FROM academic_years WHERE school_id=? AND id<>? AND start_date<=? AND end_date>=? LIMIT 1").bind(schoolId,currentId||"",end,start).first();
+  if(overlap)return "These dates overlap academic year "+overlap.name+". Use one academic-year record and place all curricula under it.";
+ }else{
+  const year=await db.prepare("SELECT start_date,end_date FROM academic_years WHERE id=? AND school_id=?").bind(values.academic_year_id,schoolId).first();
+  if(!year)return "Select an academic year belonging to this school.";
+  if(start<year.start_date||end>year.end_date)return "Term dates must fall within the selected academic year.";
+  const overlap=await db.prepare("SELECT id,name FROM terms WHERE school_id=? AND academic_year_id=? AND id<>? AND start_date<=? AND end_date>=? LIMIT 1").bind(schoolId,values.academic_year_id,currentId||"",end,start).first();
+  if(overlap)return "These dates overlap "+overlap.name+". Adjust the term dates so terms do not overlap.";
+ }
+ return null;
+}
 export async function onRequestPost({request,env}){
   const a=await auth(request,env);if(a.error)return a.error;
   const name=new URL(request.url).pathname.split("/").pop(),cfg=resources[name];
@@ -332,6 +349,7 @@ export async function onRequestPost({request,env}){
   if(cfg.scope&&!a.user.is_super_admin&&values.school_id&&values.school_id!==a.user.school_id)return json({ok:false,error:"You cannot create records for another school."},403);
   if(cfg.scope&&!await env.DB.prepare("SELECT 1 FROM schools WHERE id=?"+(a.user.is_super_admin?"":" AND status='active'")).bind(schoolId).first())return json({ok:false,error:"School not found or inactive."},404);
   if(cfg.scope)values.school_id=schoolId;
+  const calendarError=await validateAcademicCalendarDates(env.DB,name,schoolId,values);if(calendarError)return json({ok:false,error:calendarError},400);
   if(name.startsWith("competency-")||name==="rubric-criteria"){const competencyError=await validateCompetencyRecord(env.DB,name,schoolId,values,a.user);if(competencyError)return json({ok:false,error:competencyError},400)}
   if(name==="grading-schemes"&&String(values.level_key||"").startsWith("__LEVEL__")){const schoolLevel=String(values.level_key).slice(9),curriculum=String(values.curriculum||"").trim();const configured=await env.DB.prepare("SELECT 1 FROM grade_levels WHERE school_id=? AND curriculum=? AND school_level=? AND is_active=1 LIMIT 1").bind(schoolId,curriculum,schoolLevel).first();if(!configured)return json({ok:false,error:"This school level has no active grades in the selected curriculum."},400);values.level_key=null;values.stage_code="LEVEL:"+schoolLevel;}else if(name==="grading-schemes"&&values.level_key==="__ALL__"){const curriculum=String(values.curriculum||"").trim();const configured=await env.DB.prepare("SELECT 1 FROM grade_levels WHERE school_id=? AND curriculum=? AND is_active=1 LIMIT 1").bind(schoolId,curriculum).first();if(!configured)return json({ok:false,error:"This curriculum has no active grades configured for this school."},400);values.level_key=null;values.stage_code="ALL";}
   if(name==="learners"&&values.profile_json){
@@ -545,6 +563,7 @@ export async function onRequestPatch({request,env}){
     if(cfg.scope&&!a.user.is_super_admin&&requested&&requested!==a.user.school_id)return json({ok:false,error:"You cannot update records in another school."},403);
     const current=await env.DB.prepare("SELECT * FROM "+cfg.table+" WHERE "+where).bind(...(cfg.scope?[recordId,schoolId]:[recordId])).first();
     if(!current)return json({ok:false,error:"Record not found in the selected school."},404);
+    const calendarError=await validateAcademicCalendarDates(env.DB,name,schoolId,{...current,...values},recordId);if(calendarError)return json({ok:false,error:calendarError},400);
     if(name.startsWith("competency-")||name==="rubric-criteria"){const competencyError=await validateCompetencyRecord(env.DB,name,schoolId,{...current,...values},a.user);if(competencyError)return json({ok:false,error:competencyError},400)}
     if(name==="learning-areas"&&!a.user.is_super_admin){
       if(values.is_active!==undefined&&Number(current.is_mandatory)===1)return json({ok:false,error:"Mandatory learning areas cannot be deactivated."},403);
