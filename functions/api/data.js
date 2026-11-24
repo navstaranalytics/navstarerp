@@ -153,7 +153,7 @@ async function validateTeacherWrite(db,user,name,values){
  if(name==="assessment-results"||name==="competency-observations"){
   const isCompetency=name==="competency-observations";const a=await db.prepare("SELECT academic_year_id,term_id,grade_level_id,stream_id,learning_area_id"+(isCompetency?"":",pathway")+" FROM "+(isCompetency?"competency_assessments":"assessments")+" WHERE id=? AND school_id=?").bind(isCompetency?values.competency_assessment_id:values.assessment_id,user.school_id).first();
   if(!a)return "The assessment is not available in your school.";
-  year=a.academic_year_id;term=a.term_id;grade=a.grade_level_id;stream=a.stream_id;area=a.learning_area_id;pathway=a.pathway;
+  year=a.academic_year_id;term=a.term_id;grade=a.grade_level_id;stream=a.stream_id;area=a.learning_area_id;pathway=isCompetency?null:a.pathway;
   const enrolled=await db.prepare("SELECT 1 FROM learner_enrollments le JOIN learners l ON l.id=le.learner_id AND l.school_id=le.school_id WHERE le.learner_id=? AND le.school_id=? AND le.academic_year_id=? AND le.grade_level_id=? AND (le.stream_id IS ? OR le.stream_id=?) AND le.status='active' AND (? IS NULL OR l.pathway=?)").bind(values.learner_id,user.school_id,year,grade,stream,stream,pathway,pathway).first();
   if(!enrolled)return "The learner is not enrolled in the class or pathway for this assessment.";
  }
