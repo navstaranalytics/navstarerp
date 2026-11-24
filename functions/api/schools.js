@@ -63,7 +63,7 @@ async function syncSchoolGradeLevels(db,schoolId,curriculum,levels){
  const statements=[];
  for(const [code,name,order,level] of specs){
   const current=byCode.get(code);
-  if(current)statements.push(db.prepare("UPDATE grade_levels SET stage_name=?,stage_order=?,school_level=? WHERE id=? AND school_id=?").bind(name,order,level,current.id,schoolId));
+  if(current)statements.push(db.prepare("UPDATE grade_levels SET stage_name=?,stage_order=?,school_level=?,is_active=1 WHERE id=? AND school_id=?").bind(name,order,level,current.id,schoolId));
   else statements.push(db.prepare("INSERT INTO grade_levels(id,school_id,curriculum,stage_code,stage_name,stage_order,school_level,is_active) VALUES(?,?,?,?,?,?,?,1)").bind(makeId(),schoolId,curriculum,code,name,order,level));
  }
  for(const row of existing.results||[])if(!wanted.has(row.stage_code))statements.push(db.prepare("UPDATE grade_levels SET is_active=0 WHERE id=? AND school_id=?").bind(row.id,schoolId));
