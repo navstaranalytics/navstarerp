@@ -209,7 +209,7 @@ function bodyFields(body,config){
   return values;
 }
 async function syncCompulsoryLearningAreas(db,schoolId,enrollmentId=null){
- const sql="INSERT OR IGNORE INTO learner_learning_areas(id,school_id,enrollment_id,learner_id,learning_area_id,selection_type,status) SELECT lower(hex(randomblob(16))),e.school_id,e.id,e.learner_id,la.id,'mandatory','active' FROM learner_enrollments e JOIN grade_levels g ON g.id=e.grade_level_id AND g.school_id=e.school_id JOIN learning_areas la ON la.school_id=e.school_id AND la.curriculum=g.curriculum AND la.stage_code=g.stage_code AND la.is_active=1 WHERE e.school_id=? AND e.status='active' AND (? IS NULL OR e.id=?) AND (lower(COALESCE(g.school_level,'')) LIKE '%primary%' OR lower(COALESCE(g.school_level,'')) LIKE '%junior%' OR la.is_mandatory=1)";
+ const sql="INSERT OR IGNORE INTO learner_learning_areas(id,school_id,enrollment_id,learner_id,learning_area_id,selection_type,status) SELECT lower(hex(randomblob(16))),e.school_id,e.id,e.learner_id,la.id,'mandatory','active' FROM learner_enrollments e JOIN grade_levels g ON g.id=e.grade_level_id AND g.school_id=e.school_id JOIN learning_areas la ON la.school_id=e.school_id AND la.curriculum=g.curriculum AND la.stage_code=g.stage_code AND la.is_active=1 WHERE e.school_id=? AND e.status='active' AND (? IS NULL OR e.id=?) AND (lower(COALESCE(g.school_level,'')) LIKE '%primary%' OR lower(COALESCE(g.school_level,'')) LIKE '%junior%' OR upper(g.stage_code) GLOB 'G[1-9]' OR upper(g.stage_code) GLOB 'PP[12]' OR upper(g.stage_code) GLOB 'STD[1-8]' OR la.is_mandatory=1)";
  await db.prepare(sql).bind(schoolId,enrollmentId,enrollmentId).run();
 }
 function gradeBelongsToSelectedLevels(grade,levels){
@@ -409,7 +409,7 @@ export async function onRequestPost({request,env}){
     const grade=await env.DB.prepare("SELECT curriculum,school_level,stage_code FROM grade_levels WHERE id=? AND school_id=? AND is_active=1").bind(enrollment.grade_level_id,schoolId).first();
     const area=await env.DB.prepare("SELECT curriculum,stage_code,is_mandatory,is_active FROM learning_areas WHERE id=? AND school_id=?").bind(values.learning_area_id,schoolId).first();
     if(!grade||!area||Number(area.is_active)!==1||area.curriculum!==grade.curriculum||area.stage_code!==grade.stage_code)return json({ok:false,error:"Choose an enabled learning area assigned to this learner's class."},400);
-    if(/primary|pre-primary|junior/i.test(String(grade.school_level||"")))return json({ok:false,error:"All learning areas enabled by the school are compulsory for every learner in Primary and Junior School; individual elective selection is not available."},403);
+    if(/primary|pre-primary|junior/i.test(String(grade.school_level||""))||/^(PP[12]|G[1-9]|STD[1-8])$/i.test(String(grade.stage_code||"")))return json({ok:false,error:"All learning areas enabled by the school are compulsory for every learner in Primary and Junior School; individual elective selection is not available."},403);
     if(Number(area.is_mandatory)===1)return json({ok:false,error:"This learning area is compulsory and is assigned automatically."},403);
   }
   const refError=await validateRefs(env.DB,cfg,values,schoolId);if(refError)return json({ok:false,error:refError},400);
