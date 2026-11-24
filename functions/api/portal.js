@@ -47,6 +47,7 @@ export async function onRequestGet({request,env}){
     ORDER BY t.weekday,t.start_time LIMIT 100`).bind(user.school_id,enrollment.academic_year_id,enrollment.grade_level_id,enrollment.stream_id,enrollment.stream_id).all():{results:[]};
    learners.push({...learner,enrollment:enrollment||null,attendance:attendance||{total:0,present:0,absent:0,late:0},reports:reports.results||[],timetable:timetable.results||[]});
   }
-  const academicPeriod=await getAcademicPeriod(env.DB,user.school_id);\n  return json({ok:true,role:user.role_key,school:{id:user.school_id,name:user.school_name},academicPeriod,learners});
+  const academicPeriod=await getAcademicPeriod(env.DB,user.school_id);
+  return json({ok:true,role:user.role_key,school:{id:user.school_id,name:user.school_name},academicPeriod,learners});
  }catch(error){console.error("Parent/learner portal read failed:",String(error?.message||error));return json({ok:false,error:"Your linked learner information could not be loaded."},500)}
 }
