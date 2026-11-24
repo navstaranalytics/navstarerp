@@ -120,6 +120,7 @@ async function validateCompetencyRecord(db,name,schoolId,values,user){
  if(name==="competency-assessments"){
   const [year,grade,area,framework]=await Promise.all([one("academic_years",values.academic_year_id),one("grade_levels",values.grade_level_id),one("learning_areas",values.learning_area_id),one("competency_frameworks",values.framework_id)]);
   if(!year||!grade||!area||!framework)return "Select an academic year, grade, learning area and rubric from this school.";
+  if(values.term_id){const term=await one("terms",values.term_id);if(!term||term.academic_year_id!==year.id)return "The selected term must belong to the selected academic year."}
   if(grade.curriculum!==framework.curriculum)return "The rubric curriculum does not match this class curriculum.";
   if(framework.grade_level_id&&framework.grade_level_id!==grade.id)return "This rubric is configured for a different grade.";
   if(framework.learning_area_id&&framework.learning_area_id!==area.id)return "This rubric is configured for a different learning area.";
@@ -154,7 +155,8 @@ async function validateTeacherWrite(db,user,name,values){
  if(name==="assessment-results"||name==="competency-observations"){
   const isCompetency=name==="competency-observations";const a=await db.prepare("SELECT academic_year_id,term_id,grade_level_id,stream_id,learning_area_id"+(isCompetency?"":",pathway")+" FROM "+(isCompetency?"competency_assessments":"assessments")+" WHERE id=? AND school_id=?").bind(isCompetency?values.competency_assessment_id:values.assessment_id,user.school_id).first();
   if(!a)return "The assessment is not available in your school.";
-  year=a.academic_year_id;term=a.term_id;grade=a.grade_level_id;stream=a.stream_id;area=a.learning_area_id;pathway=isCompetency?null:a.pathway;
+  year=a.academic_year_id;term=a.term_id;grade=a.grade_level_id;stream=a.stream_id;area=a.learning_area_id;pathway=a.pathway;
+  if(isCompetency){const learner=await db.prepare("SELECT pathway FROM learners WHERE id=? AND school_id=?").bind(values.learner_id,user.school_id).first();pathway=learner?.pathway??null;}
   const enrolled=await db.prepare("SELECT 1 FROM learner_enrollments le JOIN learners l ON l.id=le.learner_id AND l.school_id=le.school_id WHERE le.learner_id=? AND le.school_id=? AND le.academic_year_id=? AND le.grade_level_id=? AND (le.stream_id IS ? OR le.stream_id=?) AND le.status='active' AND (? IS NULL OR l.pathway=?)").bind(values.learner_id,user.school_id,year,grade,stream,stream,pathway,pathway).first();
   if(!enrolled)return "The learner is not enrolled in the class or pathway for this assessment.";
  }
