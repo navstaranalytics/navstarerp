@@ -631,7 +631,7 @@ function subscriptionsPage(){const active=plans.filter(p=>p.active!==false);retu
 const baseAddSchool=addSchool;
 /* Central D1 school directory: D1 is the source of truth. */
 async function schoolApi(path="/api/schools",options={}){
-  const response=await fetch(path,{credentials:"same-origin",...options,headers:{"Content-Type":"application/json",...(options.headers||{})}});
+  const response=await fetch(path,{credentials:"same-origin",cache:"no-store",...options,headers:{"Content-Type":"application/json","Cache-Control":"no-cache",...(options.headers||{})}});
   let data={};try{data=await response.json()}catch{}
   if(!response.ok||!data.ok)throw new Error(data.error||"The database request failed.");
   return data;
@@ -757,7 +757,7 @@ schoolDetails=function(id){
     const payload={name:d.get("name"),code:d.get("code"),contact:d.get("contact"),email:d.get("email"),phone:d.get("phone"),address:d.get("address"),registrationNumber:d.get("registrationNumber"),county:d.get("county"),category:d.get("category"),ownership:d.get("ownership"),curricula:d.getAll("curricula"),curriculum:d.getAll("curricula")[0]||"Kenyan CBE",plan:d.get("plan"),status:d.get("status"),expiry:d.get("expiry"),learnerCount:Number(d.get("learnerCount"))||0,teacherCount:Number(d.get("teacherCount"))||0,levels:d.getAll("levels"),modules:d.getAll("modules")};
     if(!String(payload.name||"").trim()){toast("Official school name is required.");return}
     if(submit){submit.disabled=true;submit.textContent="Saving…"}
-    try{const result=await schoolApi("/api/schools/"+encodeURIComponent(id),{method:"PATCH",body:JSON.stringify(payload)});await loadSchoolsFromDatabase();const persisted=schools.find(x=>x.id===id);if(!persisted)throw new Error("The save request completed, but the school could not be read back from D1. Do not assume the changes were saved.");const expected={name:payload.name,code:payload.code,county:payload.county,plan:payload.plan,levels:payload.levels,curricula:payload.curricula,modules:payload.modules};const mismatch=Object.entries(expected).some(([key,value])=>JSON.stringify(persisted[key]??[])!==JSON.stringify(value??[]));if(mismatch)throw new Error("D1 did not return the same school configuration that was submitted. Please retry; the system has not confirmed this save.");closeModal();render();toast(result.warning||"School profile and configuration verified in D1.");}
+    try{const result=await schoolApi("/api/schools/"+encodeURIComponent(id),{method:"PATCH",body:JSON.stringify(payload)});const persisted=result.school;if(!persisted||persisted.id!==id)throw new Error("The update endpoint did not return the updated school record from D1. The save is not confirmed.");const expected={name:payload.name,code:payload.code,county:payload.county,plan:payload.plan,levels:payload.levels,curricula:payload.curricula,modules:payload.modules};const same=(a,b)=>Array.isArray(a)&&Array.isArray(b)?a.length===b.length&&a.every((value,index)=>value===b[index]):String(a??"")===String(b??"");const mismatches=Object.entries(expected).filter(([key,value])=>!same(persisted[key],value)).map(([key])=>key);if(mismatches.length)throw new Error("D1 read-back differs in: "+mismatches.join(", ")+". The save is not confirmed; please review these fields.");await loadSchoolsFromDatabase();closeModal();render();toast(result.warning||"School profile and configuration verified in D1.");}
     catch(error){toast(error.message||"School changes could not be saved.");if(submit){submit.disabled=false;submit.textContent="Save record"}}
   };
 };
