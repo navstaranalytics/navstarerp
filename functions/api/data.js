@@ -70,7 +70,7 @@ const permissionFor=(name,write=false)=>{
   if(name==="subscriptions")return write?"platform.manage":"school.settings.manage";
   if(["invoices","payments"].includes(name))return write?"platform.manage":"school.settings.manage";
   if(name==="grade-boundaries")return "academics.manage";
-  if(name==="school-events")return write?"school.settings.manage":"school.settings.manage";
+  if(name==="school-events")return write?"school.settings.manage":"timetable.view";
   if(name==="classes")return "classes.manage";
   if(["years","terms","grades","streams","learning-areas","grading-schemes"].includes(name))return "academics.manage";
   if(name==="learner-learning-areas")return write?"learner.learning.areas.manage":"learners.view";
