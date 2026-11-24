@@ -335,6 +335,13 @@ export async function onRequestGet({request,env}){
       let levels=[];try{levels=JSON.parse(school?.school_levels_json||"[]")}catch{}
       return json({ok:true,records:(rows.results||[]).filter(g=>gradeBelongsToSelectedLevels(g,levels)),school:{curriculum:school?.curriculum||"Kenyan CBE",levels}});
     }
+    if(name==="learning-areas"&&!a.user.is_super_admin){
+      const school=await env.DB.prepare("SELECT school_levels_json FROM schools WHERE id=?").bind(schoolId).first();
+      let levels=[];try{levels=JSON.parse(school?.school_levels_json||"[]")}catch{}
+      const gradeRows=await env.DB.prepare("SELECT curriculum,stage_code,school_level FROM grade_levels WHERE school_id=? AND is_active=1").bind(schoolId).all();
+      const allowed=new Set((gradeRows.results||[]).filter(g=>gradeBelongsToSelectedLevels(g,levels)).map(g=>String(g.curriculum)+"|"+String(g.stage_code)));
+      return json({ok:true,records:(rows.results||[]).filter(x=>allowed.has(String(x.curriculum)+"|"+String(x.stage_code)))});
+    }
     return json({ok:true,records:rows.results||[]});
   }catch(error){console.error("NAVSTAR data read",name,error);return json({ok:false,error:"Could not load "+name+" from the database."},500)}
 }
