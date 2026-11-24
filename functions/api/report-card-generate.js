@@ -21,10 +21,13 @@ export async function onRequestPost({request,env}){
  try{
   const [year,grade,scheme]=await Promise.all([
    env.DB.prepare("SELECT id,name FROM academic_years WHERE id=? AND school_id=?").bind(yearId,schoolId).first(),
-   env.DB.prepare("SELECT id,stage_name,stage_code FROM grade_levels WHERE id=? AND school_id=?").bind(gradeId,schoolId).first(),
-   env.DB.prepare("SELECT id,name FROM grading_schemes WHERE id=? AND school_id=? AND is_active=1").bind(schemeId,schoolId).first()
+   env.DB.prepare("SELECT id,stage_name,stage_code,curriculum,school_level FROM grade_levels WHERE id=? AND school_id=?").bind(gradeId,schoolId).first(),
+   env.DB.prepare("SELECT id,name,curriculum,level_key,stage_code FROM grading_schemes WHERE id=? AND school_id=? AND is_active=1").bind(schemeId,schoolId).first()
   ]);
   if(!year||!grade||!scheme)return json({ok:false,error:"The selected academic year, grade or grading scheme is invalid for this school."},400);
+  if(scheme.curriculum!==grade.curriculum)return json({ok:false,error:"The grading scheme curriculum does not match this learner grade."},400);
+  if(scheme.level_key&&scheme.level_key!==grade.id)return json({ok:false,error:"This grading scheme is configured for a different grade."},400);
+  if(String(scheme.stage_code||"").startsWith("LEVEL:")&&String(scheme.stage_code).slice(6)!==String(grade.school_level||""))return json({ok:false,error:"This grading scheme is configured for a different school level."},400);
   const schoolInfo=await env.DB.prepare("SELECT name FROM schools WHERE id=?").bind(schoolId).first();
   const termInfo=termId?await env.DB.prepare("SELECT name FROM terms WHERE id=? AND academic_year_id=? AND school_id=?").bind(termId,yearId,schoolId).first():null;
   if(termId&&!termInfo)return json({ok:false,error:"The selected term does not belong to the academic year."},400);
