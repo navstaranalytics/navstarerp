@@ -333,7 +333,7 @@ export async function onRequestPost({request,env}){
   if(cfg.scope&&!await env.DB.prepare("SELECT 1 FROM schools WHERE id=?"+(a.user.is_super_admin?"":" AND status='active'")).bind(schoolId).first())return json({ok:false,error:"School not found or inactive."},404);
   if(cfg.scope)values.school_id=schoolId;
   if(name.startsWith("competency-")||name==="rubric-criteria"){const competencyError=await validateCompetencyRecord(env.DB,name,schoolId,values,a.user);if(competencyError)return json({ok:false,error:competencyError},400)}
-  if(name==="grading-schemes"&&values.level_key==="__ALL__"){const curriculum=String(values.curriculum||"").trim();const configured=await env.DB.prepare("SELECT 1 FROM grade_levels WHERE school_id=? AND curriculum=? AND is_active=1 LIMIT 1").bind(schoolId,curriculum).first();if(!configured)return json({ok:false,error:"This curriculum has no active grades configured for this school."},400);values.level_key=null;values.stage_code="ALL";}
+  if(name==="grading-schemes"&&String(values.level_key||"").startsWith("__LEVEL__")){const schoolLevel=String(values.level_key).slice(9),curriculum=String(values.curriculum||"").trim();const configured=await env.DB.prepare("SELECT 1 FROM grade_levels WHERE school_id=? AND curriculum=? AND school_level=? AND is_active=1 LIMIT 1").bind(schoolId,curriculum,schoolLevel).first();if(!configured)return json({ok:false,error:"This school level has no active grades in the selected curriculum."},400);values.level_key=null;values.stage_code="LEVEL:"+schoolLevel;}else if(name==="grading-schemes"&&values.level_key==="__ALL__"){const curriculum=String(values.curriculum||"").trim();const configured=await env.DB.prepare("SELECT 1 FROM grade_levels WHERE school_id=? AND curriculum=? AND is_active=1 LIMIT 1").bind(schoolId,curriculum).first();if(!configured)return json({ok:false,error:"This curriculum has no active grades configured for this school."},400);values.level_key=null;values.stage_code="ALL";}
   if(name==="learners"&&values.profile_json){
     let profile;try{profile=typeof values.profile_json==="string"?JSON.parse(values.profile_json):values.profile_json}catch{return json({ok:false,error:"Learner profile details must be valid JSON."},400)}
     const photoCode=String(profile?.photoCode||"").trim();
@@ -522,7 +522,7 @@ export async function onRequestPatch({request,env}){
 
   if(name==="invoices"&&["paid","part_paid"].includes(String(body.status||"")))return json({ok:false,error:"Invoice settlement status is calculated from confirmed payments."},403);
   const values=bodyFields(body,cfg);delete values.school_id;
-  if(name==="grading-schemes"&&values.level_key==="__ALL__"){values.level_key=null;values.stage_code="ALL";}
+  if(name==="grading-schemes"&&String(values.level_key||"").startsWith("__LEVEL__")){values.level_key=null;values.stage_code="LEVEL:"+String(values.level_key).slice(9);}else if(name==="grading-schemes"&&values.level_key==="__ALL__"){values.level_key=null;values.stage_code="ALL";}
   if(!Object.keys(values).length)return json({ok:false,error:"No editable fields were supplied."},400);
   try{
     const where=cfg.scope?"id=? AND school_id=?":"id=?";
