@@ -512,7 +512,7 @@ export async function onRequestPatch({request,env}){
   if(name==="payments")return json({ok:false,error:"Payment records are immutable. Record a separate reversal or correction instead."},405);
   let body;try{body=await request.json()}catch{return json({ok:false,error:"Invalid record update."},400)}
   if(name==="invoices"&&body.amount_paid!==undefined)return json({ok:false,error:"Invoice payments must be recorded through the payment register."},403);
-  if(name.startsWith("competency-")||name==="rubric-criteria"){const competencyError=await validateCompetencyRecord(env.DB,name,schoolId,values,a.user);if(competencyError)return json({ok:false,error:competencyError},400)}
+
   if(name==="invoices"&&["paid","part_paid"].includes(String(body.status||"")))return json({ok:false,error:"Invoice settlement status is calculated from confirmed payments."},403);
   const values=bodyFields(body,cfg);delete values.school_id;
   if(name==="grading-schemes"&&values.level_key==="__ALL__"){values.level_key=null;values.stage_code="ALL";}
@@ -525,6 +525,7 @@ export async function onRequestPatch({request,env}){
     if(cfg.scope&&!a.user.is_super_admin&&requested&&requested!==a.user.school_id)return json({ok:false,error:"You cannot update records in another school."},403);
     const current=await env.DB.prepare("SELECT * FROM "+cfg.table+" WHERE "+where).bind(...(cfg.scope?[recordId,schoolId]:[recordId])).first();
     if(!current)return json({ok:false,error:"Record not found in the selected school."},404);
+    if(name.startsWith("competency-")||name==="rubric-criteria"){const competencyError=await validateCompetencyRecord(env.DB,name,schoolId,{...current,...values},a.user);if(competencyError)return json({ok:false,error:competencyError},400)}
     if(name==="learning-areas"&&!a.user.is_super_admin){
       if(values.is_active!==undefined&&Number(current.is_mandatory)===1)return json({ok:false,error:"Mandatory learning areas cannot be deactivated."},403);
       if(values.name!==undefined||values.code!==undefined){
