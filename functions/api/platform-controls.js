@@ -1,9 +1,9 @@
 import { getSuperAdminSession } from "./auth.js";
 const json=(data,status=200)=>Response.json(data,{status,headers:{"Cache-Control":"no-store"}});
-const allowed=new Set(["terminology","subscription_policy","scheduled_automations","system_guide","session_policy"]);
+const allowed=new Set(["terminology","subscription_policy","scheduled_automations","system_guide","session_policy","learning_area_catalogue"]);
 export async function onRequestGet({request,env}){
  const user=await getSuperAdminSession(request,env);if(!user)return json({ok:false,error:"Only Super Admin can manage platform terminology and access policies."},403);
- try{const rows=await env.DB.prepare("SELECT setting_key,setting_value,updated_at FROM platform_settings WHERE setting_key IN ('terminology','subscription_policy','scheduled_automations','system_guide','session_policy')").all();const settings={};for(const row of rows.results||[]){try{settings[row.setting_key]=JSON.parse(row.setting_value)}catch{settings[row.setting_key]=row.setting_value}}const runs=await env.DB.prepare("SELECT task_key,status,started_at,finished_at,summary_json,error_message FROM platform_automation_runs ORDER BY started_at DESC LIMIT 12").all().catch(()=>({results:[]}));return json({ok:true,settings,automationRuns:runs.results||[]})}
+ try{const rows=await env.DB.prepare("SELECT setting_key,setting_value,updated_at FROM platform_settings WHERE setting_key IN ('terminology','subscription_policy','scheduled_automations','system_guide','session_policy','learning_area_catalogue')").all();const settings={};for(const row of rows.results||[]){try{settings[row.setting_key]=JSON.parse(row.setting_value)}catch{settings[row.setting_key]=row.setting_value}}if(!Array.isArray(settings.learning_area_catalogue)){const catalogue=await env.DB.prepare("SELECT DISTINCT curriculum,stage_code AS level,code,name,pathway,is_mandatory AS mandatory FROM learning_areas ORDER BY curriculum,stage_code,name LIMIT 5000").all().catch(()=>({results:[]}));settings.learning_area_catalogue=(catalogue.results||[]).map(x=>({...x,mandatory:Number(x.mandatory)===1?1:0}));}const runs=await env.DB.prepare("SELECT task_key,status,started_at,finished_at,summary_json,error_message FROM platform_automation_runs ORDER BY started_at DESC LIMIT 12").all().catch(()=>({results:[]}));return json({ok:true,settings,automationRuns:runs.results||[]})}
  catch(error){console.error("NAVSTAR platform controls read",error);return json({ok:false,error:"Could not load platform controls."},500)}
 }
 export async function onRequestPost({request,env}){
@@ -25,6 +25,10 @@ export async function onRequestPost({request,env}){
  }
  if(key==="terminology"){
   const entries=Object.entries(value);if(entries.length>40||entries.some(([k,v])=>!String(k).match(/^[a-z0-9_]{2,50}$/)||typeof v!=="string"||!v.trim()||v.length>80))return json({ok:false,error:"Terminology entries must have valid keys and labels (maximum 40)."},400);
+ }
+ if(key==="learning_area_catalogue"){
+  if(!Array.isArray(value.areas)||value.areas.length>5000||value.areas.some(x=>!x||typeof x.name!=="string"||!x.name.trim()||x.name.length>120||typeof x.code!=="string"||!x.code.trim()||x.code.length>30||typeof x.curriculum!=="string"||!["Kenyan CBE","Kenyan 8-4-4","International / Cambridge","Custom"].includes(x.curriculum)||typeof x.level!=="string"||!x.level.trim()||x.level.length>40||![0,1,true,false].includes(x.mandatory)))return json({ok:false,error:"Each learning area needs a name, code, curriculum, level and compulsory/optional setting."},400);
+  value={areas:value.areas.map(x=>({curriculum:x.curriculum,level:x.level.trim(),code:x.code.trim().toUpperCase(),name:x.name.trim(),pathway:String(x.pathway||"").trim()||null,mandatory:x.mandatory===true||Number(x.mandatory)===1?1:0}))};
  }
  if(key==="scheduled_automations"){
   if(!Array.isArray(value.tasks)||value.tasks.length>20||value.tasks.some(t=>!t||typeof t.key!=="string"||typeof t.enabled!=="boolean"||!["daily","weekly","monthly"].includes(t.frequency)))return json({ok:false,error:"Automation tasks have an invalid structure."},400);
