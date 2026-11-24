@@ -209,7 +209,7 @@ function bodyFields(body,config){
   return values;
 }
 async function syncCompulsoryLearningAreas(db,schoolId,enrollmentId=null){
- const sql="INSERT OR IGNORE INTO learner_learning_areas(id,school_id,enrollment_id,learner_id,learning_area_id,selection_type,status) SELECT lower(hex(randomblob(16))),e.school_id,e.id,e.learner_id,la.id,'mandatory','active' FROM learner_enrollments e JOIN grade_levels g ON g.id=e.grade_level_id AND g.school_id=e.school_id JOIN learning_areas la ON la.school_id=e.school_id AND la.curriculum=g.curriculum AND la.stage_code=g.stage_code AND la.is_active=1 WHERE e.school_id=? AND e.status='active' AND (? IS NULL OR e.id=?) AND (lower(COALESCE(g.school_level,'')) LIKE '%primary%' OR lower(COALESCE(g.school_level,'')) LIKE '%junior%' OR upper(g.stage_code) GLOB 'G[1-9]' OR upper(g.stage_code) GLOB 'PP[12]' OR upper(g.stage_code) GLOB 'STD[1-8]' OR la.is_mandatory=1)";
+ const sql="INSERT INTO learner_learning_areas(id,school_id,enrollment_id,learner_id,learning_area_id,selection_type,status) SELECT lower(hex(randomblob(16))),e.school_id,e.id,e.learner_id,la.id,'mandatory','active' FROM learner_enrollments e JOIN grade_levels g ON g.id=e.grade_level_id AND g.school_id=e.school_id JOIN learning_areas la ON la.school_id=e.school_id AND la.curriculum=g.curriculum AND la.stage_code=g.stage_code AND la.is_active=1 WHERE e.school_id=? AND e.status='active' AND (? IS NULL OR e.id=?) AND (lower(COALESCE(g.school_level,'')) LIKE '%primary%' OR lower(COALESCE(g.school_level,'')) LIKE '%junior%' OR upper(g.stage_code) GLOB 'G[1-9]' OR upper(g.stage_code) GLOB 'PP[12]' OR upper(g.stage_code) GLOB 'STD[1-8]' OR la.is_mandatory=1) ON CONFLICT(enrollment_id,learning_area_id) DO UPDATE SET selection_type='mandatory',status='active'";
  await db.prepare(sql).bind(schoolId,enrollmentId,enrollmentId).run();
 }
 function gradeBelongsToSelectedLevels(grade,levels){
@@ -617,6 +617,7 @@ export async function onRequestPatch({request,env}){
     const keys=Object.keys(values),sql="UPDATE "+cfg.table+" SET "+keys.map(k=>k+"=?").join(",")+(cfg.table==="schools"?",updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now')":"")+" WHERE "+where;
     await env.DB.prepare(sql).bind(...keys.map(k=>values[k]),...(cfg.scope?[recordId,schoolId]:[recordId])).run();
     if(name==="learning-areas"&&Number(values.is_active)===1)await syncCompulsoryLearningAreas(env.DB,schoolId);
+    if(name==="learning-areas"&&Number(values.is_active)===0)await env.DB.prepare("UPDATE learner_learning_areas SET status='inactive' WHERE school_id=? AND learning_area_id=? AND status='active'").bind(schoolId,recordId).run();
     const record=await env.DB.prepare("SELECT * FROM "+cfg.table+" WHERE "+where).bind(...(cfg.scope?[recordId,schoolId]:[recordId])).first();
     await audit(env.DB,a.user,schoolId||null,"record.updated",name,recordId);
     return json({ok:true,record});
