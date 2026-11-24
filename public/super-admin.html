@@ -755,19 +755,32 @@ $('editProfile').addEventListener('click',()=>{
     try{
       if(photo&&photo.size){const fd=new FormData();fd.append('photo',photo);const up=await fetch('/api/auth/profile-photo',{method:'POST',credentials:'same-origin',body:fd});const ud=await up.json();if(!up.ok||!ud.ok){toast(ud.error||'Profile picture upload failed.');return}}
       const payload={fullName:d.get('fullName'),email:d.get('email'),phone:d.get('phone'),designation:d.get('designation'),organisationName:d.get('organisationName')};
-      const r=await fetch('/api/auth/profile',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});const data=await r.json();if(!r.ok||!data.ok){toast(data.error||'Profile could not be updated.');return}await document.addEventListener('change',async e=>{const select=e.target.closest('[data-support-status]');if(!select||!select.value)return;try{const r=await fetch('/api/support',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'status',ticket_id:select.dataset.id,status:select.value})});const d=await r.json();if(!r.ok||!d.ok)throw new Error(d.error);loadSupportTickets()}catch(x){toast(x.message)}});
-document.addEventListener('click',async e=>{
- const b=e.target.closest('#runAiDiagnostics,[data-support-reply],[data-support-status]');if(!b)return;
- if(b.id==='runAiDiagnostics'){b.disabled=true;b.textContent='Analysing…';const out=$('aiIssueAnswer');try{const r=await fetch('/api/ai/diagnostics',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({question:$('aiIssueQuestion')?.value||''})});const d=await r.json();if(!r.ok||!d.ok)throw new Error(d.error||'AI diagnostics unavailable');out.textContent=d.answer||'No diagnosis returned.'}catch(x){out.textContent=x.message}finally{b.disabled=false;b.textContent='Analyse platform'}return}
- if(b.hasAttribute('data-support-status')){try{const r=await fetch('/api/support',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'status',ticket_id:b.dataset.id,status:b.dataset.status})});const d=await r.json();if(!r.ok||!d.ok)throw new Error(d.error);loadSupportTickets()}catch(x){toast(x.message)}}
- if(b.hasAttribute('data-support-reply')){const id=b.dataset.id;const body=prompt('Reply to this school:');if(!body)return;try{const r=await fetch('/api/support',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'reply',ticket_id:id,body})});const d=await r.json();if(!r.ok||!d.ok)throw new Error(d.error);toast('Reply sent to school.');loadSupportTickets()}catch(x){toast(x.message)}}
-});
-async function loadSupportTickets(){const host=$('supportTicketList');if(!host)return;try{const r=await fetch('/api/support',{credentials:'same-origin',cache:'no-store'}),d=await r.json();if(!r.ok||!d.ok)throw new Error(d.error);host.innerHTML=(d.tickets||[]).length?d.tickets.map(t=>'<div class="list-row" style="align-items:flex-start"><div style="flex:1"><b>'+esc(t.subject)+'</b><small>'+esc(t.school_name||'School')+' · '+esc(t.opened_by_name)+' · '+esc(t.category)+' · '+esc(t.priority)+' · '+esc(t.created_at)+'</small><p>'+esc((d.messages||[]).filter(m=>m.ticket_id===t.id).map(m=>m.author_name+': '+m.body).join('\n\n'))+'</p></div><div><span class="pill">'+esc(t.status)+'</span><p><button class="tiny" data-support-reply data-id="'+esc(t.id)+'">Reply</button></p><select class="field" data-support-status data-id="'+esc(t.id)+'"><option value="">Change status</option><option value="open">Open</option><option value="in_progress">In progress</option><option value="resolved">Resolved</option><option value="closed">Closed</option></select></div></div>').join(''):'<div class="empty">No school support requests yet.</div>'}catch(e){host.textContent=e.message}}
-
-loadSignedInUser();closeModal();toast('Profile updated successfully.');
+      const r=await fetch('/api/auth/profile',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});const data=await r.json();if(!r.ok||!data.ok){toast(data.error||'Profile could not be updated.');return}loadSignedInUser();closeModal();toast('Profile updated successfully.');
     }catch{toast('Profile update failed. Please try again.')}
   });
 });
+async function loadSupportTickets(){
+ const host=$('supportTicketList');if(!host)return;
+ host.textContent='Loading support requests…';
+ try{
+  const r=await fetch('/api/support',{credentials:'same-origin',cache:'no-store'});
+  const d=await r.json();if(!r.ok||!d.ok)throw new Error(d.error||'Could not load support requests.');
+  const tickets=d.tickets||[],messages=d.messages||[];
+  host.innerHTML=tickets.length?tickets.map(t=>'<div class="list-row" style="align-items:flex-start"><div style="flex:1"><b>'+esc(t.subject)+'</b><small>'+esc(t.school_name||'School')+' · '+esc(t.opened_by_name)+' · '+esc(t.category)+' · '+esc(t.priority)+' · '+esc(t.created_at)+'</small><p style="white-space:pre-wrap">'+esc(messages.filter(m=>m.ticket_id===t.id).map(m=>m.author_name+': '+m.body).join('\\n\\n'))+'</p></div><div><span class="pill">'+esc(t.status)+'</span><p><button class="tiny" data-support-reply data-id="'+esc(t.id)+'">Reply</button></p><select class="field" data-support-status data-id="'+esc(t.id)+'"><option value="">Change status</option><option value="open">Open</option><option value="in_progress">In progress</option><option value="resolved">Resolved</option><option value="closed">Closed</option></select></div></div>').join(''):'<div class="empty">No school support requests yet.</div>';
+ }catch(e){host.innerHTML='<div class="empty">Could not load support requests: '+esc(e.message)+'</div>'}
+}
+document.addEventListener('change',async e=>{
+ const select=e.target.closest('[data-support-status]');if(!select||!select.value)return;
+ const status=select.value;select.disabled=true;
+ try{const r=await fetch('/api/support',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'status',ticket_id:select.dataset.id,status})});const d=await r.json();if(!r.ok||!d.ok)throw new Error(d.error||'Status update failed.');toast('Issue status updated.');await loadSupportTickets()}
+ catch(x){toast(x.message);select.disabled=false}
+});
+document.addEventListener('click',async e=>{
+ const b=e.target.closest('#runAiDiagnostics,[data-support-reply]');if(!b)return;
+ if(b.id==='runAiDiagnostics'){b.disabled=true;b.textContent='Analysing…';const out=$('aiIssueAnswer');try{const r=await fetch('/api/ai/diagnostics',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({question:$('aiIssueQuestion')?.value||''})});const d=await r.json();if(!r.ok||!d.ok)throw new Error(d.error||'AI diagnostics unavailable');out.textContent=d.answer||'No diagnosis returned.'}catch(x){out.textContent=x.message}finally{b.disabled=false;b.textContent='Analyse platform'}return}
+ if(b.hasAttribute('data-support-reply')){const id=b.dataset.id;const body=prompt('Reply to this school:');if(!body)return;try{const r=await fetch('/api/support',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'reply',ticket_id:id,body})});const d=await r.json();if(!r.ok||!d.ok)throw new Error(d.error||'Reply failed.');toast('Reply sent to school.');await loadSupportTickets()}catch(x){toast(x.message)}}
+});
+
 $('changePassword').addEventListener('click',()=>{
   $('accountMenu').classList.remove('open');
   openModal('Change your password','<div class="form-grid">'+field('Current password *','currentPassword','Enter current password','password')+field('New password *','newPassword','At least 6 characters','password')+field('Confirm new password *','confirmPassword','Repeat new password','password')+'</div><div id="passwordMatchStatus" class="notice" style="margin-top:0">Enter the new password twice to check that they match.</div><div class="notice">Use at least 6 characters and any 3 of: uppercase, lowercase, number and special character. Other active sessions will be signed out.</div>',async d=>{
