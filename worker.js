@@ -7,7 +7,7 @@ import { onRequestPost as bulkLearnerImportPost } from "./functions/api/bulk-imp
 import { onRequestPost as bulkEnrollmentImportPost } from "./functions/api/bulk-import-enrollments.js";
 import { onRequestPost as timetableGeneratePost } from "./functions/api/timetable-generate.js";
 import { onRequestPost as reportCardGeneratePost } from "./functions/api/report-card-generate.js";
-import { onRequestGet as schoolWorkspaceSummaryGet } from "./functions/api/school-workspace-summary.js";
+import { onRequestGet as schoolWorkspaceSummaryGet, onRequestPostMotto as schoolMottoPost } from "./functions/api/school-workspace-summary.js";
 import { onRequestGet as platformControlsGet, onRequestPost as platformControlsPost } from "./functions/api/platform-controls.js";
 import { onRequestGet as sampleDataGet, onRequestDelete as sampleDataDelete } from "./functions/api/sample-data.js";
 import { onRequestGet as terminologyGet } from "./functions/api/terminology.js";
@@ -103,6 +103,7 @@ export default {
       if (request.method === "DELETE") return sampleDataDelete({ request, env });
       return new Response("Method not allowed", { status: 405, headers: { Allow: "GET, DELETE" } });
     }
+    if (route === "/api/school-motto") { if(request.method!=="POST")return new Response("Method not allowed",{status:405,headers:{Allow:"POST"}});return schoolMottoPost({request,env}); }
     if (route === "/api/school-workspace-summary") {
       if (request.method !== "GET") return new Response("Method not allowed", { status: 405, headers: { Allow: "GET" } });
       return schoolWorkspaceSummaryGet({ request, env });
