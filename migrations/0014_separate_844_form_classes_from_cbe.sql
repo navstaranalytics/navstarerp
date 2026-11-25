@@ -8,6 +8,12 @@ SET curriculum='Kenyan 8-4-4',
 WHERE upper(replace(stage_code,' ','')) IN ('FORM1','FORM2','FORM3','FORM4','F1','F2','F3','F4')
   AND lower(curriculum) NOT LIKE '%8-4-4%'
   AND lower(curriculum) NOT LIKE '%844%'
+  AND NOT EXISTS (
+    SELECT 1 FROM grade_levels target
+    WHERE target.school_id=grade_levels.school_id
+      AND target.curriculum='Kenyan 8-4-4'
+      AND upper(replace(target.stage_code,' ',''))=upper(replace(grade_levels.stage_code,' ',''))
+  )
   AND EXISTS (
     SELECT 1 FROM schools s
     WHERE s.id=grade_levels.school_id
