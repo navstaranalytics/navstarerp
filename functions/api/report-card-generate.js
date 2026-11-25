@@ -25,6 +25,7 @@ export async function onRequestPost({request,env}){
    env.DB.prepare("SELECT id,name,curriculum,level_key,stage_code FROM grading_schemes WHERE id=? AND school_id=? AND is_active=1").bind(schemeId,schoolId).first()
   ]);
   if(!year||!grade||!scheme)return json({ok:false,error:"The selected academic year, class or grading scheme is invalid for this school."},400);
+  if(streamId){const stream=await env.DB.prepare("SELECT id FROM streams WHERE id=? AND school_id=? AND grade_level_id=? AND status='active'").bind(streamId,schoolId,gradeId).first();if(!stream)return json({ok:false,error:"The selected stream does not belong to the selected class or is inactive. Refresh the class and stream selections."},400);}
   if(scheme.curriculum!==grade.curriculum)return json({ok:false,error:"The grading scheme curriculum does not match this learner class."},400);
   if(scheme.level_key&&scheme.level_key!==grade.id)return json({ok:false,error:"This grading scheme is configured for a different class."},400);
   if(String(scheme.stage_code||"").startsWith("LEVEL:")&&String(scheme.stage_code).slice(6)!==String(grade.school_level||""))return json({ok:false,error:"This grading scheme is configured for a different school level."},400);
