@@ -14,7 +14,7 @@ const resources={
   streams:{table:"streams",scope:true,fields:["grade_level_id","name","capacity","classroom","status"],required:["school_id","grade_level_id","name"],refs:{grade_level_id:"grade_levels"}},
   "learning-areas":{table:"learning_areas",scope:true,fields:["curriculum","code","name","stage_code","pathway","is_active","subject_type","is_mandatory","source_template","catalogue_code","school_customized"],required:["school_id","name"]},
   "learner-learning-areas":{table:"learner_learning_areas",scope:true,fields:["enrollment_id","learner_id","learning_area_id","selection_type","selected_by","status"],required:["school_id","enrollment_id","learner_id","learning_area_id"],refs:{enrollment_id:"learner_enrollments",learner_id:"learners",learning_area_id:"learning_areas"}},
-  staff:{table:"staff_profiles",scope:true,fields:["user_id","staff_number","department","employment_type","employment_status","hire_date","profile_json"],required:["school_id"],refs:{user_id:"users"}},
+  staff:{table:"staff_profiles",scope:true,fields:["user_id","staff_number","department","employment_type","employment_status","hire_date","profile_json","is_teacher"],required:["school_id"],refs:{user_id:"users"}},
   "staff-learning-areas":{table:"staff_learning_areas",scope:true,fields:["staff_id","curriculum","learning_area_code","learning_area_name","status"],required:["school_id","staff_id","curriculum","learning_area_code","learning_area_name"],refs:{staff_id:"staff_profiles"}},
   departments:{table:"school_departments",scope:true,fields:["name","code","description","head_staff_id","status"],required:["school_id","name"],refs:{head_staff_id:"staff_profiles"}},
   classes:{table:"classes",scope:true,fields:["academic_year_id","grade_level_id","stream_id","class_teacher_staff_id","capacity","room","status"],required:["school_id","academic_year_id","grade_level_id","stream_id"],refs:{academic_year_id:"academic_years",grade_level_id:"grade_levels",stream_id:"streams",class_teacher_staff_id:"staff_profiles"}},
@@ -397,8 +397,9 @@ export async function onRequestGet({request,env}){
     }
     if(name==="staff"){
       const roleKeys=a.user.role_keys||[a.user.role_key];
-      if(roleKeys.includes("school_admin")||roleKeys.includes("school_administrator")){
-        await env.DB.prepare("INSERT INTO staff_profiles(id,school_id,user_id,employment_status) SELECT lower(hex(randomblob(16))),?,?, 'active' WHERE NOT EXISTS (SELECT 1 FROM staff_profiles WHERE school_id=? AND user_id=?)").bind(schoolId,a.user.id,schoolId,a.user.id).run();
+      if(roleKeys.includes("school_admin")||roleKeys.includes("school_administrator")||a.user.permissions.includes("school.users.manage")){
+        await env.DB.prepare("INSERT INTO staff_profiles(id,school_id,user_id,employment_status,is_teacher) SELECT lower(hex(randomblob(16))),?,?, 'active',1 WHERE NOT EXISTS (SELECT 1 FROM staff_profiles WHERE school_id=? AND user_id=?)").bind(schoolId,a.user.id,schoolId,a.user.id).run();
+        await env.DB.prepare("UPDATE staff_profiles SET is_teacher=1 WHERE school_id=? AND user_id=?").bind(schoolId,a.user.id).run();
       }
       const rows=await env.DB.prepare("SELECT sp.*,u.full_name,u.username,u.email FROM staff_profiles sp LEFT JOIN users u ON u.id=sp.user_id WHERE sp.school_id=? ORDER BY u.full_name").bind(schoolId).all();
       return json({ok:true,records:rows.results||[]});
