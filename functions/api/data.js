@@ -15,6 +15,7 @@ const resources={
   "learning-areas":{table:"learning_areas",scope:true,fields:["curriculum","code","name","stage_code","pathway","is_active","subject_type","is_mandatory","source_template","catalogue_code","school_customized"],required:["school_id","name"]},
   "learner-learning-areas":{table:"learner_learning_areas",scope:true,fields:["enrollment_id","learner_id","learning_area_id","selection_type","selected_by","status"],required:["school_id","enrollment_id","learner_id","learning_area_id"],refs:{enrollment_id:"learner_enrollments",learner_id:"learners",learning_area_id:"learning_areas"}},
   staff:{table:"staff_profiles",scope:true,fields:["user_id","staff_number","department","employment_type","employment_status","hire_date","profile_json"],required:["school_id"],refs:{user_id:"users"}},
+  departments:{table:"school_departments",scope:true,fields:["name","code","description","head_staff_id","status"],required:["school_id","name"],refs:{head_staff_id:"staff_profiles"}},
   classes:{table:"classes",scope:true,fields:["academic_year_id","grade_level_id","stream_id","class_teacher_staff_id","capacity","room","status"],required:["school_id","academic_year_id","grade_level_id","stream_id"],refs:{academic_year_id:"academic_years",grade_level_id:"grade_levels",stream_id:"streams",class_teacher_staff_id:"staff_profiles"}},
   learners:{table:"learners",scope:true,fields:["admission_number","first_name","middle_name","last_name","gender","date_of_birth","status","pathway","profile_json"],required:["school_id","admission_number","first_name","last_name"]},
   enrollments:{table:"learner_enrollments",scope:true,fields:["learner_id","academic_year_id","grade_level_id","stream_id","status","enrolled_at"],required:["school_id","learner_id","academic_year_id","grade_level_id"],refs:{learner_id:"learners",academic_year_id:"academic_years",grade_level_id:"grade_levels",stream_id:"streams"}},
@@ -75,6 +76,7 @@ const permissionFor=(name,write=false)=>{
   if(["years","terms","grades","streams","learning-areas","grading-schemes"].includes(name))return "academics.manage";
   if(name==="learner-learning-areas")return write?"learner.learning.areas.manage":"learners.view";
   if(["staff"].includes(name))return "staff.manage";
+  if(name==="departments")return "staff.manage";
   if(["learners","enrollments","guardians","transfers"].includes(name))return write?"learners.manage":"learners.view";
   if(name==="teacher-allocations")return "allocations.manage";
   if(["competency-frameworks","rubric-criteria"].includes(name))return write?"academics.manage":"assessments.view";
@@ -310,6 +312,9 @@ async function validateTimetableEntry(db,schoolId,values,excludeId=null){
   if(values.room){const roomArgs=[schoolId,values.academic_year_id,values.term_id??null,values.weekday,values.end_time,values.start_time,values.room];let roomSql="SELECT id FROM timetable_entries WHERE school_id=? AND academic_year_id=? AND term_id IS ? AND weekday=? AND start_time<? AND end_time>? AND room=?";if(excludeId){roomSql+=" AND id<>?";roomArgs.push(excludeId)}if(await db.prepare(roomSql+" LIMIT 1").bind(...roomArgs).first())return "The selected room already has a lesson during that time."}
   return null;
 }
+async function ensureDepartments(db){
+  await db.prepare("CREATE TABLE IF NOT EXISTS school_departments (id TEXT PRIMARY KEY, school_id TEXT NOT NULL REFERENCES schools(id) ON DELETE CASCADE, name TEXT NOT NULL, code TEXT, description TEXT, head_staff_id TEXT REFERENCES staff_profiles(id) ON DELETE SET NULL, status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','inactive','archived')), created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')), updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')), UNIQUE(school_id,name))").run();
+}
 async function audit(db,user,schoolId,action,resource,resourceId){
   try{await db.prepare("INSERT INTO audit_logs (id,actor_user_id,school_id,action,resource_type,resource_id,outcome,details_json) VALUES (?,?,?,?,?,?,'success','{}')")
     .bind(id(),user.id,schoolId||null,action,resource,resourceId||null).run()}catch{}
@@ -318,6 +323,7 @@ export async function onRequestGet({request,env}){
   const a=await auth(request,env);if(a.error)return a.error;
   const url=new URL(request.url),name=url.pathname.split("/").pop(),cfg=resources[name];
   if(!cfg)return json({ok:false,error:"Unknown data resource."},404);
+  if(name==="departments")await ensureDepartments(env.DB);
   const needed=permissionFor(name,false);if(!allowed(a.user,needed))return json({ok:false,error:"Your role does not have permission to view this resource."},403);
   if(name==="grade-boundaries")await ensureGradeBoundaryScope(env.DB);
   if(name==="platform-users"){
@@ -448,6 +454,7 @@ export async function onRequestPost({request,env}){
   }
   const name=new URL(request.url).pathname.split("/").pop(),cfg=resources[name];
   if(!cfg)return json({ok:false,error:"Unknown data resource."},404);
+  if(name==="departments")await ensureDepartments(env.DB);
   if(!allowed(a.user,permissionFor(name,true)))return json({ok:false,error:"Your role does not have permission to change this resource."},403);
   if(name==="grades"&&!a.user.is_super_admin)return json({ok:false,error:"Classes are configured by Navstar Super Admin. School Admins may create streams only."},403);
   if(name==="classes")return json({ok:false,error:"Class groups are no longer created. Classes are centrally configured; manage streams under each class instead."},405);
@@ -620,7 +627,8 @@ export async function onRequestDelete({request,env}){
   const a=await auth(request,env);if(a.error)return a.error;
   const parts=new URL(request.url).pathname.split("/"),name=parts[parts.length-2],recordId=decodeURIComponent(parts[parts.length-1]||""),cfg=resources[name];
   if(!cfg||!recordId)return json({ok:false,error:"Unknown resource or record."},404);
-  if(!["years","terms","school-events","grading-schemes","streams"].includes(name))return json({ok:false,error:"Deletion is not enabled for this resource."},405);
+  if(name==="departments")await ensureDepartments(env.DB);
+  if(!["years","terms","school-events","grading-schemes","streams","departments"].includes(name))return json({ok:false,error:"Deletion is not enabled for this resource."},405);
   if(!allowed(a.user,permissionFor(name,true)))return json({ok:false,error:"Your role does not have permission to delete this record."},403);
   const requested=new URL(request.url).searchParams.get("schoolId")||"";
   const schoolId=cfg.scope?(a.user.is_super_admin?requested:a.user.school_id):"";
@@ -662,6 +670,7 @@ export async function onRequestPatch({request,env}){
   const a=await auth(request,env);if(a.error)return a.error;
   const parts=new URL(request.url).pathname.split("/"),name=parts[parts.length-2],recordId=decodeURIComponent(parts[parts.length-1]||""),cfg=resources[name];
   if(!cfg||!recordId)return json({ok:false,error:"Unknown resource or record."},404);
+  if(name==="departments")await ensureDepartments(env.DB);
   if(!allowed(a.user,permissionFor(name,true)))return json({ok:false,error:"Your role does not have permission to change this resource."},403);
   if(name==="grades"&&!a.user.is_super_admin){
     let submitted;try{submitted=await request.clone().json()}catch{submitted={}}
