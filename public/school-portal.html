@@ -500,7 +500,60 @@ setOptions(yearSelect,yearRows,x=>x.name,"Select year to enrol now");setOptions(
 const pathwayField=admissionForm.elements.pathway?.closest(".field"),areaHost=$("admissionLearningAreas"),refreshAdmissionStreams=()=>{const gid=gradeSelect.value,g=gradeRows.find(x=>x.id===gid),usesPathways=schoolGradeUsesCbePathways(g),path=String(admissionForm.elements.pathway.value||"").toLowerCase().replace(/&/g,"and").replace(/[^a-z0-9]+/g," ").trim();setOptions(streamSelect,streamRows.filter(x=>x.grade_level_id===gid),x=>x.name,gid?"Select stream":"Select class first");if(pathwayField){pathwayField.classList.toggle("hidden",!usesPathways);admissionForm.elements.pathway.required=usesPathways;if(!usesPathways)admissionForm.elements.pathway.value=""}const areas=(window.currentLearningAreas||[]).filter(x=>g&&x.stage_code===g.stage_code&&x.curriculum===g.curriculum&&Number(x.is_active)!==0).filter(x=>{const ap=String(x.pathway||"").toLowerCase().replace(/&/g,"and").replace(/[^a-z0-9]+/g," ").trim();return !ap||ap==="all"||ap==="all pathways"||(usesPathways&&path&&ap===path)});areaHost.innerHTML=areas.length?areas.map(x=>{const mandatory=Number(x.is_mandatory)===1;return '<label><input type="checkbox" name="enrolment_learning_area" value="'+esc(x.id)+'" data-mandatory="'+(mandatory?"1":"0")+'" '+(mandatory?"checked disabled":"")+'> <span>'+esc(x.name)+(mandatory?" · Compulsory":" · Elective")+(x.pathway?" · "+esc(x.pathway):"")+"</span></label>"}).join(""):'<span class="muted">No active learning areas are configured for this class. Configure them in Academic Setup.</span>'};gradeSelect.onchange=refreshAdmissionStreams;admissionForm.elements.pathway.onchange=refreshAdmissionStreams;refreshAdmissionStreams();
 if(!admissionForm.elements.admission_number.value){try{const next=await api("/api/admission-numbers/next?schoolId="+encodeURIComponent(schoolId),{method:"POST",body:"{}"});admissionForm.elements.admission_number.value=next.admission_number}catch{}}
 window.currentLearners=rows;$("recordTable").innerHTML=rows.length?'<div class="tablewrap"><table><thead><tr><th>Photo</th><th>Admission no.</th><th>Learner name</th><th>Gender</th><th>Date of birth</th><th>Pathway</th><th>Status</th><th>Actions</th></tr></thead><tbody>'+rows.map(x=>'<tr data-learner-row="'+esc(x.id)+'"><td><img class="photo-preview" loading="lazy" src="/api/learner-photos/'+encodeURIComponent(x.id)+'?schoolId='+encodeURIComponent(schoolId)+'" alt="Passport" onerror="this.style.visibility=\'hidden\'"></td><td>'+esc(x.admission_number)+'</td><td>'+esc([x.first_name,x.middle_name,x.last_name].filter(Boolean).join(" "))+'</td><td>'+esc(x.gender||"—")+'</td><td>'+esc(x.date_of_birth||"—")+'</td><td>'+esc(x.pathway||"—")+'</td><td>'+esc(x.status)+'</td><td><button class="btn" type="button" data-edit-learner="'+esc(x.id)+'">Edit details</button> <button class="btn" type="button" data-delete-learner="'+esc(x.id)+'" style="background:#a52d3a">Delete</button></td></tr>').join("")+'</tbody></table></div>':'<div class="empty">No learners registered yet. Use the form above or the CSV import to add learners.</div>';const count=$("learnerCount");if(count)count.textContent=rows.length}catch(e){$("recordTable").innerHTML='<div class="empty">'+esc(e.message)+'</div>'}}
-$("learnerForm").addEventListener("submit",async e=>{e.preventDefault();const form=e.currentTarget,button=$("saveLearner");button.disabled=true;button.textContent="Saving…";const body=Object.fromEntries(new FormData(form).entries());body.school_id=schoolId;const photoCode=String(body.photo_code||"").trim(),yearId=body.admission_year_id,gradeId=body.admission_grade_id,streamId=body.admission_stream_id,selectedGrade=(window.currentSchoolGrades||[]).find(g=>g.id===gradeId),selectedAreaIds=[...document.querySelectorAll("#admissionLearningAreas input[name=\"enrolment_learning_area\"]:checked:not([data-mandatory=\"1\"])")].map(x=>x.value);if(selectedGrade&&schoolGradeUsesCbePathways(selectedGrade)&&!["STEM","Social Sciences","Arts & Sports Science"].includes(body.pathway)){message("learnerNotice","Select the learner’s Senior School CBE pathway before registering.",true);button.disabled=false;button.textContent="Register learner";return}if(selectedGrade&&!schoolGradeUsesCbePathways(selectedGrade))body.pathway="";const guardian={title:body.guardian_title,full_name:body.guardian_name,relationship:body.guardian_relationship,phone:body.guardian_phone,email:body.guardian_email,national_id:body.guardian_national_id,occupation:body.guardian_occupation,postal_address:body.guardian_address};for(const k of ["photo_code","admission_year_id","admission_grade_id","admission_stream_id","guardian_title","guardian_name","guardian_relationship","guardian_phone","guardian_email","guardian_national_id","guardian_occupation","guardian_address"])delete body[k];body.profile_json=JSON.stringify(photoCode?{photoCode}:{});try{const saved=await api("/api/data/learners",{method:"POST",body:JSON.stringify(body)});const learner=saved.record||saved.learner||saved;if(guardian.full_name)await api("/api/learner-guardians",{method:"POST",body:JSON.stringify({learner_id:learner.id,...guardian})});if(yearId&&gradeId){const enrollment=await api("/api/data/enrollments",{method:"POST",body:JSON.stringify({school_id:schoolId,learner_id:learner.id,academic_year_id:yearId,grade_level_id:gradeId,stream_id:streamId||null,status:"active"})});const en=enrollment.record||enrollment;for(const areaId of selectedAreaIds){const mandatory=!!document.querySelector("#admissionLearningAreas input[value=\""+CSS.escape(areaId)+"\"][data-mandatory=\"1\"]");await api("/api/data/learner-learning-areas",{method:"POST",body:JSON.stringify({school_id:schoolId,enrollment_id:en.id,learner_id:learner.id,learning_area_id:areaId,selection_type:mandatory?"mandatory":"elective",selected_by:null,status:"active"})})}}message("learnerNotice","Learner registered"+(yearId&&gradeId?" and enrolled in the selected class":"")+(guardian.full_name?" with parent/guardian details saved.":"."));form.reset();await loadLearners();$("generateAdmissionNumber").click()}catch(error){message("learnerNotice",error.message,true)}finally{button.disabled=false;button.textContent="Register learner"}});
+$("learnerForm").addEventListener("submit",async e=>{
+ e.preventDefault();
+ const form=e.currentTarget,button=$("saveLearner");
+ if(button.disabled)return;
+ button.disabled=true;button.textContent="Saving learner…";
+ const body=Object.fromEntries(new FormData(form).entries());
+ body.school_id=schoolId;
+ const photoCode=String(body.photo_code||"").trim(),yearId=body.admission_year_id,gradeId=body.admission_grade_id,streamId=body.admission_stream_id,selectedGrade=(window.currentSchoolGrades||[]).find(g=>g.id===gradeId),selectedAreaIds=[...document.querySelectorAll("#admissionLearningAreas input[name=\"enrolment_learning_area\"]:checked:not([data-mandatory=\"1\"])")].map(x=>x.value);
+ if(selectedGrade&&schoolGradeUsesCbePathways(selectedGrade)&&!["STEM","Social Sciences","Arts & Sports Science"].includes(body.pathway)){
+  message("learnerNotice","Select the learner’s Senior School CBE pathway before registering.",true);
+  button.disabled=false;button.textContent="Register learner";return;
+ }
+ if(selectedGrade&&!schoolGradeUsesCbePathways(selectedGrade))body.pathway="";
+ const guardian={title:body.guardian_title,full_name:body.guardian_name,relationship:body.guardian_relationship,phone:body.guardian_phone,email:body.guardian_email,national_id:body.guardian_national_id,occupation:body.guardian_occupation,postal_address:body.guardian_address};
+ for(const k of ["photo_code","admission_year_id","admission_grade_id","admission_stream_id","guardian_title","guardian_name","guardian_relationship","guardian_phone","guardian_email","guardian_national_id","guardian_occupation","guardian_address"])delete body[k];
+ body.profile_json=JSON.stringify(photoCode?{photoCode}:{});
+ try{
+  const saved=await api("/api/data/learners",{method:"POST",body:JSON.stringify(body)});
+  const learner=saved.record||saved.learner||saved;
+  if(!learner?.id)throw new Error("The learner profile was created but the server did not return its record ID. Refresh the learner list before retrying.");
+  button.textContent="Saving enrolment details…";
+  // Guardian and class enrolment are independent after the learner ID exists;
+  // run them together instead of making the user wait for sequential requests.
+  const guardianPromise=guardian.full_name
+   ?api("/api/learner-guardians",{method:"POST",body:JSON.stringify({learner_id:learner.id,...guardian})})
+   :Promise.resolve(null);
+  const enrollmentPromise=yearId&&gradeId
+   ?api("/api/data/enrollments",{method:"POST",body:JSON.stringify({school_id:schoolId,learner_id:learner.id,academic_year_id:yearId,grade_level_id:gradeId,stream_id:streamId||null,status:"active"})})
+   :Promise.resolve(null);
+  const [guardianSaved,enrollment]=await Promise.all([guardianPromise,enrollmentPromise]);
+  if(enrollment){
+   const en=enrollment.record||enrollment;
+   if(!en?.id)throw new Error("The learner profile was saved, but the class enrolment was not confirmed. Refresh before retrying.");
+   if(selectedAreaIds.length){
+    button.textContent="Saving learning areas…";
+    const assignments=selectedAreaIds.map(areaId=>{
+     const mandatory=!!document.querySelector("#admissionLearningAreas input[value=\""+CSS.escape(areaId)+"\"][data-mandatory=\"1\"]");
+     return api("/api/data/learner-learning-areas",{method:"POST",body:JSON.stringify({school_id:schoolId,enrollment_id:en.id,learner_id:learner.id,learning_area_id:areaId,selection_type:mandatory?"mandatory":"elective",selected_by:null,status:"active"})});
+    });
+    await Promise.all(assignments);
+   }
+  }
+  message("learnerNotice","Learner registered"+(yearId&&gradeId?" and enrolled in the selected class":"")+(guardian.full_name&&guardianSaved?" with parent/guardian details saved.":"."));
+  form.reset();
+  // Do not hold the Save button open while refreshing the full learner table,
+  // admission settings and next admission number. These are follow-up reads.
+  void loadLearners();
+  $("generateAdmissionNumber").click();
+ }catch(error){
+  message("learnerNotice",error.message,true);
+ }finally{
+  button.disabled=false;button.textContent="Register learner";
+ }
+});
 
 $("recordTable").addEventListener("click",async e=>{
  const edit=e.target.closest("[data-edit-learner]"),save=e.target.closest("[data-save-learner]"),cancel=e.target.closest("[data-cancel-learner]");
