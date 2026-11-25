@@ -958,6 +958,7 @@ export async function onRequestPatch({request,env}){
     if(name==="learning-areas"&&values.department_id){const department=await env.DB.prepare("SELECT id FROM school_departments WHERE id=? AND school_id=? AND status='active'").bind(String(values.department_id),schoolId).first();if(!department)return json({ok:false,error:"Choose an active department belonging to this school."},409);}
     const current=await env.DB.prepare("SELECT * FROM "+cfg.table+" WHERE "+where).bind(...(cfg.scope?[recordId,schoolId]:[recordId])).first();
     if(!current)return json({ok:false,error:"Record not found in the selected school."},404);
+    if(name==="learning-areas"&&(values.name!==undefined||values.code!==undefined))values.school_customized=1;
     if(name==="learners"){
       for(const field of ["assessment_number","upi_number"]){
         const value=String(values[field]??current[field]??"").trim();if(!value)continue;
