@@ -328,7 +328,7 @@ async function loadSchoolBillingFromDatabase(){
       const assignedPlan=plans.find(p=>p.id===row.plan_id);
       if(assignedPlan){school.plan=assignedPlan.name;const planModules=Array.isArray(assignedPlan.modules)?assignedPlan.modules:String(assignedPlan.modules||"").split(/[,;+]/).map(x=>x.trim()).filter(Boolean);school.modules=[...new Set([...modulesForLevels(school.levels||[]),...planModules])];}
       school.learnerCount=Number(row.learner_count||0);
-      school.billing={subscriptionId:row.id,billingModel:row.billing_model_override,rate:row.rate_override_kes,learnerCountBasis:row.learner_count_basis||"active",discount:Number(row.discount_percent||0),cycleStart:row.contract_start_date||"",nextDue:row.next_due_date||"",paymentTerms:row.payment_terms||"",paymentMethod:row.preferred_payment_method||"",status:row.status||"trial"};
+      let paidModules=[],moduleAmounts={};try{paidModules=JSON.parse(row.paid_modules_json||"[]")}catch{}try{moduleAmounts=JSON.parse(row.module_amounts_json||"{}")}catch{}school.billing={subscriptionId:row.id,billingModel:row.billing_model_override,rate:row.rate_override_kes,discount:Number(row.discount_percent||0),paidModules,moduleAmounts,cycleStart:row.contract_start_date||"",nextDue:row.next_due_date||"",paymentTerms:row.payment_terms||"",paymentMethod:row.preferred_payment_method||"",status:row.status||"trial"};
     }catch(error){console.warn("Could not load subscription for school",school.id,String(error?.message||error))}
   }));
 }
@@ -358,7 +358,7 @@ configureSchoolBilling=function(id){
       if(rate!==null&&(!Number.isFinite(rate)||rate<0)){toast("Custom rate must be a non-negative number.");return}
       if(discount<0||discount>100){toast("Discount must be between 0 and 100%.");return}
       const billingModel=model==="plan"?null:model;
-      const effectiveModel=billingModel||selected.billingModel||"flat_school_month";
+      const effectiveModel=billingModel||selected.billingModel||"flat_school_year";
       const effectiveRate=rate??selected.rate??selected.price??0;
       const base=effectiveModel==="custom"?0:effectiveRate;
       const estimated=Math.round(base*(1-discount/100)*100)/100;
@@ -372,9 +372,10 @@ configureSchoolBilling=function(id){
         school.plan=selected.name;school.learnerCount=0;school.billing={subscriptionId:result.record?.id||billing.subscriptionId,billingModel,rate,discount,paidModules,moduleAmounts,cycleStart:payload.contract_start_date||"",nextDue:payload.next_due_date||"",paymentTerms:payload.payment_terms,paymentMethod:payload.preferred_payment_method,status:payload.status};
         const schoolStatus=d.get("schoolStatus")||String(school.status||"pending").toLowerCase();
         await schoolApi("/api/schools/"+encodeURIComponent(school.id),{method:"PATCH",body:JSON.stringify({status:schoolStatus})});
-        await loadSchoolsFromDatabase();await loadSchoolBillingFromDatabase();
-        let invoiceNotice="";try{const issued=await schoolApi("/api/subscription-invoice",{method:"POST",body:JSON.stringify({school_id:school.id})});if(issued?.invoice)invoiceNotice=" Invoice "+issued.invoice.invoice_number+" is ready for payment.";}catch(invoiceError){console.warn("Automatic school invoice could not be issued",invoiceError);invoiceNotice=" The subscription is saved; invoice generation needs review in Billing & payments."}
-        closeModal();render();toast((schoolStatus==="active"?"Subscription saved, school confirmed and dashboard activated.":"Subscription saved and school approval status updated.")+invoiceNotice);
+        school.status=schoolStatus;
+        const check=await schoolApi("/api/data/subscriptions?schoolId="+encodeURIComponent(school.id));const saved=(check.records||[]).find(x=>x.id===(result.record?.id||billing.subscriptionId));if(!saved)throw new Error("The subscription request was accepted, but its database read-back could not verify the saved record. Refresh and review before retrying.");
+        closeModal();render();toast(schoolStatus==="active"?"Subscription saved and school activated.":"Subscription saved; school approval status updated.");
+        try{const issued=await schoolApi("/api/subscription-invoice",{method:"POST",body:JSON.stringify({school_id:school.id})});if(issued?.invoice)toast("Invoice "+issued.invoice.invoice_number+" is ready. Balance: "+money(Number(issued.invoice.total||0)-Number(issued.invoice.amount_paid||0))+".");}catch(invoiceError){console.warn("Automatic school invoice could not be issued",invoiceError);toast("Subscription saved. Invoice generation needs review in Billing & payments.");}
       }catch(error){toast(error.message||"Subscription could not be saved.");if(button){button.disabled=false;button.textContent="Save record"}}
     });
   const planSelect=$("modalBody")?.querySelector('[name="plan"]');
