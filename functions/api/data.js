@@ -473,6 +473,30 @@ async function validateAcademicCalendarDates(db,name,schoolId,values,currentId=n
 export async function onRequestPost({request,env}){
   const a=await auth(request,env);if(a.error)return a.error;
   const pathParts=new URL(request.url).pathname.split("/").filter(Boolean);
+  if(pathParts.slice(-2).join("/") === "learning-areas/bulk-create"){
+    if(!allowed(a.user,permissionFor("learning-areas",true)))return json({ok:false,error:"Your role does not have permission to manage learning areas."},403);
+    let body;try{body=await request.json()}catch{return json({ok:false,error:"Invalid learning-area details."},400)}
+    const schoolId=a.user.is_super_admin?String(body.school_id||""):a.user.school_id,gradeIds=[...new Set((Array.isArray(body.grade_ids)?body.grade_ids:[]).map(x=>String(x||"").trim()).filter(Boolean))],curriculum=clean(body.curriculum),name=clean(body.name),code=String(body.code||"").trim().toUpperCase(),pathway=clean(body.pathway)||null,isMandatory=Number(body.is_mandatory)===1?1:0;
+    if(!schoolId||(!a.user.is_super_admin&&body.school_id&&body.school_id!==schoolId))return json({ok:false,error:"School workspace is required."},403);
+    if(!curriculum||!name||!code||!gradeIds.length||gradeIds.length>30)return json({ok:false,error:"Choose a curriculum and level, enter a subject name and code, and select its active classes."},400);
+    if(pathway&&!/cbe|cbc|competency/i.test(curriculum))return json({ok:false,error:"Pathways are available only for CBE Senior School."},400);
+    try{
+      const placeholders=gradeIds.map(()=>"?").join(",");
+      const grades=await env.DB.prepare("SELECT id,stage_code,school_level FROM grade_levels WHERE school_id=? AND curriculum=? AND is_active=1 AND id IN ("+placeholders+")").bind(schoolId,curriculum,...gradeIds).all();
+      if((grades.results||[]).length!==gradeIds.length)return json({ok:false,error:"One or more selected classes are inactive or belong to another curriculum."},409);
+      const senior=(grades.results||[]).every(g=>/senior|secondary/i.test(String(g.school_level||""))||/^G1[0-2]$/.test(String(g.stage_code||"")));
+      if(pathway&&!senior)return json({ok:false,error:"Choose a pathway only when adding a CBE Senior School learning area."},400);
+      const duplicates=await env.DB.prepare("SELECT stage_code FROM learning_areas WHERE school_id=? AND curriculum=? AND upper(COALESCE(NULLIF(code,''),catalogue_code,''))=? AND COALESCE(pathway,'')=COALESCE(?,'') AND stage_code IN ("+placeholders+")").bind(schoolId,curriculum,code,pathway,...(grades.results||[]).map(g=>g.stage_code)).all();
+      if((duplicates.results||[]).length)return json({ok:false,error:"This subject code already exists in one or more classes in the selected level. Refresh the catalogue and choose a different code."},409);
+      const records=(grades.results||[]).map(g=>({id:id(),school_id:schoolId,curriculum,stage_code:g.stage_code,name,code,catalogue_code:code,pathway,is_active:1,is_mandatory:isMandatory,subject_type:clean(body.subject_type)||"learning_area",source_template:"school_custom",school_customized:1}));
+      await env.DB.batch(records.map(x=>env.DB.prepare("INSERT INTO learning_areas(id,school_id,curriculum,stage_code,name,code,catalogue_code,pathway,is_active,is_mandatory,subject_type,source_template,school_customized) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)").bind(x.id,x.school_id,x.curriculum,x.stage_code,x.name,x.code,x.catalogue_code,x.pathway,x.is_active,x.is_mandatory,x.subject_type,x.source_template,x.school_customized)));
+      if(isMandatory)await syncCompulsoryLearningAreas(env.DB,schoolId);
+      const saved=await env.DB.prepare("SELECT id FROM learning_areas WHERE school_id=? AND id IN ("+records.map(()=>"?").join(",")+")").bind(schoolId,...records.map(x=>x.id)).all();
+      if((saved.results||[]).length!==records.length)throw new Error("Learning-area batch verification failed.");
+      await audit(env.DB,a.user,schoolId,"learning_areas.level_catalogue_created","learning_areas",records.map(x=>x.id).join(","));
+      return json({ok:true,savedCount:records.length,records,message:name+" added to "+records.length+" classes in "+body.level+"."},201);
+    }catch(error){console.error("NAVSTAR bulk learning-area create",error);return json({ok:false,error:"The learning area could not be added to every class in this level. No successful save was confirmed."},500)}
+  }
   if(pathParts.slice(-2).join("/") === "learning-areas/bulk"){
     if(!allowed(a.user,permissionFor("learning-areas",true)))return json({ok:false,error:"Your role does not have permission to manage learning areas."},403);
     let body;try{body=await request.json()}catch{return json({ok:false,error:"Invalid learning-area update."},400)}
