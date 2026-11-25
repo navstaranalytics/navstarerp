@@ -228,9 +228,14 @@ function schoolDetails(id){let s=schools.find(x=>x.id===id);if(!s)return;openMod
   try{
     const payload={name:nextName,code:nextCode,contact:d.get('contact'),email:d.get('email'),phone:d.get('phone'),address:d.get('address'),registrationNumber:d.get('registrationNumber'),county:d.get('county'),category:d.get('category'),ownership:d.get('ownership'),curricula:d.getAll('curricula'),curriculum:d.getAll('curricula')[0]||'Kenyan CBE',plan:d.get('plan'),status:d.get('status'),expiry:d.get('expiry'),learnerCount:Number(d.get('learnerCount'))||0,teacherCount:Number(d.get('teacherCount'))||0,levels:d.getAll('levels'),modules:d.getAll('modules')};
     const saved=await schoolApi('/api/schools/'+encodeURIComponent(s.id),{method:'PATCH',body:JSON.stringify(payload)});
+    if(!saved?.ok||!saved.school?.id)throw new Error(saved?.error||"The server did not confirm the school configuration save.");
     await loadSchoolsFromDatabase();
+    const persisted=schools.find(x=>x.id===s.id);
+    const sameList=(a,b)=>JSON.stringify([...(a||[])].sort())===JSON.stringify([...(b||[])].sort());
+    const verified=persisted&&persisted.name===payload.name&&persisted.code===payload.code&&persisted.county===payload.county&&persisted.email===payload.email&&persisted.phone===payload.phone&&persisted.address===payload.address&&persisted.contact===payload.contact&&persisted.registrationNumber===payload.registrationNumber&&persisted.category===payload.category&&persisted.ownership===payload.ownership&&persisted.plan===payload.plan&&persisted.status===payload.status&&persisted.expiry===payload.expiry&&sameList(persisted.curricula,payload.curricula)&&sameList(persisted.levels,payload.levels)&&sameList(persisted.modules,payload.modules);
+    if(!verified)throw new Error("The school update was accepted, but a fresh database read did not match the submitted configuration. The form remains open; please refresh and review before continuing.");
     closeModal();render();
-    toast(saved.warning||'School profile and offered levels saved permanently in D1.');
+    toast(saved.warning||"School profile and configuration saved and verified in D1.");
   }catch(error){
     if(submit){submit.disabled=false;submit.textContent='Save record'}
     toast(error.message||'School profile could not be saved to the central database.');
