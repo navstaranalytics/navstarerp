@@ -39,11 +39,14 @@ export async function onRequestPost({request,env}){
   if(r.stream){const stream=streamRows.find(x=>x.grade_level_id===grade.id&&norm(x.name)===norm(r.stream)&&x.status==="active");if(!stream||stream.id!==enrollment.stream_id){problems.push({row:line,error:"Stream does not match the learner's active class enrolment."});continue}}
   const key=enrollment.id;if(seen.has(key)){problems.push({row:line,error:"Duplicate learner enrolment in this upload."});continue}seen.add(key);
   const wanted=String(r.learning_areas||"").split(/[;|]/).map(x=>x.trim()).filter(Boolean);if(!wanted.length){problems.push({row:line,error:"Enter at least one learning area using the exact offered names."});continue}
-  const pathNorm=norm(pathway),selected=[];
+  const pathNorm=norm(pathway),selected=areaRows.filter(a=>a.curriculum===grade.curriculum&&a.stage_code===grade.stage_code&&Number(a.is_mandatory)===1&&(!norm(a.pathway)||["all","all pathways"].includes(norm(a.pathway))||norm(a.pathway)===pathNorm));
+  if(usesPath&&!["STEM","Social Sciences","Arts & Sports Science"].includes(learner.pathway||"")){problems.push({row:line,error:"Set the learner's CBE Senior School pathway on their enrolment record before allocating pathway subjects."});continue}
+  if(usesPath&&r.pathway&&norm(r.pathway)!==norm(learner.pathway)){problems.push({row:line,error:"The uploaded pathway does not match the learner's registered pathway. Update the learner enrolment first."});continue}
   let invalid=false;
   for(const name of wanted){const match=areaRows.find(a=>a.curriculum===grade.curriculum&&a.stage_code===grade.stage_code&&norm(a.name)===norm(name)&&(!norm(a.pathway)||["all","all pathways"].includes(norm(a.pathway))||norm(a.pathway)===pathNorm));
-   if(!match){problems.push({row:line,error:"'"+name+"' is not an active learning area offered for this class and pathway."});invalid=true;break}selected.push(match)}
+   if(!match){problems.push({row:line,error:"'"+name+"' is not an active learning area offered for this class and pathway."});invalid=true;break}if(!selected.some(x=>x.id===match.id))selected.push(match)}
   if(invalid)continue;
+  if(!selected.length){problems.push({row:line,error:"No active compulsory or selected learning areas are available for this class. Check the school's learning-area offerings."});continue}
   prepared.push({enrollmentId:enrollment.id,learnerId:learner.id,areas:selected});
  }
  if(problems.length)return json({ok:false,imported:0,failed:problems.length,problems,message:"No learner learning-area changes were saved. Correct the highlighted rows and upload again."},422);
