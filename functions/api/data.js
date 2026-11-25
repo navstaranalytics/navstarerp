@@ -366,6 +366,22 @@ export async function onRequestGet({request,env}){
     if(cfg.scope)sql+=teacherFilter(name,a.user);
     sql+=(name==="audit"?" ORDER BY created_at DESC LIMIT 500":" ORDER BY rowid DESC LIMIT 1000");
     const rows=cfg.scope?await env.DB.prepare(sql).bind(schoolId).all():await env.DB.prepare(sql).all();
+    if(name==="learning-areas"){
+      const area=await env.DB.prepare("SELECT id,name,stage_code,curriculum,is_mandatory FROM learning_areas WHERE id=? AND school_id=?").bind(recordId,schoolId).first();
+      if(!area)return json({ok:false,error:"Learning area not found in this school."},404);
+      if(!a.user.is_super_admin){
+        const grade=await env.DB.prepare("SELECT school_level,stage_code FROM grade_levels WHERE school_id=? AND curriculum=? AND stage_code=? AND is_active=1").bind(schoolId,area.curriculum,area.stage_code).first();
+        const level=String(grade?.school_level||"").toLowerCase(),stage=String(area.stage_code||"").toUpperCase(),primary=!!grade&&(/pre-primary|primary/.test(level)&&!/junior/.test(level)||/^PP[12]$/.test(stage)||/^G[1-6]$/.test(stage)||/^STD[1-8]$/.test(stage));
+        if(!primary)return json({ok:false,error:"Only Primary and Pre-Primary learning areas can be deleted by a School Admin."},403);
+      }
+      const linked=await env.DB.prepare("SELECT COUNT(*) AS total FROM learner_learning_areas WHERE school_id=? AND learning_area_id=?").bind(schoolId,recordId).first();
+      if(Number(linked?.total||0)>0)return json({ok:false,error:"This learning area is already attached to learner records. Deactivate it instead to preserve historical records."},409);
+      await env.DB.prepare("DELETE FROM learning_areas WHERE id=? AND school_id=?").bind(recordId,schoolId).run();
+      const verify=await env.DB.prepare("SELECT id FROM learning_areas WHERE id=? AND school_id=?").bind(recordId,schoolId).first();
+      if(verify)throw new Error("Learning area still exists after deletion.");
+      await audit(env.DB,a.user,schoolId,"record.deleted","learning-areas",recordId);
+      return json({ok:true,message:"School learning area deleted. The central Navstar catalogue was not changed."});
+    }
     if(name==="grades"){
       const school=await env.DB.prepare("SELECT curriculum,school_levels_json FROM schools WHERE id=?").bind(schoolId).first();
       let levels=[];try{levels=JSON.parse(school?.school_levels_json||"[]")}catch{}
@@ -458,7 +474,7 @@ export async function onRequestPost({request,env}){
   if(!allowed(a.user,permissionFor(name,true)))return json({ok:false,error:"Your role does not have permission to change this resource."},403);
   if(name==="grades"&&!a.user.is_super_admin)return json({ok:false,error:"Classes are configured by Navstar Super Admin. School Admins may create streams only."},403);
   if(name==="classes")return json({ok:false,error:"Class groups are no longer created. Classes are centrally configured; manage streams under each class instead."},405);
-  if(name==="learning-areas"&&!a.user.is_super_admin)return json({ok:false,error:"Schools can edit existing learning-area names and codes, but only Navstar can add catalogue entries."},403);
+  if(name==="learning-areas"&&!a.user.is_super_admin){/* School Admins may manage school-owned Primary and Pre-Primary areas only; server validates the selected phase below. */}
   if(name==="grade-boundaries")await ensureGradeBoundaryScope(env.DB);
   if(cfg.readOnly)return json({ok:false,error:"This resource is read-only."},405);
   let body;try{body=await request.json()}catch{return json({ok:false,error:"Invalid record data."},400)}
@@ -472,6 +488,17 @@ export async function onRequestPost({request,env}){
   const calendarError=await validateAcademicCalendarDates(env.DB,name,schoolId,values);if(calendarError)return json({ok:false,error:calendarError},400);
   if(name.startsWith("competency-")||name==="rubric-criteria"){const competencyError=await validateCompetencyRecord(env.DB,name,schoolId,values,a.user);if(competencyError)return json({ok:false,error:competencyError},400)}
   if(name==="grading-schemes"&&String(values.level_key||"").startsWith("__LEVEL__")){const schoolLevel=String(values.level_key).slice(9),curriculum=String(values.curriculum||"").trim();const configured=await env.DB.prepare("SELECT 1 FROM grade_levels WHERE school_id=? AND curriculum=? AND school_level=? AND is_active=1 LIMIT 1").bind(schoolId,curriculum,schoolLevel).first();if(!configured)return json({ok:false,error:"This school level has no active grades in the selected curriculum."},400);values.level_key=null;values.stage_code="LEVEL:"+schoolLevel;}else if(name==="grading-schemes"&&values.level_key==="__ALL__"){const curriculum=String(values.curriculum||"").trim();const configured=await env.DB.prepare("SELECT 1 FROM grade_levels WHERE school_id=? AND curriculum=? AND is_active=1 LIMIT 1").bind(schoolId,curriculum).first();if(!configured)return json({ok:false,error:"This curriculum has no active grades configured for this school."},400);values.level_key=null;values.stage_code="ALL";}
+  if(name==="learning-areas"&&!a.user.is_super_admin){
+    const curriculum=String(values.curriculum||"").trim(),stage=String(values.stage_code||"").trim().toUpperCase(),areaName=String(values.name||"").trim(),code=String(values.code||"").trim().toUpperCase();
+    if(!curriculum||!stage||!areaName||!code)return json({ok:false,error:"Choose a curriculum and Primary / Pre-Primary class, then enter the learning-area name and code."},400);
+    if(areaName.length>160||code.length>24||!/^[A-Z0-9_-]+$/.test(code))return json({ok:false,error:"Enter a valid learning-area name and code (letters, numbers, hyphens or underscores)."},400);
+    const grade=await env.DB.prepare("SELECT school_level,stage_code,curriculum FROM grade_levels WHERE school_id=? AND curriculum=? AND stage_code=? AND is_active=1").bind(schoolId,curriculum,stage).first();
+    const level=String(grade?.school_level||"").toLowerCase(),primary=!!grade&&(/pre-primary|primary/.test(level)&&!/junior/.test(level)||/^PP[12]$/.test(stage)||/^G[1-6]$/.test(stage)||/^STD[1-8]$/.test(stage));
+    if(!primary)return json({ok:false,error:"School Admins may add learning areas only to configured PP1, PP2 and Primary classes. Junior and Senior School remain governed by the central catalogue."},403);
+    const duplicate=await env.DB.prepare("SELECT 1 AS found FROM learning_areas WHERE school_id=? AND curriculum=? AND stage_code=? AND upper(code)=? LIMIT 1").bind(schoolId,curriculum,stage,code).first();
+    if(duplicate)return json({ok:false,error:"That learning-area code already exists for this class."},409);
+    values.name=areaName;values.code=code;values.pathway=null;values.is_active=1;values.is_mandatory=Number(values.is_mandatory)===1?1:0;values.subject_type=String(values.subject_type||"learning_area");values.school_customized=1;values.source_template="school_custom";
+  }
   if(name==="learners"&&values.profile_json){
     let profile;try{profile=typeof values.profile_json==="string"?JSON.parse(values.profile_json):values.profile_json}catch{return json({ok:false,error:"Learner profile details must be valid JSON."},400)}
     const photoCode=String(profile?.photoCode||"").trim();
@@ -629,7 +656,7 @@ export async function onRequestDelete({request,env}){
   const parts=new URL(request.url).pathname.split("/"),name=parts[parts.length-2],recordId=decodeURIComponent(parts[parts.length-1]||""),cfg=resources[name];
   if(!cfg||!recordId)return json({ok:false,error:"Unknown resource or record."},404);
   if(name==="departments")await ensureDepartments(env.DB);
-  if(!["years","terms","school-events","grading-schemes","streams","departments","grades"].includes(name))return json({ok:false,error:"Deletion is not enabled for this resource."},405);
+  if(!["years","terms","school-events","grading-schemes","streams","departments","grades","learning-areas"].includes(name))return json({ok:false,error:"Deletion is not enabled for this resource."},405);
   if(!allowed(a.user,permissionFor(name,true)))return json({ok:false,error:"Your role does not have permission to delete this record."},403);
   const requested=new URL(request.url).searchParams.get("schoolId")||"";
   const schoolId=cfg.scope?(a.user.is_super_admin?requested:a.user.school_id):"";
@@ -703,9 +730,8 @@ export async function onRequestPatch({request,env}){
   if(name==="classes")return json({ok:false,error:"Class groups are no longer edited. Classes are centrally configured; manage streams under each class instead."},405);
   if(name==="learning-areas"&&!a.user.is_super_admin){
     let submitted;try{submitted=await request.clone().json()}catch{submitted={}}
-    const allowedFields=new Set(["is_active"]);
-    if(!Object.keys(submitted).length||Object.keys(submitted).some(k=>!allowedFields.has(k)))return json({ok:false,error:"Schools may only enable or disable optional learning areas supplied by Navstar. Catalogue names and codes are centrally managed."},403);
-    if(submitted.is_active!==undefined&&Object.keys(submitted).some(k=>k!=="is_active"))return json({ok:false,error:"Save learning-area details and availability separately."},400);
+    const allowedFields=new Set(["name","code","is_active","subject_type","is_mandatory"]);
+    if(!Object.keys(submitted).length||Object.keys(submitted).some(k=>!allowedFields.has(k)))return json({ok:false,error:"Only learning-area details and school offering settings can be changed here."},403);
   }
   if(name==="grade-boundaries")await ensureGradeBoundaryScope(env.DB);
   if(cfg.readOnly)return json({ok:false,error:"This resource is read-only."},405);
@@ -730,6 +756,9 @@ export async function onRequestPatch({request,env}){
     const calendarError=await validateAcademicCalendarDates(env.DB,name,schoolId,{...current,...values},recordId);if(calendarError)return json({ok:false,error:calendarError},400);
     if(name.startsWith("competency-")||name==="rubric-criteria"){const competencyError=await validateCompetencyRecord(env.DB,name,schoolId,{...current,...values},a.user);if(competencyError)return json({ok:false,error:competencyError},400)}
     if(name==="learning-areas"&&!a.user.is_super_admin){
+      const areaGrade=await env.DB.prepare("SELECT school_level,stage_code FROM grade_levels WHERE school_id=? AND curriculum=? AND stage_code=? AND is_active=1").bind(schoolId,current.curriculum,current.stage_code).first();
+      const areaLevel=String(areaGrade?.school_level||"").toLowerCase(),areaStage=String(current.stage_code||"").toUpperCase(),isPrimaryArea=!!areaGrade&&(/pre-primary|primary/.test(areaLevel)&&!/junior/.test(areaLevel)||/^PP[12]$/.test(areaStage)||/^G[1-6]$/.test(areaStage)||/^STD[1-8]$/.test(areaStage));
+      if(!isPrimaryArea)return json({ok:false,error:"School Admins may edit only Primary and Pre-Primary learning areas."},403);
       if(values.is_active!==undefined&&Number(values.is_active)===0){
         const grade=await env.DB.prepare("SELECT school_level,stage_code FROM grade_levels WHERE school_id=? AND curriculum=? AND stage_code=? AND is_active=1 LIMIT 1").bind(schoolId,current.curriculum,current.stage_code).first();
         if(Number(current.is_mandatory)===1||isPrimaryOrJuniorClass(grade))return json({ok:false,error:"This learning area is compulsory for every learner at this school level and cannot be disabled. Only Senior School optional areas may be switched off."},403);
