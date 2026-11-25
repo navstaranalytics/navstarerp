@@ -515,10 +515,15 @@ export async function onRequestPost({request,env}){
     if(!schoolId||(!a.user.is_super_admin&&body.school_id&&body.school_id!==schoolId)||selected.length>1000)return json({ok:false,error:"A valid school and learning-area selection are required."},400);
     try{
       const grades=await env.DB.prepare("SELECT id,curriculum,stage_code FROM grade_levels WHERE school_id=? AND is_active=1").bind(schoolId).all();
+      let master=[];const savedCatalogue=await env.DB.prepare("SELECT setting_value FROM platform_settings WHERE setting_key='learning_area_catalogue'").first();
+      try{const parsed=JSON.parse(savedCatalogue?.setting_value||"{}");master=Array.isArray(parsed.areas)?parsed.areas:[]}catch{}
+      if(!master.length){const rows=await env.DB.prepare("SELECT DISTINCT curriculum,stage_code AS level,code,name,pathway,is_mandatory AS mandatory FROM learning_areas WHERE is_active=1 AND COALESCE(school_customized,0)=0").all();master=rows.results||[];}
       const gradeRows=grades.results||[],statements=[],seen=new Set();
       for(const item of selected){
         const curriculum=clean(item.curriculum),level=String(item.level||"").trim(),code=String(item.code||"").trim().toUpperCase(),name=clean(item.name),pathway=clean(item.pathway)||null,mandatory=Number(item.mandatory)===1?1:0;
         if(!curriculum||!level||!code||!name)continue;
+        const approved=master.some(x=>String(x.curriculum||"").toLowerCase()===curriculum.toLowerCase()&&String(x.level||"").toLowerCase()===level.toLowerCase()&&String(x.code||"").toLowerCase()===code.toLowerCase()&&String(x.pathway||"")===String(pathway||""));
+        if(!approved)return json({ok:false,error:"One or more selected learning areas are not in the approved Super Admin catalogue. Refresh and try again."},409);
         const targets=gradeRows.filter(g=>String(g.curriculum||"").toLowerCase()===curriculum.toLowerCase()&&String(g.stage_code||"").toLowerCase()===level.toLowerCase());
         for(const grade of targets){
           const key=grade.id+"|"+code.toLowerCase()+"|"+(pathway||"").toLowerCase();if(seen.has(key))continue;seen.add(key);
