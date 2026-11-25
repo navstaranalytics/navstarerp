@@ -14,14 +14,13 @@ export async function onRequestPost({request,env}){
   if(!fullName||fullName.length>120||!/^[a-z0-9._-]{3,32}$/.test(username)||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||email.length>190||!phone||phone.length>40)
     return json({ok:false,error:"Enter a full name, username (3–32 letters/numbers/dots/underscores/hyphens), valid email and phone number."},400);
   try{
-    await env.DB.prepare("CREATE UNIQUE INDEX IF NOT EXISTS one_school_admin_per_school ON user_role_assignments(school_id) WHERE role_id='role_school_admin' AND school_id IS NOT NULL").run();
     const school=await env.DB.prepare("SELECT id,name,school_code,status,contact_email,contact_phone,county,curriculum FROM schools WHERE id=?").bind(schoolId).first();
     if(!school)return json({ok:false,error:"School was not found."},404);
-    const existing=await env.DB.prepare(`SELECT u.id,u.full_name,u.username,u.email,u.phone FROM school_memberships m
+    const existing=await env.DB.prepare(`SELECT COUNT(DISTINCT u.id) AS total FROM school_memberships m
       JOIN users u ON u.id=m.user_id JOIN user_role_assignments a ON a.user_id=u.id AND a.school_id=m.school_id
       JOIN roles r ON r.id=a.role_id AND r.role_key='school_admin'
-      WHERE m.school_id=? AND m.membership_status IN ('active','invited') LIMIT 1`).bind(schoolId).first();
-    if(existing)return json({ok:false,error:"This school already has a School Administrator account. View the existing account in the school profile."},409);
+      WHERE m.school_id=? AND m.membership_status IN ('active','invited') AND u.status='active'`).bind(schoolId).first();
+    if(Number(existing?.total||0)>=2)return json({ok:false,error:"This school already has the maximum of two School Administrator accounts. Edit an existing account instead."},409);
     if(await env.DB.prepare("SELECT 1 AS found FROM users WHERE username_normalized=? LIMIT 1").bind(username).first())
       return json({ok:false,error:"That username is already taken across Navstar. Choose a different username."},409);
     if(await env.DB.prepare("SELECT 1 AS found FROM users WHERE email_normalized=? LIMIT 1").bind(email).first())
