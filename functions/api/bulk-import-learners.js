@@ -37,7 +37,7 @@ export async function onRequestPost({request,env}){
  try{
   [years,grades,streams,existing]=await Promise.all([
    env.DB.prepare("SELECT id,name FROM academic_years WHERE school_id=?").bind(schoolId).all(),
-   env.DB.prepare("SELECT id,stage_name,stage_code,curriculum FROM grade_levels WHERE school_id=? AND is_active=1").bind(schoolId).all(),
+   env.DB.prepare("SELECT id,stage_name,stage_code,curriculum,school_level FROM grade_levels WHERE school_id=? AND is_active=1").bind(schoolId).all(),
    env.DB.prepare("SELECT id,grade_level_id,name FROM streams WHERE school_id=? AND status='active'").bind(schoolId).all(),
    env.DB.prepare("SELECT lower(admission_number) AS admission_number FROM learners WHERE school_id=?").bind(schoolId).all()
   ]);
@@ -61,7 +61,9 @@ export async function onRequestPost({request,env}){
   if(!year){problems.push({row:line,error:"Academic year '"+r.academic_year+"' was not found."});continue}
   if(!matches.length){problems.push({row:line,error:"Class '"+r.grade+"'"+(r.curriculum?" in curriculum '"+r.curriculum+"'":"")+" was not found or is inactive. Download a fresh school-generated template to get the correct class and curriculum values."});continue}
   if(matches.length>1){const curricula=[...new Set(matches.map(x=>x.curriculum).filter(Boolean))];problems.push({row:line,error:"Class '"+r.grade+"' is ambiguous because it exists under more than one curriculum ("+curricula.join(", ")+"). Add the curriculum column or download the latest school-generated template, which includes it."});continue}
-  const grade=matches[0];
+  const grade=matches[0],curriculumKey=String(grade.curriculum||"").toLowerCase(),stageKey=String(grade.stage_code||"").toUpperCase(),schoolLevel=String(grade.school_level||"").toLowerCase(),senior=/senior|secondary/.test(schoolLevel)||/^G1[0-2]$/.test(stageKey),cbe=curriculumKey.includes("cbe")||curriculumKey.includes("cbc")||curriculumKey.includes("competency"),usesPathways=senior&&cbe;
+  if(usesPathways&&!r.pathway){problems.push({row:line,error:"This is a CBE Senior School class. Select the learner’s STEM, Social Sciences or Arts & Sports Science pathway."});continue}
+  if(!usesPathways&&r.pathway){problems.push({row:line,error:"Pathways apply only to CBE Senior School. Leave the pathway column blank for Primary, Junior and other curricula."});continue}
   let streamId=null;
   if(r.stream){const stream=streamMap.get(grade.id+":"+r.stream.toLowerCase());if(!stream){const available=(streams.results||[]).filter(s=>s.grade_level_id===grade.id).map(s=>s.name);const detail=available.length?"Available streams in this class: "+available.join(", ")+".":"This class has no active streams; leave the stream column blank or create a stream for this class first.";problems.push({row:line,error:"Stream '"+r.stream+"' was not found in class '"+(grade.stage_name||r.grade)+"'. "+detail+" Download a fresh school-generated learner CSV template to use the correct class/stream pairs."});continue}streamId=stream.id}
   if(r.date_of_birth&&!/^\d{4}-\d{2}-\d{2}$/.test(r.date_of_birth)){problems.push({row:line,error:"Date of birth must use YYYY-MM-DD."});continue}
