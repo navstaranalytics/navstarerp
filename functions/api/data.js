@@ -491,7 +491,7 @@ export async function onRequestGet({request,env}){
 async function validateAcademicCalendarDates(db,name,schoolId,values,currentId=null){
  if(!["years","terms"].includes(name))return null;
  const start=String(values.start_date||""),end=String(values.end_date||"");
- if(!/^\\d{4}-\\d{2}-\\d{2}$/.test(start)||!/^\\d{4}-\\d{2}-\\d{2}$/.test(end)||!Number.isFinite(Date.parse(start+"T00:00:00Z"))||!Number.isFinite(Date.parse(end+"T00:00:00Z")))return "Enter valid start and end dates.";
+ if(!/^\d{4}-\d{2}-\d{2}$/.test(start)||!/^\\d{4}-\\d{2}-\\d{2}$/.test(end)||!Number.isFinite(Date.parse(start+"T00:00:00Z"))||!Number.isFinite(Date.parse(end+"T00:00:00Z")))return "Enter valid start and end dates.";
  if(start>end)return "The start date must be on or before the end date.";
  if(name==="years"){
   const overlap=await db.prepare("SELECT id,name FROM academic_years WHERE school_id=? AND id<>? AND start_date<=? AND end_date>=? LIMIT 1").bind(schoolId,currentId||"",end,start).first();
