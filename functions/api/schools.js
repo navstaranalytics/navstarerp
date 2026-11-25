@@ -80,7 +80,7 @@ function validateCurricula(curricula,levels) {
  if(levels.some(x=>/^(Pre-Primary|Primary|Junior School|Senior School|Grade (?:[1-9]|1[0-2])|PP[12])$/i.test(x))&&!curricula.includes("Kenyan CBE"))return "Select Kenyan CBE to offer CBE school classes.";
  return null;
 }
-async function syncSchoolCurricula(db,schoolId,curricula,levels) {
+export async function syncSchoolCurricula(db,schoolId,curricula,levels) {
  const managed=["Kenyan CBE","Kenyan 8-4-4"];
  for(const curriculum of managed){
   if(!curricula.includes(curriculum)){
