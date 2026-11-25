@@ -13,7 +13,7 @@ async function download(options){
  try{
   const brand=await fetch("/api/branding",{credentials:"same-origin"}).then(r=>r.ok?r.json():null).catch(()=>null),b=brand?.branding||{};
   const platformLogo=safeUrl(o.platformLogoUrl||b.logoUrl||"/api/branding/logo"),schoolLogo=safeUrl(o.schoolLogoUrl),learnerPhoto=safeUrl(o.learnerPhotoUrl);
-  const accent=/^#[0-9a-fA-F]{6}$/.test(o.accentColor||"")?o.accentColor:"#173b6d",school=o.schoolName||b.name||"Navstar Analytics",contact=[b.address,b.city,b.county,b.phone,b.supportEmail,b.website].filter(Boolean).join(" · ");
+  const accent=/^#[0-9a-fA-F]{6}$/.test(o.accentColor||"")?o.accentColor:"#173b6d",school=o.schoolName||b.name||"Navstar Analytics",contact=[o.schoolContact,b.address,b.city,b.county,b.phone,b.supportEmail,b.website].filter(Boolean).join(" · ");
   const profile=o.learnerProfile?'<div class="profile"><div class="photo">'+(learnerPhoto?'<img src="'+esc(learnerPhoto)+'" alt="Learner profile photo">':'<span>PHOTO</span>')+'</div><div class="profile-details">'+Object.entries(o.learnerProfile).filter(([k,v])=>v!==null&&v!==undefined&&String(v)!=="").map(([k,v])=>'<div><small>'+esc(k)+'</small><b>'+esc(v)+'</b></div>').join("")+'</div></div>':"";
   const body=(o.sections||[]).map(sectionHtml).join("");
   let html='<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+esc(o.title||"Navstar document")+'</title><style>'+
