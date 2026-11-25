@@ -51,7 +51,7 @@ export async function onRequestPost({request,env}){
    env.DB.prepare("SELECT id,stage_name,stage_code,curriculum,school_level FROM grade_levels WHERE school_id=? AND is_active=1").bind(schoolId).all(),
    env.DB.prepare("SELECT id,grade_level_id,name FROM streams WHERE school_id=? AND status='active'").bind(schoolId).all(),
    env.DB.prepare("SELECT lower(admission_number) AS admission_number,lower(COALESCE(assessment_number,'')) AS assessment_number,lower(COALESCE(upi_number,'')) AS upi_number FROM learners WHERE school_id=?").bind(schoolId).all(),
-   env.DB.prepare("SELECT id,stage_code,curriculum,pathway,is_mandatory FROM learning_areas WHERE school_id=? AND is_active=1").bind(schoolId).all()
+   env.DB.prepare("SELECT id,name,stage_code,curriculum,pathway,is_mandatory FROM learning_areas WHERE school_id=? AND is_active=1").bind(schoolId).all()
   ]);
  }catch(e){console.error("Bulk learner import lookup",e);return json({ok:false,error:"School reference data could not be loaded. No learners were imported."},500)}
  const yearMap=new Map((years.results||[]).map(x=>[String(x.name).toLowerCase(),x]));
