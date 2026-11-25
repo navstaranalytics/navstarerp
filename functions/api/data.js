@@ -628,13 +628,36 @@ export async function onRequestDelete({request,env}){
   const parts=new URL(request.url).pathname.split("/"),name=parts[parts.length-2],recordId=decodeURIComponent(parts[parts.length-1]||""),cfg=resources[name];
   if(!cfg||!recordId)return json({ok:false,error:"Unknown resource or record."},404);
   if(name==="departments")await ensureDepartments(env.DB);
-  if(!["years","terms","school-events","grading-schemes","streams","departments"].includes(name))return json({ok:false,error:"Deletion is not enabled for this resource."},405);
+  if(!["years","terms","school-events","grading-schemes","streams","departments","grades"].includes(name))return json({ok:false,error:"Deletion is not enabled for this resource."},405);
   if(!allowed(a.user,permissionFor(name,true)))return json({ok:false,error:"Your role does not have permission to delete this record."},403);
   const requested=new URL(request.url).searchParams.get("schoolId")||"";
   const schoolId=cfg.scope?(a.user.is_super_admin?requested:a.user.school_id):"";
   if(cfg.scope&&!schoolId)return json({ok:false,error:"School workspace is required."},400);
   if(cfg.scope&&!a.user.is_super_admin&&requested&&requested!==a.user.school_id)return json({ok:false,error:"You cannot delete records in another school."},403);
   try{
+    if(name==="grades"){
+      const grade=await env.DB.prepare("SELECT id,stage_name,stage_code,curriculum FROM grade_levels WHERE id=? AND school_id=?").bind(recordId,schoolId).first();
+      if(!grade)return json({ok:false,error:"Class not found in this school."},404);
+      const tableRows=await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table'").all();
+      const tableNames=new Set((tableRows.results||[]).map(x=>x.name));
+      const protectedRefs=[];
+      const candidates=["classes","learner_enrollments","assessments","timetable_entries","attendance_sessions","teacher_allocations","competency_frameworks","competency_assessments","grade_boundaries","class_attendance"];
+      for(const table of candidates){
+        if(!tableNames.has(table))continue;
+        const columns=await env.DB.prepare("PRAGMA table_info("+table+")").all();
+        const names=new Set((columns.results||[]).map(x=>x.name));
+        if(!names.has("grade_level_id"))continue;
+        const hasSchool=names.has("school_id");
+        const count=await env.DB.prepare("SELECT COUNT(*) AS total FROM "+table+" WHERE grade_level_id=?"+(hasSchool?" AND school_id=?":"")).bind(...(hasSchool?[recordId,schoolId]:[recordId])).first();
+        if(Number(count?.total||0)>0)protectedRefs.push(table.replace(/_/g," ")+": "+count.total);
+      }
+      if(protectedRefs.length)return json({ok:false,error:"This class is already used by school records and cannot be deleted safely ("+protectedRefs.join("; ")+"). Deactivate it instead, or move those records first."},409);
+      await env.DB.prepare("DELETE FROM grade_levels WHERE id=? AND school_id=?").bind(recordId,schoolId).run();
+      const verify=await env.DB.prepare("SELECT id FROM grade_levels WHERE id=? AND school_id=?").bind(recordId,schoolId).first();
+      if(verify)throw new Error("Class still exists after deletion.");
+      await audit(env.DB,a.user,schoolId,"record.deleted","grades",recordId);
+      return json({ok:true,message:"Extra class deleted. Its unused streams were removed automatically; the central learning-area catalogue was preserved."});
+    }
     if(name==="streams"){
       const stream=await env.DB.prepare("SELECT id,name FROM streams WHERE id=? AND school_id=?").bind(recordId,schoolId).first();
       if(!stream)return json({ok:false,error:"Stream not found in this school."},404);
