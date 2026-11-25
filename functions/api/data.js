@@ -969,7 +969,19 @@ export async function onRequestPatch({request,env}){
     let submitted;try{submitted=await request.clone().json()}catch{submitted={}}
     if(Object.keys(submitted).some(k=>k!=="is_active")||submitted.is_active===undefined)return json({ok:false,error:"School Admins may only activate or deactivate classes assigned by Super Admin."},403);
   }
-  if(name==="classes")return json({ok:false,error:"Class groups are no longer edited. Classes are centrally configured; manage streams under each class instead."},405);
+  if(name==="classes"){
+    let submitted;try{submitted=await request.clone().json()}catch{submitted={}};
+    if(Object.keys(submitted).length!==1||!Object.prototype.hasOwnProperty.call(submitted,"class_teacher_staff_id"))return json({ok:false,error:"Class groups are centrally configured. Only the assigned Class Teacher / Grade Teacher may be updated here."},405);
+    const schoolId=a.user.is_super_admin?(new URL(request.url).searchParams.get("schoolId")||""):a.user.school_id,teacherId=clean(submitted.class_teacher_staff_id);
+    if(!schoolId)return json({ok:false,error:"School context is required."},400);
+    const cls=await env.DB.prepare("SELECT id FROM classes WHERE id=? AND school_id=?").bind(recordId,schoolId).first();
+    if(!cls)return json({ok:false,error:"Class record was not found in this school."},404);
+    if(teacherId){const teacher=await env.DB.prepare("SELECT id FROM staff_profiles WHERE id=? AND school_id=? AND employment_status='active' AND is_teacher=1").bind(teacherId,schoolId).first();if(!teacher)return json({ok:false,error:"Choose an active teaching staff profile for this class."},400);}
+    await env.DB.prepare("UPDATE classes SET class_teacher_staff_id=? WHERE id=? AND school_id=?").bind(teacherId||null,recordId,schoolId).run();
+    await audit(env.DB,a.user,schoolId,"class.teacher.assigned","class",recordId);
+    const record=await env.DB.prepare("SELECT * FROM classes WHERE id=? AND school_id=?").bind(recordId,schoolId).first();
+    return json({ok:true,record,message:"Class Teacher / Grade Teacher assignment saved."});
+  }
   if(name==="learning-areas"&&!a.user.is_super_admin){
     let submitted;try{submitted=await request.clone().json()}catch{submitted={}}
     const allowedFields=new Set(["name","code","is_active","subject_type","is_mandatory","department_id"]);
