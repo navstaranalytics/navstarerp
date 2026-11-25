@@ -37,13 +37,13 @@ export async function onRequestPost({request,env}){
  try{
   [years,grades,streams,existing]=await Promise.all([
    env.DB.prepare("SELECT id,name FROM academic_years WHERE school_id=?").bind(schoolId).all(),
-   env.DB.prepare("SELECT id,stage_name,stage_code FROM grade_levels WHERE school_id=? AND is_active=1").bind(schoolId).all(),
+   env.DB.prepare("SELECT id,stage_name,stage_code,curriculum FROM grade_levels WHERE school_id=? AND is_active=1").bind(schoolId).all(),
    env.DB.prepare("SELECT id,grade_level_id,name FROM streams WHERE school_id=? AND status='active'").bind(schoolId).all(),
    env.DB.prepare("SELECT lower(admission_number) AS admission_number FROM learners WHERE school_id=?").bind(schoolId).all()
   ]);
  }catch(e){console.error("Bulk learner import lookup",e);return json({ok:false,error:"School reference data could not be loaded. No learners were imported."},500)}
  const yearMap=new Map((years.results||[]).map(x=>[String(x.name).toLowerCase(),x]));
- const gradeMap=new Map();for(const x of grades.results||[]){if(x.stage_name)gradeMap.set(String(x.stage_name).toLowerCase(),x);if(x.stage_code)gradeMap.set(String(x.stage_code).toLowerCase(),x)}
+ const gradeRows=grades.results||[];
  const streamMap=new Map((streams.results||[]).map(x=>[x.grade_level_id+":"+String(x.name).toLowerCase(),x]));
  const existingAdmissions=new Set((existing.results||[]).map(x=>x.admission_number));
  const problems=[],prepared=[],seen=new Set();
@@ -55,9 +55,13 @@ export async function onRequestPost({request,env}){
   if(!["","male","female","other"].includes((r.gender||"").toLowerCase())){problems.push({row:line,error:"Gender must be Male, Female, Other or blank."});continue}
   if(r.status&&!["applicant","active","transferred","graduated","withdrawn","inactive"].includes(r.status.toLowerCase())){problems.push({row:line,error:"Status must be applicant, active, transferred, graduated, withdrawn or inactive."});continue}
   if(r.pathway&&!["STEM","Social Sciences","Arts & Sports Science"].includes(r.pathway)){problems.push({row:line,error:"Pathway must be STEM, Social Sciences or Arts & Sports Science."});continue}
-  const year=yearMap.get((r.academic_year||"").toLowerCase()),grade=gradeMap.get((r.grade||"").toLowerCase());
+  const year=yearMap.get((r.academic_year||"").toLowerCase());
+  const className=String(r.grade||"").trim().toLowerCase(),curriculumName=String(r.curriculum||"").trim().toLowerCase();
+  const matches=gradeRows.filter(x=>(String(x.stage_name||"").trim().toLowerCase()===className||String(x.stage_code||"").trim().toLowerCase()===className)&&(!curriculumName||String(x.curriculum||"").trim().toLowerCase()===curriculumName));
   if(!year){problems.push({row:line,error:"Academic year '"+r.academic_year+"' was not found."});continue}
-  if(!grade){problems.push({row:line,error:"Class '"+r.grade+"' was not found or is inactive."});continue}
+  if(!matches.length){problems.push({row:line,error:"Class '"+r.grade+"'"+(r.curriculum?" in curriculum '"+r.curriculum+"'":"")+" was not found or is inactive. Download a fresh school-generated template to get the correct class and curriculum values."});continue}
+  if(matches.length>1){const curricula=[...new Set(matches.map(x=>x.curriculum).filter(Boolean))];problems.push({row:line,error:"Class '"+r.grade+"' is ambiguous because it exists under more than one curriculum ("+curricula.join(", ")+"). Add the curriculum column or download the latest school-generated template, which includes it."});continue}
+  const grade=matches[0];
   let streamId=null;
   if(r.stream){const stream=streamMap.get(grade.id+":"+r.stream.toLowerCase());if(!stream){const available=(streams.results||[]).filter(s=>s.grade_level_id===grade.id).map(s=>s.name);const detail=available.length?"Available streams in this class: "+available.join(", ")+".":"This class has no active streams; leave the stream column blank or create a stream for this class first.";problems.push({row:line,error:"Stream '"+r.stream+"' was not found in class '"+(grade.stage_name||r.grade)+"'. "+detail+" Download a fresh school-generated learner CSV template to use the correct class/stream pairs."});continue}streamId=stream.id}
   if(r.date_of_birth&&!/^\d{4}-\d{2}-\d{2}$/.test(r.date_of_birth)){problems.push({row:line,error:"Date of birth must use YYYY-MM-DD."});continue}
