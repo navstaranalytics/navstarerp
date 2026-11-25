@@ -32,7 +32,7 @@ export async function onRequestPost({request,env}) {
  if(!actor.is_super_admin&&!actor.permissions.includes("school.users.manage"))return json({ok:false,error:"You do not have permission to manage school users."},403);
  let body;try{body=await request.json()}catch{return json({ok:false,error:"Enter valid account details."},400)}
  if(body.createFamilyAccounts===true){
-  const admission=clean(body.learnerAdmissionNumber),studentName=clean(body.learnerFullName),studentUsername=norm(body.learnerUsername),studentEmail=norm(body.learnerEmail),studentPassword=String(body.learnerPassword||""),parentName=clean(body.parentFullName),parentUsername=norm(body.parentUsername),parentEmail=norm(body.parentEmail),parentPhone=clean(body.parentPhone),parentPassword=String(body.parentPassword||""),relationship=clean(body.relationship)||"Parent/Guardian";
+  const admission=clean(body.learnerAdmissionNumber),studentName=clean(body.learnerFullName),studentUsername=norm(body.learnerUsername),studentPassword=String(body.learnerPassword||""),parentName=clean(body.parentFullName),parentUsername=norm(body.parentUsername),parentEmail=norm(body.parentEmail),parentPhone=clean(body.parentPhone),parentPassword=String(body.parentPassword||""),relationship=clean(body.relationship)||"Parent/Guardian";
   if(!admission||!studentName||!parentName||!/^[a-z0-9._-]{3,32}$/.test(studentUsername)||!/^[a-z0-9._-]{3,32}$/.test(parentUsername)||studentUsername===parentUsername||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(studentEmail)||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(parentEmail)||studentEmail===parentEmail||studentPassword.length<10||parentPassword.length<10)return json({ok:false,error:"Enter valid, different usernames, a learner account email, the parent's email and passwords of at least 10 characters."},400);
   try{
    const school=await env.DB.prepare("SELECT id,name,school_code,status FROM schools WHERE id=?").bind(schoolId).first();
@@ -44,32 +44,22 @@ export async function onRequestPost({request,env}) {
    if(!roles[0]||!roles[1])return json({ok:false,error:"Student and Parent roles are not installed. Apply the latest role-access migration."},503);
    let student=await env.DB.prepare("SELECT u.id,u.username FROM learner_user_links l JOIN users u ON u.id=l.user_id WHERE l.school_id=? AND l.learner_id=?").bind(schoolId,learner.id).first();
    let parent=await env.DB.prepare("SELECT u.id,u.username,u.full_name FROM users u WHERE u.email_normalized=? LIMIT 1").bind(parentEmail).first();
-   if(parent){
-    const parentRole=await env.DB.prepare("SELECT 1 AS found FROM user_role_assignments a JOIN roles r ON r.id=a.role_id WHERE a.user_id=? AND r.role_key='parent_guardian' LIMIT 1").bind(parent.id).first();
-    if(!parentRole)return json({ok:false,error:"The parent's email is already registered to a non-parent account. Use the existing account's correct parent email or contact the School Administrator."},409);
-   }
-   if(!student){
-    const taken=await env.DB.prepare("SELECT 1 AS found FROM users WHERE username_normalized=? OR email_normalized=? LIMIT 1").bind(studentUsername,studentEmail).first();
-    if(taken)return json({ok:false,error:"The learner username or generated learner email is already in use. Change the learner username and try again."},409);
-   }
-   if(!parent){
-    if(studentUsername===parentUsername)return json({ok:false,error:"Learner and parent usernames must be different."},400);
-    const usernameTaken=await env.DB.prepare("SELECT 1 AS found FROM users WHERE username_normalized=? LIMIT 1").bind(parentUsername).first();
-    if(usernameTaken)return json({ok:false,error:"The parent username is already taken across Navstar. Choose another username."},409);
-    const emailTaken=await env.DB.prepare("SELECT 1 AS found FROM users WHERE email_normalized=? LIMIT 1").bind(parentEmail).first();
-    if(emailTaken)return json({ok:false,error:"The parent's email is already registered. Use the existing parent account or another email."},409);
-   }
+   const reservedUsernames=new Set();
+   const uniqueUsername=async base=>{const root=String(base||"account").slice(0,26);for(let n=0;n<100;n++){const candidate=(n?root+"."+n:root).slice(0,32);if(reservedUsernames.has(candidate))continue;const used=await env.DB.prepare("SELECT 1 AS found FROM users WHERE username_normalized=? LIMIT 1").bind(candidate).first();if(!used){reservedUsernames.add(candidate);return candidate;}}throw new Error("Could not generate an available username.");};
+   const finalStudentUsername=student?.username||await uniqueUsername(studentUsername);
+   const finalParentUsername=parent?.username||await uniqueUsername(parentUsername);
+   const finalStudentEmail=norm(schoolId+"."+learner.id.slice(0,8)+"."+finalStudentUsername+"@learner.navstar.local");
    const studentId=student?.id||id(),parentId=parent?.id||id(),statements=[];
    if(!student){
     const passwordHash=await hashPassword(studentPassword);
-    statements.push(env.DB.prepare("INSERT INTO users(id,email,email_normalized,username,username_normalized,phone,full_name,password_hash,status,password_changed_at) VALUES(?,?,?,?,?,?,?,?,'active',strftime('%Y-%m-%dT%H:%M:%fZ','now'))").bind(studentId,studentEmail,studentEmail,studentUsername,studentUsername,null,studentName,passwordHash));
+    statements.push(env.DB.prepare("INSERT INTO users(id,email,email_normalized,username,username_normalized,phone,full_name,password_hash,status,password_changed_at) VALUES(?,?,?,?,?,?,?,?,'active',strftime('%Y-%m-%dT%H:%M:%fZ','now'))").bind(studentId,finalStudentEmail,finalStudentEmail,finalStudentUsername,finalStudentUsername,null,studentName,passwordHash));
     statements.push(env.DB.prepare("INSERT OR IGNORE INTO school_memberships(id,school_id,user_id,membership_status,job_title,joined_at) VALUES(?,?,?,'active','Student',strftime('%Y-%m-%dT%H:%M:%fZ','now'))").bind(id(),schoolId,studentId));
     statements.push(env.DB.prepare("INSERT INTO user_role_assignments(id,user_id,role_id,school_id,scope_json,assigned_by) SELECT ?,?,?,?,?,? WHERE NOT EXISTS (SELECT 1 FROM user_role_assignments WHERE user_id=? AND role_id=? AND school_id=?)").bind(id(),studentId,roles[0].id,schoolId,JSON.stringify({scope:"school",level:"learner"}),actor.id,studentId,roles[0].id,schoolId));
     statements.push(env.DB.prepare("INSERT INTO learner_user_links(id,school_id,learner_id,user_id,created_by) VALUES(?,?,?,?,?)").bind(id(),schoolId,learner.id,studentId,actor.id));
    }
    if(!parent){
     const passwordHash=await hashPassword(parentPassword);
-    statements.push(env.DB.prepare("INSERT INTO users(id,email,email_normalized,username,username_normalized,phone,full_name,password_hash,status,password_changed_at) VALUES(?,?,?,?,?,?,?,?,'active',strftime('%Y-%m-%dT%H:%M:%fZ','now'))").bind(parentId,parentEmail,parentEmail,parentUsername,parentUsername,parentPhone||null,parentName,passwordHash));
+    statements.push(env.DB.prepare("INSERT INTO users(id,email,email_normalized,username,username_normalized,phone,full_name,password_hash,status,password_changed_at) VALUES(?,?,?,?,?,?,?,?,'active',strftime('%Y-%m-%dT%H:%M:%fZ','now'))").bind(parentId,parentEmail,parentEmail,finalParentUsername,finalParentUsername,parentPhone||null,parentName,passwordHash));
    }
    statements.push(env.DB.prepare("INSERT OR IGNORE INTO school_memberships(id,school_id,user_id,membership_status,job_title,joined_at) VALUES(?,?,?,'active','Parent / Guardian',strftime('%Y-%m-%dT%H:%M:%fZ','now'))").bind(id(),schoolId,parentId));
    statements.push(env.DB.prepare("INSERT INTO user_role_assignments(id,user_id,role_id,school_id,scope_json,assigned_by) SELECT ?,?,?,?,?,? WHERE NOT EXISTS (SELECT 1 FROM user_role_assignments WHERE user_id=? AND role_id=? AND school_id=?)").bind(id(),parentId,roles[1].id,schoolId,JSON.stringify({scope:"school",level:"linked_learners"}),actor.id,parentId,roles[1].id,schoolId));
@@ -80,9 +70,9 @@ export async function onRequestPost({request,env}) {
     statements.push(env.DB.prepare("INSERT INTO guardians(id,school_id,user_id,full_name,phone,email,relationship) VALUES(?,?,?,?,?,?,?)").bind(guardianId,schoolId,parentId,parentName,parentPhone||null,parentEmail,relationship));
     statements.push(env.DB.prepare("INSERT OR IGNORE INTO learner_guardians(learner_id,guardian_id,is_primary,receives_communications) VALUES(?,?,1,1)").bind(learner.id,guardianId));
    }
-   statements.push(env.DB.prepare("INSERT INTO audit_logs(id,actor_user_id,school_id,action,resource_type,resource_id,outcome,details_json) VALUES(?,?,?,'learner.family.accounts.created','learner',?,'success',?)").bind(id(),actor.id,schoolId,learner.id,JSON.stringify({studentUsername:student?.username||studentUsername,parentUsername:parent?.username||parentUsername,studentExisting:!!student,parentExisting:!!parent})));
+   statements.push(env.DB.prepare("INSERT INTO audit_logs(id,actor_user_id,school_id,action,resource_type,resource_id,outcome,details_json) VALUES(?,?,?,'learner.family.accounts.created','learner',?,'success',?)").bind(id(),actor.id,schoolId,learner.id,JSON.stringify({studentUsername:finalStudentUsername,parentUsername:finalParentUsername,studentExisting:!!student,parentExisting:!!parent})));
    await env.DB.batch(statements);
-   const finalStudent=student||{id:studentId,username:studentUsername},finalParent=parent||{id:parentId,username:parentUsername};
+   const finalStudent=student||{id:studentId,username:finalStudentUsername},finalParent=parent||{id:parentId,username:finalParentUsername};
    let emailDelivery="not_configured";
    if(env.RESEND_API_KEY){
     const loginUrl=new URL("/login.html",new URL(request.url).origin).toString(),safe=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
