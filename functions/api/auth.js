@@ -83,9 +83,12 @@ export async function getSuperAdminSession(request, env) {
   const user = await getAuthenticatedSession(request, env);
   return user?.is_super_admin ? user : null;
 }
+let profilePhotoColumnReady=false;
+let profilePhotoColumnCheck=null;
 async function ensureUserProfilePhotoColumn(db){
-  const info=await db.prepare("PRAGMA table_info(users)").all();
-  if(!(info.results||[]).some(x=>x.name==="profile_photo_url"))await db.prepare("ALTER TABLE users ADD COLUMN profile_photo_url TEXT").run();
+  if(profilePhotoColumnReady)return;
+  if(!profilePhotoColumnCheck)profilePhotoColumnCheck=(async()=>{const info=await db.prepare("PRAGMA table_info(users)").all();if(!(info.results||[]).some(x=>x.name==="profile_photo_url"))await db.prepare("ALTER TABLE users ADD COLUMN profile_photo_url TEXT").run();profilePhotoColumnReady=true})().catch(error=>{profilePhotoColumnCheck=null;throw error});
+  await profilePhotoColumnCheck;
 }
 export async function getAuthenticatedSession(request, env) {
   if (!env?.DB) return null;
