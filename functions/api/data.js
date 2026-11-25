@@ -210,6 +210,28 @@ function bodyFields(body,config){
   for(const field of config.fields)if(body[field]!==undefined){const v=clean(body[field]);values[field]=v===""?null:v;}
   return values;
 }
+function canonicalStageIdentity(code,name){
+ const raw=String(code||"").toUpperCase().replace(/[^A-Z0-9]/g,"");
+ const label=String(name||"").toUpperCase().replace(/[^A-Z0-9]/g,"");
+ const value=raw||label;
+ let m=value.match(/^(?:FORM|F)([1-4])$/);if(m)return "FORM"+m[1];
+ m=value.match(/^(?:GRADE|G)(1[0-2]|[1-9])$/);if(m)return "G"+m[1];
+ m=value.match(/^PP([12])$/);if(m)return "PP"+m[1];
+ m=value.match(/^(?:STANDARD|STD)([1-8])$/);if(m)return "STD"+m[1];
+ return value;
+}
+function canonicalCurriculum(value){
+ const c=String(value||"").toLowerCase().replace(/[^a-z0-9]/g,"");
+ if(c.includes("844")||c.includes("eightfourfour"))return "844";
+ if(c.includes("cbe")||c.includes("cbc")||c.includes("competency"))return "cbe";
+ return c;
+}
+async function findDuplicateGrade(db,schoolId,values,currentId=""){
+ const curriculum=canonicalCurriculum(values.curriculum),stage=canonicalStageIdentity(values.stage_code,values.stage_name);
+ if(!curriculum||!stage)return null;
+ const rows=await db.prepare("SELECT id,curriculum,stage_code,stage_name FROM grade_levels WHERE school_id=? AND id<>?").bind(schoolId,currentId||"").all();
+ return (rows.results||[]).find(row=>canonicalCurriculum(row.curriculum)===curriculum&&canonicalStageIdentity(row.stage_code,row.stage_name)===stage)||null;
+}
 function isPrimaryOrJuniorClass(grade){
  const level=String(grade?.school_level||"").toLowerCase(),code=String(grade?.stage_code||"").toUpperCase();
  return /pre-primary|primary|junior/.test(level)||/^PP[12]$/.test(code)||/^G[1-9]$/.test(code)||/^STD[1-8]$/.test(code);
@@ -469,6 +491,7 @@ export async function onRequestPost({request,env}){
   if(cfg.scope&&!a.user.is_super_admin&&values.school_id&&values.school_id!==a.user.school_id)return json({ok:false,error:"You cannot create records for another school."},403);
   if(cfg.scope&&!await env.DB.prepare("SELECT 1 FROM schools WHERE id=?"+(a.user.is_super_admin?"":" AND status='active'")).bind(schoolId).first())return json({ok:false,error:"School not found or inactive."},404);
   if(cfg.scope)values.school_id=schoolId;
+  if(name==="grades"){const duplicate=await findDuplicateGrade(env.DB,schoolId,values);if(duplicate)return json({ok:false,error:"This class already exists in this curriculum. The system will not create another "+String(values.stage_name||values.stage_code)+". Edit or reactivate the existing class instead.",existing_grade_id:duplicate.id},409);}
   const calendarError=await validateAcademicCalendarDates(env.DB,name,schoolId,values);if(calendarError)return json({ok:false,error:calendarError},400);
   if(name.startsWith("competency-")||name==="rubric-criteria"){const competencyError=await validateCompetencyRecord(env.DB,name,schoolId,values,a.user);if(competencyError)return json({ok:false,error:competencyError},400)}
   if(name==="grading-schemes"&&String(values.level_key||"").startsWith("__LEVEL__")){const schoolLevel=String(values.level_key).slice(9),curriculum=String(values.curriculum||"").trim();const configured=await env.DB.prepare("SELECT 1 FROM grade_levels WHERE school_id=? AND curriculum=? AND school_level=? AND is_active=1 LIMIT 1").bind(schoolId,curriculum,schoolLevel).first();if(!configured)return json({ok:false,error:"This school level has no active grades in the selected curriculum."},400);values.level_key=null;values.stage_code="LEVEL:"+schoolLevel;}else if(name==="grading-schemes"&&values.level_key==="__ALL__"){const curriculum=String(values.curriculum||"").trim();const configured=await env.DB.prepare("SELECT 1 FROM grade_levels WHERE school_id=? AND curriculum=? AND is_active=1 LIMIT 1").bind(schoolId,curriculum).first();if(!configured)return json({ok:false,error:"This curriculum has no active grades configured for this school."},400);values.level_key=null;values.stage_code="ALL";}
@@ -753,6 +776,7 @@ export async function onRequestPatch({request,env}){
     if(cfg.scope&&!a.user.is_super_admin&&requested&&requested!==a.user.school_id)return json({ok:false,error:"You cannot update records in another school."},403);
     const current=await env.DB.prepare("SELECT * FROM "+cfg.table+" WHERE "+where).bind(...(cfg.scope?[recordId,schoolId]:[recordId])).first();
     if(!current)return json({ok:false,error:"Record not found in the selected school."},404);
+    if(name==="grades"){const duplicate=await findDuplicateGrade(env.DB,schoolId,{...current,...values},recordId);if(duplicate)return json({ok:false,error:"Another class with the same curriculum and class level already exists. Keep one record and edit it instead.",existing_grade_id:duplicate.id},409);}
     const calendarError=await validateAcademicCalendarDates(env.DB,name,schoolId,{...current,...values},recordId);if(calendarError)return json({ok:false,error:calendarError},400);
     if(name.startsWith("competency-")||name==="rubric-criteria"){const competencyError=await validateCompetencyRecord(env.DB,name,schoolId,{...current,...values},a.user);if(competencyError)return json({ok:false,error:competencyError},400)}
     if(name==="learning-areas"&&!a.user.is_super_admin){
