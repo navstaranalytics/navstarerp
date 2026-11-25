@@ -32,7 +32,7 @@ export async function onRequestPost({request,env}){
  if(!env.DB)return json({ok:false,error:"Database unavailable."},503);
  const actor=await getAuthenticatedSession(request,env);
  if(!actor)return json({ok:false,error:"Sign in to continue."},401);
- if(actor.is_super_admin===false&&!actor.permissions.includes("learners.manage"))return json({ok:false,error:"Your role cannot bulk register learners."},403);
+ if(!actor.is_super_admin&&!(actor.permissions||[]).includes("learners.manage"))return json({ok:false,error:"Your role cannot bulk register learners."},403);
  const schoolId=actor.school_id||new URL(request.url).searchParams.get("schoolId");
  try{await ensureLearnerIdentifierColumns(env.DB)}catch(error){console.error("Learner identifier schema",error);return json({ok:false,error:"Learner registration fields are not ready. Please contact support."},500)}
  if(!schoolId)return json({ok:false,error:"School workspace is required."},400);
