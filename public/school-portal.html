@@ -870,7 +870,7 @@ async function loadAllocations(){
   const [staff,years,terms,grades,streams,areas,allocs,staffSubjects]=await Promise.all(["staff","years","terms","grades","streams","learning-areas","teacher-allocations","staff-learning-areas"].map(x=>api("/api/data/"+x+"?schoolId="+encodeURIComponent(schoolId))));
   const form=$("allocationForm");
   const fill=(name,rows,idField,labelFn,first)=>{const el=form.elements[name];if(!el)return;const old=el.value;el.innerHTML='<option value="">'+first+'</option>'+rows.map(x=>'<option value="'+esc(x[idField])+'">'+esc(labelFn(x))+'</option>').join("");if(rows.some(x=>String(x[idField])===old))el.value=old};
-  fill("staff_id",staff.records||[],"id",x=>x.full_name||x.staff_number||x.id.slice(0,8),"Select teacher");
+  fill("staff_id",(staff.records||[]).filter(x=>Number(x.is_teacher)===1&&x.employment_status==="active"),"id",x=>x.full_name||x.staff_number||x.id.slice(0,8),"Select teacher");
   fill("academic_year_id",years.records||[],"id",x=>x.name,"Select year");
   fill("term_id",terms.records||[],"id",x=>x.name,"All terms");
   fill("grade_level_id",grades.records||[],"id",x=>schoolGradeLabel(x),"Select class");
