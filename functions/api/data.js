@@ -395,6 +395,24 @@ async function validateAcademicCalendarDates(db,name,schoolId,values,currentId=n
 export async function onRequestPost({request,env}){
   const a=await auth(request,env);if(a.error)return a.error;
   const pathParts=new URL(request.url).pathname.split("/").filter(Boolean);
+  if(pathParts.slice(-2).join("/") === "learning-areas/bulk"){
+    if(!allowed(a.user,permissionFor("learning-areas",true)))return json({ok:false,error:"Your role does not have permission to manage learning areas."},403);
+    let body;try{body=await request.json()}catch{return json({ok:false,error:"Invalid learning-area update."},400)}
+    const ids=[...new Set((Array.isArray(body.ids)?body.ids:[]).map(x=>String(x||"").trim()).filter(Boolean))],active=Number(body.is_active),schoolId=a.user.is_super_admin?String(body.school_id||""):a.user.school_id;
+    if(!schoolId||(!a.user.is_super_admin&&body.school_id&&body.school_id!==schoolId))return json({ok:false,error:"School workspace is required."},403);
+    if(!ids.length||ids.length>100||![0,1].includes(active))return json({ok:false,error:"Choose between 1 and 100 learning areas and a valid offering status."},400);
+    try{
+      const placeholders=ids.map(()=>"?").join(",");
+      const current=await env.DB.prepare("SELECT id,is_mandatory FROM learning_areas WHERE school_id=? AND id IN ("+placeholders+")").bind(schoolId,...ids).all();
+      if((current.results||[]).length!==ids.length)return json({ok:false,error:"Some learning areas are no longer available in this school. Refresh and try again."},409);
+      if(active===0&&(current.results||[]).some(x=>Number(x.is_mandatory)===1))return json({ok:false,error:"Compulsory learning areas cannot be disabled."},403);
+      await env.DB.batch(ids.map(recordId=>env.DB.prepare("UPDATE learning_areas SET is_active=? WHERE id=? AND school_id=?").bind(active,recordId,schoolId)));
+      const saved=await env.DB.prepare("SELECT id,is_active FROM learning_areas WHERE school_id=? AND id IN ("+placeholders+")").bind(schoolId,...ids).all();
+      if((saved.results||[]).length!==ids.length||(saved.results||[]).some(x=>Number(x.is_active)!==active))throw new Error("Learning-area offering verification failed.");
+      await audit(env.DB,a.user,schoolId,"learning_areas.phase_offering_updated","learning_areas",ids.join(","));
+      return json({ok:true,savedCount:ids.length,message:"Learning-area offering updated."});
+    }catch(error){console.error("NAVSTAR learning-area phase update",error);return json({ok:false,error:"Learning-area offering could not be saved and verified. Refresh before retrying."},500)}
+  }
   if(pathParts.slice(-2).join("/") === "grade-boundaries/bulk"){
     if(!allowed(a.user,permissionFor("grade-boundaries",true)))return json({ok:false,error:"Your role does not have permission to change grading boundaries."},403);
     await ensureGradeBoundaryScope(env.DB);
