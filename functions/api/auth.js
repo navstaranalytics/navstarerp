@@ -118,6 +118,14 @@ export async function getAuthenticatedSession(request, env) {
     LIMIT 1
   `).bind(tokenHash).first();
   if(!row)return null;
+  try{
+    const maintenance=await env.DB.prepare("SELECT setting_value FROM platform_settings WHERE setting_key='maintenance_mode'").first();
+    const mode=JSON.parse(maintenance?.setting_value||"{}");
+    if(mode.enabled&&row.role_key!=="super_admin"){
+      await env.DB.prepare("UPDATE auth_sessions SET revoked_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE token_hash=? AND revoked_at IS NULL").bind(tokenHash).run();
+      return null;
+    }
+  }catch(error){console.error("Maintenance mode check failed:",String(error?.message||error));}
   let sessionPolicy={idle_timeout_minutes:30};
   try{const setting=await env.DB.prepare("SELECT setting_value FROM platform_settings WHERE setting_key='session_policy'").first();if(setting?.setting_value){const parsed=JSON.parse(setting.setting_value);const minutes=Number(parsed.idle_timeout_minutes);if(Number.isInteger(minutes)&&minutes>=5&&minutes<=480)sessionPolicy={idle_timeout_minutes:minutes};}}catch(error){console.error("Session policy lookup failed:",String(error?.message||error));}
   const lastActivity=Date.parse(row.last_seen_at||row.created_at||"");
@@ -272,6 +280,11 @@ export async function onRequestPostLogin({ request, env }) {
         .bind(username,failures>=5?0:failures,lockedUntil).run();
       await audit(env,user?.id,"auth.login","denied",{reason:"invalid_credentials"});
       return json({ok:false,error:"The username or password is incorrect, or the account is not active."},401);
+    }
+    let maintenanceMode={};try{const setting=await env.DB.prepare("SELECT setting_value FROM platform_settings WHERE setting_key='maintenance_mode'").first();maintenanceMode=JSON.parse(setting?.setting_value||"{}")}catch{}
+    if(maintenanceMode.enabled&&user.role_key!=="super_admin"){
+      await audit(env,user.id,"auth.login","denied",{reason:"platform_maintenance"});
+      return json({ok:false,maintenance:true,error:maintenanceMode.message||"Navstar is temporarily undergoing scheduled maintenance. Please try again shortly."},503);
     }
     await env.DB.prepare("DELETE FROM auth_login_attempts WHERE identifier=?").bind(username).run();
     const issued=await issueSession(env,request,user.id,body.remember===true);
