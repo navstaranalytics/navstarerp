@@ -136,7 +136,7 @@ function curriculumLearningAreas(curriculum,levels){
  }
  return {template,rows};
 }
-async function syncSchoolLearningAreas(db,schoolId,curriculum,levels){
+export async function syncSchoolLearningAreas(db,schoolId,curriculum,levels){
  const {template,rows}=curriculumLearningAreas(curriculum,levels);
  // Apply the platform-wide learning-area catalogue to each school tenant.
  // Existing curriculum templates remain the fallback; Super Admin additions and
