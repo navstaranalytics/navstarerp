@@ -9,6 +9,7 @@ import { onRequestGet as feeReceiptsGet, onRequestPost as feeReceiptsPost } from
 import { onRequestGet as outputTemplatesGet, onRequestPost as outputTemplatesPost } from "./functions/api/output-templates.js";
 import { onRequestPost as bulkLearnerImportPost } from "./functions/api/bulk-import-learners.js";
 import { onRequestPost as bulkEnrollmentImportPost } from "./functions/api/bulk-import-enrollments.js";
+import { onRequestPost as bulkLearnerAreasPost } from "./functions/api/bulk-learner-learning-areas.js";
 import { onRequestPost as timetableGeneratePost } from "./functions/api/timetable-generate.js";
 import { onRequestPost as reportCardGeneratePost } from "./functions/api/report-card-generate.js";
 import { onRequestGet as schoolWorkspaceSummaryGet, onRequestPostMotto as schoolMottoPost } from "./functions/api/school-workspace-summary.js";
@@ -173,6 +174,7 @@ export default {
       if (request.method !== "POST") return new Response("Method not allowed", { status: 405, headers: { Allow: "POST" } });
       return timetableGeneratePost({ request, env });
     }
+    if (route === "/api/bulk-learner-learning-areas") { if(request.method!=="POST")return new Response("Method not allowed",{status:405,headers:{Allow:"POST"}});return bulkLearnerAreasPost({request,env}); }
     if (route === "/api/bulk-import/enrollments") {
       if (request.method !== "POST") return new Response("Method not allowed", { status: 405, headers: { Allow: "POST" } });
       return bulkEnrollmentImportPost({ request, env });
