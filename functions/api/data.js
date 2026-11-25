@@ -757,7 +757,7 @@ export async function onRequestPost({request,env}){
     const assessment=await env.DB.prepare("SELECT academic_year_id,grade_level_id,stream_id,pathway,max_score,mark_submission_deadline FROM assessments WHERE id=? AND school_id=?").bind(values.assessment_id,schoolId).first();
     if(!assessment)return json({ok:false,error:"Assessment not found in this school."},400);
     const roleKeys=a.user.role_keys||[a.user.role_key],deadlinePassed=assessment.mark_submission_deadline&&Date.now()>Date.parse(String(assessment.mark_submission_deadline).slice(0,10)+"T23:59:59+03:00"),canOverride=!!a.user.is_super_admin||roleKeys.some(k=>["school_admin","school_administrator"].includes(k));
-    if(deadlinePassed&&!canOverride)return json({ok:false,error:"The mark submission deadline has passed. Contact the School Administrator or Examinations Officer for an authorised override."},403);
+    if(deadlinePassed&&!canOverride)return json({ok:false,error:"The mark submission deadline has passed. Contact the School Administrator for an authorised override."},403);
     if(deadlinePassed&&canOverride)await audit(env.DB,a.user,schoolId,"assessment.deadline.override","assessment",values.assessment_id);
     if(values.score!==undefined&&values.score!==null&&(Number(values.score)<0||Number(values.score)>Number(assessment.max_score)))return json({ok:false,error:"Score must be between zero and the assessment maximum."},400);
     const enrolled=await env.DB.prepare("SELECT 1 FROM learner_enrollments le JOIN learners l ON l.id=le.learner_id AND l.school_id=le.school_id WHERE le.learner_id=? AND le.school_id=? AND le.academic_year_id=? AND le.grade_level_id=? AND (le.stream_id IS ? OR le.stream_id=?) AND le.status='active' AND (? IS NULL OR l.pathway=?)").bind(values.learner_id,schoolId,assessment.academic_year_id,assessment.grade_level_id,assessment.stream_id,assessment.stream_id,assessment.pathway,assessment.pathway).first();
@@ -765,6 +765,9 @@ export async function onRequestPost({request,env}){
   }
 
   if(name==="assessments"){
+    if(values.start_time&&values.end_time&&values.end_time<=values.start_time)return json({ok:false,error:"Assessment end time must be later than its start time."},400);
+    if(values.assessment_date&&values.mark_submission_deadline&&Date.parse(values.mark_submission_deadline+"T23:59:59+03:00")<Date.parse(values.assessment_date+"T00:00:00+03:00"))return json({ok:false,error:"Marks submission deadline cannot be before the assessment date."},400);
+    if(values.mark_submission_deadline&&!/^\\d{4}-\\d{2}-\\d{2}$/.test(values.mark_submission_deadline))return json({ok:false,error:"Enter a valid marks submission deadline."},400);
     if(!Number.isFinite(Number(values.max_score??100))||Number(values.max_score??100)<=0)return json({ok:false,error:"Assessment maximum score must be greater than zero."},400);
     if(values.weight!==undefined&&(!Number.isFinite(Number(values.weight))||Number(values.weight)<0))return json({ok:false,error:"Assessment weight cannot be negative."},400);
     if(values.stream_id){const stream=await env.DB.prepare("SELECT grade_level_id FROM streams WHERE id=? AND school_id=?").bind(values.stream_id,schoolId).first();if(!stream||stream.grade_level_id!==values.grade_level_id)return json({ok:false,error:"The selected stream must belong to the selected grade."},400);}
