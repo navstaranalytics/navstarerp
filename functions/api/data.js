@@ -25,7 +25,7 @@ const resources={
   "school-events":{table:"school_calendar_events",scope:true,fields:["title","description","event_type","start_at","end_at","audience","reminder_minutes","reminder_sent_at","created_by","status"],required:["school_id","title","start_at"],refs:{created_by:"users"}},
   "teacher-allocations":{table:"teacher_allocations",scope:true,fields:["staff_id","academic_year_id","term_id","grade_level_id","stream_id","learning_area_id","pathway"],required:["school_id","staff_id","academic_year_id","grade_level_id","learning_area_id"],refs:{staff_id:"staff_profiles",academic_year_id:"academic_years",term_id:"terms",grade_level_id:"grade_levels",stream_id:"streams",learning_area_id:"learning_areas"}},
   transfers:{table:"learner_transfers",scope:true,fields:["learner_id","from_enrollment_id","to_enrollment_id","reason"],required:["school_id","learner_id"],refs:{learner_id:"learners",from_enrollment_id:"learner_enrollments",to_enrollment_id:"learner_enrollments"}},
-  assessments:{table:"assessments",scope:true,fields:["academic_year_id","term_id","grade_level_id","stream_id","learning_area_id","title","assessment_number","examination_session","assessment_type","max_score","weight","pathway","due_date","status"],required:["school_id","academic_year_id","grade_level_id","learning_area_id","title"],refs:{academic_year_id:"academic_years",term_id:"terms",grade_level_id:"grade_levels",stream_id:"streams",learning_area_id:"learning_areas"}},
+  assessments:{table:"assessments",scope:true,fields:["academic_year_id","term_id","grade_level_id","stream_id","learning_area_id","title","assessment_number","examination_session","assessment_type","max_score","weight","pathway","due_date","assessment_date","start_time","end_time","mark_submission_deadline","status"],required:["school_id","academic_year_id","grade_level_id","learning_area_id","title"],refs:{academic_year_id:"academic_years",term_id:"terms",grade_level_id:"grade_levels",stream_id:"streams",learning_area_id:"learning_areas"}},
   "assessment-results":{table:"assessment_results",scope:true,fields:["assessment_id","learner_id","score","grade","feedback","status"],required:["school_id","assessment_id","learner_id"],refs:{assessment_id:"assessments",learner_id:"learners"}},
   "competency-frameworks":{table:"competency_frameworks",scope:true,fields:["curriculum","grade_level_id","learning_area_id","name","description","levels_json","status"],required:["school_id","curriculum","name"],refs:{grade_level_id:"grade_levels",learning_area_id:"learning_areas"}},
   "rubric-criteria":{table:"rubric_criteria",scope:true,fields:["framework_id","criterion","description","weight","sort_order","is_active"],required:["school_id","framework_id","criterion"],refs:{framework_id:"competency_frameworks"}},
@@ -537,6 +537,37 @@ export async function onRequestPost({request,env}){
       return json({ok:true,savedCount:statements.length,activeLearningAreas:Number(verified?.total||0),message:"Selected central catalogue learning areas were added or enabled. Existing unselected records were preserved."});
     }catch(error){console.error("NAVSTAR central catalogue selection",error);return json({ok:false,error:"Selected learning areas could not be saved. Existing school records were not intentionally removed."},500)}
   }
+  if(pathParts.slice(-2).join("/") === "assessments/bulk-exam"){
+    if(!allowed(a.user,permissionFor("assessments",true)))return json({ok:false,error:"Your role does not have permission to create exam papers."},403);
+    let body;try{body=await request.json()}catch{return json({ok:false,error:"Invalid exam setup."},400)}
+    const schoolId=a.user.is_super_admin?String(body.school_id||""):a.user.school_id,gradeIds=[...new Set((Array.isArray(body.grade_level_ids)?body.grade_level_ids:[]).map(String))],areaIds=[...new Set((Array.isArray(body.learning_area_ids)?body.learning_area_ids:[]).map(String))];
+    const year=clean(body.academic_year_id),term=clean(body.term_id)||null,title=clean(body.title),type=clean(body.assessment_type),date=clean(body.assessment_date),start=clean(body.start_time),end=clean(body.end_time),deadline=clean(body.mark_submission_deadline),max=Number(body.max_score||100),weight=Number(body.weight??1);
+    const allowedTypes=["Opener","Midterm","Closer","Mock","CAT","RAT","Quiz","Assignment","Project","Practical","Observation"];
+    if(!schoolId||(!a.user.is_super_admin&&body.school_id&&body.school_id!==schoolId)||!year||!title||!allowedTypes.includes(type)||!gradeIds.length||!areaIds.length||gradeIds.length>50||areaIds.length>100||!date||!start||!end||end<=start||!deadline||!Number.isFinite(max)||max<=0||!Number.isFinite(weight)||weight<0)return json({ok:false,error:"Choose an academic year, paper type, at least one class and subject, exam date, start/end time and mark deadline."},400);
+    if(Date.parse(deadline+"T23:59:59+03:00")<Date.parse(date+"T00:00:00+03:00"))return json({ok:false,error:"The mark submission deadline cannot be before the examination date."},400);
+    try{
+      const yearRow=await env.DB.prepare("SELECT id FROM academic_years WHERE id=? AND school_id=?").bind(year,schoolId).first();if(!yearRow)return json({ok:false,error:"The selected academic year does not belong to this school."},400);
+      if(term){const termRow=await env.DB.prepare("SELECT id FROM terms WHERE id=? AND school_id=? AND academic_year_id=?").bind(term,schoolId,year).first();if(!termRow)return json({ok:false,error:"The selected term does not belong to this academic year and school."},400);}
+      const marks=await env.DB.prepare("SELECT id,curriculum,stage_code,school_level FROM grade_levels WHERE school_id=? AND is_active=1 AND id IN ("+gradeIds.map(()=>"?").join(",")+")").bind(schoolId,...gradeIds).all();
+      if((marks.results||[]).length!==gradeIds.length)return json({ok:false,error:"One or more selected classes are inactive or outside this school."},400);
+      const subjects=await env.DB.prepare("SELECT id,curriculum,stage_code,name,is_active,pathway FROM learning_areas WHERE school_id=? AND is_active=1 AND id IN ("+areaIds.map(()=>"?").join(",")+")").bind(schoolId,...areaIds).all();
+      if((subjects.results||[]).length!==areaIds.length)return json({ok:false,error:"One or more selected learning areas are not currently offered by this school."},400);
+      const statements=[],created=[];
+      for(const grade of marks.results||[])for(const area of subjects.results||[]){
+        if(area.curriculum!==grade.curriculum||area.stage_code!==grade.stage_code)continue;
+        const idValue=crypto.randomUUID(),pathway=area.pathway||null,session=clean(body.examination_session)||type;
+        const issue=await validateLearningAreaClassAndPathway(env.DB,"assessments",schoolId,{grade_level_id:grade.id,learning_area_id:area.id,pathway});
+        if(issue)return json({ok:false,error:issue},400);
+        statements.push(env.DB.prepare("INSERT INTO assessments(id,school_id,academic_year_id,term_id,grade_level_id,learning_area_id,title,assessment_number,examination_session,assessment_type,max_score,weight,pathway,due_date,assessment_date,start_time,end_time,mark_submission_deadline,status,created_by) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)").bind(idValue,schoolId,year,term,grade.id,area.id,title+" - "+area.name,clean(body.assessment_number)||null,session,type,max,weight,pathway,deadline,date,start,end,deadline,"draft",a.user.id));
+        created.push(idValue);
+      }
+      if(!statements.length)return json({ok:false,error:"None of the selected learning areas match the selected classes. Select matching curriculum levels and subjects."},400);
+      if(statements.length>400)return json({ok:false,error:"This selection creates more than 400 papers. Narrow the classes or learning areas and save in smaller groups."},400);
+      for(let i=0;i<statements.length;i+=50)await env.DB.batch(statements.slice(i,i+50));
+      await audit(env.DB,a.user,schoolId,"exam.papers.generated","assessment",created.length+" papers");
+      return json({ok:true,createdCount:created.length,assessmentIds:created,message:created.length+" exam papers created as drafts. Set individual dates in the exam timetable and publish when ready."},201);
+    }catch(error){console.error("NAVSTAR bulk exam paper creation",error);return json({ok:false,error:"Exam papers could not be saved. No existing assessment records were changed."},500)}
+  }
   if(pathParts.slice(-2).join("/") === "learning-areas/bulk-create"){
     if(!allowed(a.user,permissionFor("learning-areas",true)))return json({ok:false,error:"Your role does not have permission to manage learning areas."},403);
     let body;try{body=await request.json()}catch{return json({ok:false,error:"Invalid learning-area details."},400)}
@@ -723,8 +754,11 @@ export async function onRequestPost({request,env}){
   }
   const refError=await validateRefs(env.DB,cfg,values,schoolId);if(refError)return json({ok:false,error:refError},400);const pathwayError=await validateLearningAreaClassAndPathway(env.DB,name,schoolId,values);if(pathwayError)return json({ok:false,error:pathwayError},400);
   if(name==="assessment-results"){
-    const assessment=await env.DB.prepare("SELECT academic_year_id,grade_level_id,stream_id,pathway,max_score FROM assessments WHERE id=? AND school_id=?").bind(values.assessment_id,schoolId).first();
+    const assessment=await env.DB.prepare("SELECT academic_year_id,grade_level_id,stream_id,pathway,max_score,mark_submission_deadline FROM assessments WHERE id=? AND school_id=?").bind(values.assessment_id,schoolId).first();
     if(!assessment)return json({ok:false,error:"Assessment not found in this school."},400);
+    const roleKeys=a.user.role_keys||[a.user.role_key],deadlinePassed=assessment.mark_submission_deadline&&Date.now()>Date.parse(String(assessment.mark_submission_deadline).slice(0,10)+"T23:59:59+03:00"),canOverride=!!a.user.is_super_admin||roleKeys.some(k=>["school_admin","school_administrator","principal","examinations_officer"].includes(k));
+    if(deadlinePassed&&!canOverride)return json({ok:false,error:"The mark submission deadline has passed. Contact the School Administrator or Examinations Officer for an authorised override."},403);
+    if(deadlinePassed&&canOverride)await audit(env.DB,a.user,schoolId,"assessment.deadline.override","assessment",values.assessment_id);
     if(values.score!==undefined&&values.score!==null&&(Number(values.score)<0||Number(values.score)>Number(assessment.max_score)))return json({ok:false,error:"Score must be between zero and the assessment maximum."},400);
     const enrolled=await env.DB.prepare("SELECT 1 FROM learner_enrollments le JOIN learners l ON l.id=le.learner_id AND l.school_id=le.school_id WHERE le.learner_id=? AND le.school_id=? AND le.academic_year_id=? AND le.grade_level_id=? AND (le.stream_id IS ? OR le.stream_id=?) AND le.status='active' AND (? IS NULL OR l.pathway=?)").bind(values.learner_id,schoolId,assessment.academic_year_id,assessment.grade_level_id,assessment.stream_id,assessment.stream_id,assessment.pathway,assessment.pathway).first();
     if(!enrolled)return json({ok:false,error:"The learner is not actively enrolled in the assessment class or pathway."},400);
