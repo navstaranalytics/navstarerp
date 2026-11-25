@@ -222,6 +222,10 @@ function canonicalStageIdentity(code,name){
  m=value.match(/^(?:STANDARD|STD)([1-8])$/);if(m)return "STD"+m[1];
  return value;
 }
+function isDepartmentApplicableLevel(level,stageCode){
+ const levelName=String(level||"").toLowerCase(),code=String(stageCode||"").toUpperCase();
+ return /junior|senior|secondary/.test(levelName)||/^G(?:[7-9]|1[0-2])$/.test(code)||/^FORM[1-4]$/.test(code);
+}
 function canonicalCurriculum(value){
  const c=String(value||"").toLowerCase().replace(/[^a-z0-9]/g,"");
  if(c.includes("844")||c.includes("eightfourfour"))return "844";
@@ -690,6 +694,10 @@ export async function onRequestPost({request,env}){
   if(cfg.scope&&!a.user.is_super_admin&&values.school_id&&values.school_id!==a.user.school_id)return json({ok:false,error:"You cannot create records for another school."},403);
   if(cfg.scope&&!await env.DB.prepare("SELECT 1 FROM schools WHERE id=?"+(a.user.is_super_admin?"":" AND status='active'")).bind(schoolId).first())return json({ok:false,error:"School not found or inactive."},404);
   if(cfg.scope)values.school_id=schoolId;
+  if(name==="departments"){
+    const eligible=await env.DB.prepare("SELECT school_level,stage_code FROM grade_levels WHERE school_id=? AND is_active=1").bind(schoolId).all();
+    if(!(eligible.results||[]).some(g=>isDepartmentApplicableLevel(g.school_level,g.stage_code)))return json({ok:false,error:"Departments are available only when this school offers CBE Junior/Senior School or 8-4-4 Secondary."},403);
+  }
   if(name==="grades"){const curriculumError=validateGradeCurriculum(values);if(curriculumError)return json({ok:false,error:curriculumError},400);const duplicate=await findDuplicateGrade(env.DB,schoolId,values);if(duplicate)return json({ok:false,error:"This class already exists in this curriculum. The system will not create another "+String(values.stage_name||values.stage_code)+". Edit or reactivate the existing class instead.",existing_grade_id:duplicate.id},409);}
   const calendarError=await validateAcademicCalendarDates(env.DB,name,schoolId,values);if(calendarError)return json({ok:false,error:calendarError},400);
   if(name.startsWith("competency-")||name==="rubric-criteria"){const competencyError=await validateCompetencyRecord(env.DB,name,schoolId,values,a.user);if(competencyError)return json({ok:false,error:competencyError},400)}
@@ -1023,6 +1031,12 @@ export async function onRequestPatch({request,env}){
     let submitted;try{submitted=await request.clone().json()}catch{submitted={}}
     const allowedFields=new Set(["name","code","is_active","subject_type","is_mandatory","department_id"]);
     if(!Object.keys(submitted).length||Object.keys(submitted).some(k=>!allowedFields.has(k)))return json({ok:false,error:"Only learning-area details and school offering settings can be changed here."},403);
+    if(submitted.department_id){
+      const schoolId=a.user.is_super_admin?(new URL(request.url).searchParams.get("schoolId")||""):a.user.school_id;
+      const area=await env.DB.prepare("SELECT curriculum,stage_code FROM learning_areas WHERE id=? AND school_id=?").bind(recordId,schoolId).first();
+      const grade=area?await env.DB.prepare("SELECT school_level,stage_code FROM grade_levels WHERE school_id=? AND curriculum=? AND stage_code=? AND is_active=1 LIMIT 1").bind(schoolId,area.curriculum,area.stage_code).first():null;
+      if(!grade||!isDepartmentApplicableLevel(grade.school_level,grade.stage_code))return json({ok:false,error:"Departments apply only to CBE Junior/Senior School and 8-4-4 Secondary learning areas."},403);
+    }
   }
   if(name==="grade-boundaries")await ensureGradeBoundaryScope(env.DB);
   if(cfg.readOnly)return json({ok:false,error:"This resource is read-only."},405);
