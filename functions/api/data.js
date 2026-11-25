@@ -732,6 +732,13 @@ export async function onRequestDelete({request,env}){
         if(Number(count?.total||0)>0&&!(table==="learner_enrollments"&&targetGradeId))protectedRefs.push(table.replace(/_/g," ")+": "+count.total);
       }
       if(protectedRefs.length)return json({ok:false,error:"This class is still linked to non-enrolment records ("+protectedRefs.join("; ")+"). Those records must be reassigned or archived before deleting the class."},409);
+      const attendanceCount=Number((await env.DB.prepare("SELECT COUNT(*) AS total FROM attendance_sessions WHERE school_id=? AND grade_level_id=?").bind(schoolId,recordId).first())?.total||0);
+      if(attendanceCount>0){
+        await env.DB.prepare("UPDATE attendance_sessions SET status='archived' WHERE school_id=? AND grade_level_id=?").bind(schoolId,recordId).run();
+        await env.DB.prepare("UPDATE grade_levels SET is_active=0 WHERE id=? AND school_id=?").bind(recordId,schoolId).run();
+        await audit(env.DB,a.user,schoolId,"record.archived","grades",recordId);
+        return json({ok:true,message:"Class archived and removed from active choices. "+attendanceCount+" attendance session(s) were archived with their attendance records preserved. You can create a replacement class with the same name."});
+      }
       const remaining=await env.DB.prepare("SELECT COUNT(*) AS total FROM learner_enrollments WHERE school_id=? AND grade_level_id=?").bind(schoolId,recordId).first();
       if(Number(remaining?.total||0)>0){
         await env.DB.prepare("UPDATE grade_levels SET is_active=0 WHERE id=? AND school_id=?").bind(recordId,schoolId).run();
