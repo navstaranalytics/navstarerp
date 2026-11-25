@@ -508,6 +508,7 @@ export async function onRequestPost({request,env}){
       const current=await env.DB.prepare("SELECT id,is_mandatory FROM learning_areas WHERE school_id=? AND id IN ("+placeholders+")").bind(schoolId,...ids).all();
       if((current.results||[]).length!==ids.length)return json({ok:false,error:"Some learning areas are no longer available in this school. Refresh and try again."},409);
       await env.DB.batch(ids.map(recordId=>env.DB.prepare("UPDATE learning_areas SET is_active=? WHERE id=? AND school_id=?").bind(active,recordId,schoolId)));
+      if(active===1)await syncCompulsoryLearningAreas(env.DB,schoolId);
       const saved=await env.DB.prepare("SELECT id,is_active FROM learning_areas WHERE school_id=? AND id IN ("+placeholders+")").bind(schoolId,...ids).all();
       if((saved.results||[]).length!==ids.length||(saved.results||[]).some(x=>Number(x.is_active)!==active))throw new Error("Learning-area offering verification failed.");
       await audit(env.DB,a.user,schoolId,"learning_areas.phase_offering_updated","learning_areas",ids.join(","));
