@@ -66,7 +66,7 @@ async function syncSchoolGradeLevels(db,schoolId,curriculum,levels){
   if(current)statements.push(db.prepare("UPDATE grade_levels SET stage_name=?,stage_order=?,school_level=?,is_active=1 WHERE id=? AND school_id=?").bind(name,order,level,current.id,schoolId));
   else statements.push(db.prepare("INSERT INTO grade_levels(id,school_id,curriculum,stage_code,stage_name,stage_order,school_level,is_active) VALUES(?,?,?,?,?,?,?,1)").bind(makeId(),schoolId,curriculum,code,name,order,level));
  }
- for(const row of existing.results||[])if(!wanted.has(row.stage_code))statements.push(db.prepare("UPDATE grade_levels SET is_active=0 WHERE id=? AND school_id=?").bind(row.id,schoolId));
+ // Keep previously configured classes active; changing a school's current selection must not silently remove existing classes. Deactivation is an explicit school-admin action.
  if(statements.length)await db.batch(statements);
 }
 function normalizeCurricula(body, fallback) {
@@ -84,10 +84,8 @@ export async function syncSchoolCurricula(db,schoolId,curricula,levels) {
  const managed=["Kenyan CBE","Kenyan 8-4-4"];
  for(const curriculum of managed){
   if(!curricula.includes(curriculum)){
-   await db.batch([
-    db.prepare("UPDATE grade_levels SET is_active=0 WHERE school_id=? AND curriculum=?").bind(schoolId,curriculum),
-    db.prepare("UPDATE learning_areas SET is_active=0 WHERE school_id=? AND curriculum=?").bind(schoolId,curriculum)
-   ]);
+   // A change to the current curriculum selection is not permission to remove
+   // existing school classes or learning areas. Keep all records untouched.
    continue;
   }
   const scoped=curriculum==="Kenyan 8-4-4"?levels.filter(x=>/^8-4-4/i.test(x)||/^Form [1-4]$/i.test(x)):levels.filter(x=>/^(Pre-Primary|Primary|Junior School|Senior School)$/i.test(x)||/^(Grade (?:[1-9]|1[0-2])|PP[12])$/i.test(x));
@@ -173,7 +171,8 @@ export async function syncSchoolLearningAreas(db,schoolId,curriculum,levels){
    statements.push(db.prepare("INSERT INTO learning_areas(id,school_id,curriculum,code,catalogue_code,name,stage_code,pathway,is_active,subject_type,is_mandatory,source_template,school_customized) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,0)").bind(makeId(),schoolId,curriculum,x.code,x.code,x.name,x.stage,x.pathway,x.mandatory,x.type,x.mandatory,template));
   }
  }
- for(const row of existing.results||[])if(!matched.has(row.id)&&!rows.some(x=>x.stage===row.stage_code&&(x.code===(row.catalogue_code||row.code)||String(x.name||"").toLowerCase()===String(row.name||"").toLowerCase())))statements.push(db.prepare("UPDATE learning_areas SET is_active=0 WHERE id=? AND school_id=?").bind(row.id,schoolId));
+ // Do not deactivate unmatched learning areas during catalogue synchronization.
+ // Catalogue changes and curriculum selection edits must never erase a school's offering or historical learner allocations.
  if(statements.length)await db.batch(statements);
 }
 function mapSchool(row){

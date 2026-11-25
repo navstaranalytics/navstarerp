@@ -452,7 +452,9 @@ export async function onRequestGet({request,env}){
     if(name==="streams"&&!a.user.is_super_admin&&!url.searchParams.has("includeInactive"))sql+=" AND status='active'";
     if(name==="learning-areas"&&!a.user.is_super_admin){
       if(!url.searchParams.has("includeInactive"))sql+=" AND is_active=1";
-      sql+=" AND EXISTS (SELECT 1 FROM grade_levels gl WHERE gl.school_id=learning_areas.school_id AND gl.curriculum=learning_areas.curriculum AND gl.stage_code=learning_areas.stage_code AND gl.is_active=1)";
+      // Show the complete school catalogue across every curriculum. Do not hide
+      // areas merely because a corresponding grade-level row is currently inactive
+      // or being reconfigured; historical offerings remain visible and manageable.
     }
     if(cfg.scope)sql+=teacherFilter(name,a.user);
     sql+=(name==="audit"?" ORDER BY created_at DESC LIMIT 500":" ORDER BY rowid DESC LIMIT 1000");
@@ -472,9 +474,7 @@ export async function onRequestGet({request,env}){
       const allSchoolGrades=rows.results||[];const visibleGrades=a.user.is_super_admin||url.searchParams.has("includeInactive")?allSchoolGrades:allSchoolGrades.filter(g=>gradeBelongsToSelectedLevels(g,levels));return json({ok:true,records:visibleGrades,school:{curriculum:school?.curriculum||"Kenyan CBE",levels}});
     }
     if(name==="learning-areas"&&!a.user.is_super_admin){
-      const gradeRows=await env.DB.prepare("SELECT curriculum,stage_code FROM grade_levels WHERE school_id=? AND is_active=1").bind(schoolId).all();
-      const allowed=new Set((gradeRows.results||[]).map(g=>String(g.curriculum)+"|"+String(g.stage_code)));
-      return json({ok:true,records:(rows.results||[]).filter(x=>allowed.has(String(x.curriculum)+"|"+String(x.stage_code)))});
+      return json({ok:true,records:rows.results||[]});
     }
     return json({ok:true,records:rows.results||[]});
   }catch(error){console.error("NAVSTAR data read",name,error);return json({ok:false,error:"Could not load "+name+" from the database."},500)}
