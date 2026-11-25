@@ -397,6 +397,10 @@ export async function onRequestGet({request,env}){
       return json({ok:true,records:rows.results||[]});
     }
     if(name==="staff"){
+      const roleKeys=a.user.role_keys||[a.user.role_key];
+      if(roleKeys.includes("school_admin")||roleKeys.includes("school_administrator")){
+        await env.DB.prepare("INSERT INTO staff_profiles(id,school_id,user_id,employment_status) SELECT lower(hex(randomblob(16))),?,?, 'active' WHERE NOT EXISTS (SELECT 1 FROM staff_profiles WHERE school_id=? AND user_id=?)").bind(schoolId,a.user.id,schoolId,a.user.id).run();
+      }
       const rows=await env.DB.prepare("SELECT sp.*,u.full_name,u.username,u.email FROM staff_profiles sp LEFT JOIN users u ON u.id=sp.user_id WHERE sp.school_id=? ORDER BY u.full_name").bind(schoolId).all();
       return json({ok:true,records:rows.results||[]});
     }
