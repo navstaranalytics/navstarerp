@@ -198,7 +198,7 @@ function mapSchool(row){
     phone:row.contact_phone||"",address:row.physical_address||"",curriculum:row.curriculum||"Kenyan CBE",curricula,
     curriculumLabel:meta.curriculumLabel||row.curriculum||"Kenyan CBE",levels,configuredLevels,plan:meta.plan||"Starter",
     status:displayStatus(row.status),expiry:meta.expiry||"",modules:Array.isArray(meta.modules)?meta.modules:modulesForLevels(levels),
-    learnerCount:Number(meta.learnerCount||0),teacherCount:Number(meta.teacherCount||0),created:row.created_at,schoolAdminCount:Number(row.admin_count||0),schoolAdmin:row.admin_user_id?{id:row.admin_user_id,fullName:row.admin_full_name,username:row.admin_username,email:row.admin_email,phone:row.admin_phone,status:row.admin_status,role:"School Administrator"}:null};
+    learnerCount:Number(meta.learnerCount||0),teacherCount:Number(meta.teacherCount||0),boardingType:meta.boardingType||"day",created:row.created_at,schoolAdminCount:Number(row.admin_count||0),schoolAdmin:row.admin_user_id?{id:row.admin_user_id,fullName:row.admin_full_name,username:row.admin_username,email:row.admin_email,phone:row.admin_phone,status:row.admin_status,role:"School Administrator"}:null};
 }
 async function requireAdmin(request,env){
   if(!env.DB)return {error:json({ok:false,error:"Database connection is unavailable."},503)};
@@ -236,7 +236,9 @@ export async function onRequestPost({request,env}){
   const levels=Array.isArray(body.levels)?[...new Set(body.levels.map(clean).filter(Boolean))]:[];
   if(!levels.length)return json({ok:false,error:"Select at least one school level in Super Admin before registering this school."},400);
   const curriculumIssue=validateCurricula(curricula,levels);if(curriculumIssue)return json({ok:false,error:curriculumIssue},400);
-  const meta={category:clean(body.category),level:clean(body.level),plan:clean(body.plan)||"Starter",expiry:clean(body.expiry),modules:modulesForLevels(levels),learnerCount:0,teacherCount:0};
+  const boardingType=["day","boarding","both"].includes(clean(body.boardingType))?clean(body.boardingType):"day";
+  const meta={category:clean(body.category),level:clean(body.level),plan:clean(body.plan)||"Starter",expiry:clean(body.expiry),modules:modulesForLevels(levels),learnerCount:0,teacherCount:0,boardingType};
+  if(boardingType!=="day"&&!meta.modules.includes("Boarding"))meta.modules.push("Boarding");
   try{
     await env.DB.batch([
       env.DB.prepare(`INSERT INTO schools (id,school_code,name,registration_number,emis_code,institution_type,ownership,county,sub_county,town,physical_address,contact_person,contact_email,contact_phone,curriculum,school_levels_json,status,created_by,activated_at)
@@ -283,6 +285,8 @@ export async function onRequestPatch({request,env}){
     let current={};try{current=JSON.parse(existing.settings_json||"{}")}catch{}
     const meta={...(current.navstar_school_meta||{})};
     for(const key of ["category","level","plan","expiry","modules","learnerCount","teacherCount"])if(body[key]!==undefined)meta[key]=body[key];
+    if(body.boardingType!==undefined){if(!["day","boarding","both"].includes(clean(body.boardingType)))return json({ok:false,error:"Choose Day, Boarding or Both for the school type."},400);meta.boardingType=clean(body.boardingType);}
+    if(meta.boardingType&&meta.boardingType!=="day"){meta.modules=[...new Set([...(Array.isArray(meta.modules)?meta.modules:[]),"Boarding"])];}
     const name=body.name===undefined?existing.name:clean(body.name),code=body.code===undefined?existing.school_code:clean(body.code);
     if(!name||name.length>180||!code||code.length>80)return json({ok:false,error:"School name and institution code are required."},400);
     const status=body.status===undefined?existing.status:normStatus(body.status);
