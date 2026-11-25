@@ -369,7 +369,7 @@ export async function onRequestGet({request,env}){
     if(name==="grades"){
       const school=await env.DB.prepare("SELECT curriculum,school_levels_json FROM schools WHERE id=?").bind(schoolId).first();
       let levels=[];try{levels=JSON.parse(school?.school_levels_json||"[]")}catch{}
-      return json({ok:true,records:a.user.is_super_admin?(rows.results||[]):(rows.results||[]).filter(g=>gradeBelongsToSelectedLevels(g,levels)),school:{curriculum:school?.curriculum||"Kenyan CBE",levels}});
+      const allSchoolGrades=rows.results||[];const visibleGrades=a.user.is_super_admin||url.searchParams.has("includeInactive")?allSchoolGrades:allSchoolGrades.filter(g=>gradeBelongsToSelectedLevels(g,levels));return json({ok:true,records:visibleGrades,school:{curriculum:school?.curriculum||"Kenyan CBE",levels}});
     }
     if(name==="learning-areas"&&!a.user.is_super_admin){
       const school=await env.DB.prepare("SELECT school_levels_json FROM schools WHERE id=?").bind(schoolId).first();
