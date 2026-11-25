@@ -13,6 +13,7 @@ import { onRequestPost as timetableGeneratePost } from "./functions/api/timetabl
 import { onRequestPost as reportCardGeneratePost } from "./functions/api/report-card-generate.js";
 import { onRequestGet as schoolWorkspaceSummaryGet, onRequestPostMotto as schoolMottoPost } from "./functions/api/school-workspace-summary.js";
 import { onRequestGet as platformControlsGet, onRequestPost as platformControlsPost } from "./functions/api/platform-controls.js";
+import { onRequestGet as platformAccessGet, onRequestPatch as platformAccessPatch } from "./functions/api/platform-access.js";
 import { onRequestGet as sampleDataGet, onRequestDelete as sampleDataDelete } from "./functions/api/sample-data.js";
 import { onRequestGet as terminologyGet } from "./functions/api/terminology.js";
 import { onRequestGet as systemGuideGet } from "./functions/api/system-guide.js";
@@ -78,6 +79,11 @@ export default {
         const locked = mode === "block_all" || (mode === "billing_only" && !billingAllowed) || (mode === "read_only" && !["GET","HEAD","OPTIONS"].includes(request.method) && !readOnlyPaymentAllowed);
         if (locked) return Response.json({ ok:false, error: policySession.access_notice || "This school account is restricted by its subscription policy. Contact Navstar Analytics or open Billing & Support.", accessMode:mode }, { status:423, headers:{"Cache-Control":"no-store"} });
       }
+    }
+    if (route === "/api/platform-access") {
+      if (request.method === "GET") return platformAccessGet({ request, env });
+      if (request.method === "PATCH") return platformAccessPatch({ request, env });
+      return new Response("Method not allowed", { status: 405, headers: { Allow: "GET, PATCH" } });
     }
     if (route === "/api/platform-controls") {
       if (request.method === "GET") return platformControlsGet({ request, env });
