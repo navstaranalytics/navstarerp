@@ -757,9 +757,9 @@ $("gradingBoundaryScheme")?.addEventListener("change",renderGradingBoundaryTable
 async function loadAcademicSetup(){
  try{
   // Resolve form controls explicitly instead of relying on implicit window globals.
-  const electiveForm=$("learnerElectiveForm");
-  const electiveEnrollment=electiveForm?.elements.namedItem("enrollment_id");
-  const electiveArea=electiveForm?.elements.namedItem("learning_area_id");
+  const navstarLearnerAllocationForm=$("learnerElectiveForm");
+  const electiveEnrollment=navstarLearnerAllocationForm?.elements.namedItem("enrollment_id");
+  const electiveArea=navstarLearnerAllocationForm?.elements.namedItem("learning_area_id");
   const resourceNames=["years","terms","grades","streams","learning-areas","staff","grading-schemes","grade-boundaries","learners","enrollments"];
   const settled=await Promise.allSettled(resourceNames.map(x=>api("/api/data/"+x+(x==="grades"||x==="learning-areas"?"?schoolId="+encodeURIComponent(schoolId)+"&includeInactive=1":"?schoolId="+encodeURIComponent(schoolId)))));
   const cache={years:window.currentAcademicYears,terms:window.currentAcademicTerms,grades:window.currentSchoolGrades,streams:window.currentStreams,"learning-areas":window.currentLearningAreas,staff:window.currentSchoolStaff,"grading-schemes":window.currentGradingSchemes,"grade-boundaries":window.currentGradeBoundaries,learners:window.currentLearners,enrollments:window.currentEnrollments};const loaded={},failed=[];resourceNames.forEach((name,index)=>{const item=settled[index];if(item.status==="fulfilled"&&item.value&&item.value.ok!==false)loaded[name]=item.value;else{const previous=cache[name];loaded[name]={records:Array.isArray(previous)?previous:[]};const reason=item.status==="rejected"?String(item.reason?.message||"Could not load"):String(item.value?.error||"The server did not return a successful response");failed.push(name+": "+reason)}});const areasLoadFailed=failed.some(x=>x.startsWith("learning-areas:"));
