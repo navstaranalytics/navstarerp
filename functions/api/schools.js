@@ -84,10 +84,8 @@ export async function syncSchoolCurricula(db,schoolId,curricula,levels) {
  const managed=["Kenyan CBE","Kenyan 8-4-4"];
  for(const curriculum of managed){
   if(!curricula.includes(curriculum)){
-   await db.batch([
-    db.prepare("UPDATE grade_levels SET is_active=0 WHERE school_id=? AND curriculum=?").bind(schoolId,curriculum),
-    db.prepare("UPDATE learning_areas SET is_active=0 WHERE school_id=? AND curriculum=?").bind(schoolId,curriculum)
-   ]);
+   // A change to the current curriculum selection is not permission to remove
+   // existing school classes or learning areas. Keep all records untouched.
    continue;
   }
   const scoped=curriculum==="Kenyan 8-4-4"?levels.filter(x=>/^8-4-4/i.test(x)||/^Form [1-4]$/i.test(x)):levels.filter(x=>/^(Pre-Primary|Primary|Junior School|Senior School)$/i.test(x)||/^(Grade (?:[1-9]|1[0-2])|PP[12])$/i.test(x));
