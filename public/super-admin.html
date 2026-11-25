@@ -783,7 +783,25 @@ async function loadSignedInUser(){
   const response=await fetch('/api/auth/me',{credentials:'same-origin'});
   if(!response.ok){location.replace('/login');return}
   const data=await response.json();signedInUser=data.user;window.navstarStartIdleLogout(signedInUser.sessionIdleTimeoutMinutes);
-  $('accountButton').innerHTML=signedInUser.profilePhotoUrl?'<img src="'+esc(signedInUser.profilePhotoUrl)+'?v='+Date.now()+'" alt="Profile picture">':((signedInUser.fullName||'SA').split(/\\s+/).slice(0,2).map(x=>x[0]||'').join('').toUpperCase()||'SA');
+  const accountButton=$('accountButton');
+  if(accountButton){
+    accountButton.textContent=(signedInUser.fullName||'SA').split(/\\s+/).slice(0,2).map(x=>x[0]||'').join('').toUpperCase()||'SA';
+    if(signedInUser.profilePhotoUrl){
+      try{
+        // The private photo endpoint requires the tab-scoped X-Navstar-Session
+        // header; a native <img src> request cannot send that header.
+        const photoResponse=await fetch('/api/auth/profile-photo',{credentials:'same-origin',cache:'no-store'});
+        if(photoResponse.ok){
+          const photoBlob=await photoResponse.blob();
+          const photoObjectUrl=URL.createObjectURL(photoBlob);
+          const previous=accountButton.dataset.photoObjectUrl;
+          if(previous)URL.revokeObjectURL(previous);
+          accountButton.dataset.photoObjectUrl=photoObjectUrl;
+          accountButton.innerHTML='<img src="'+photoObjectUrl+'" alt="Profile picture">';
+        }
+      }catch(error){console.warn('Profile picture could not be displayed:',String(error?.message||error))}
+    }
+  }
   $('accountName').textContent=signedInUser.fullName||'Super Admin';
   $('accountEmail').textContent=signedInUser.email||signedInUser.username||'Platform owner';
 }
@@ -796,7 +814,7 @@ $('editProfile').addEventListener('click',()=>{
     try{
       if(photo&&photo.size){const fd=new FormData();fd.append('photo',photo);const up=await fetch('/api/auth/profile-photo',{method:'POST',credentials:'same-origin',body:fd});const ud=await up.json();if(!up.ok||!ud.ok){toast(ud.error||'Profile picture upload failed.');return}}
       const payload={fullName:d.get('fullName'),email:d.get('email'),phone:d.get('phone'),designation:d.get('designation'),organisationName:d.get('organisationName')};
-      const r=await fetch('/api/auth/profile',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});const data=await r.json();if(!r.ok||!data.ok){toast(data.error||'Profile could not be updated.');return}loadSignedInUser();closeModal();toast('Profile updated successfully.');
+      const r=await fetch('/api/auth/profile',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});const data=await r.json();if(!r.ok||!data.ok){toast(data.error||'Profile could not be updated.');return}await loadSignedInUser();closeModal();toast('Profile updated successfully.');
     }catch{toast('Profile update failed. Please try again.')}
   });
 });
