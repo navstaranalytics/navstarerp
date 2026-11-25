@@ -756,7 +756,7 @@ export async function onRequestPost({request,env}){
   if(name==="assessment-results"){
     const assessment=await env.DB.prepare("SELECT academic_year_id,grade_level_id,stream_id,pathway,max_score,mark_submission_deadline FROM assessments WHERE id=? AND school_id=?").bind(values.assessment_id,schoolId).first();
     if(!assessment)return json({ok:false,error:"Assessment not found in this school."},400);
-    const roleKeys=a.user.role_keys||[a.user.role_key],deadlinePassed=assessment.mark_submission_deadline&&Date.now()>Date.parse(String(assessment.mark_submission_deadline).slice(0,10)+"T23:59:59+03:00"),canOverride=!!a.user.is_super_admin||roleKeys.some(k=>["school_admin","school_administrator","principal","examinations_officer"].includes(k));
+    const roleKeys=a.user.role_keys||[a.user.role_key],deadlinePassed=assessment.mark_submission_deadline&&Date.now()>Date.parse(String(assessment.mark_submission_deadline).slice(0,10)+"T23:59:59+03:00"),canOverride=!!a.user.is_super_admin||roleKeys.some(k=>["school_admin","school_administrator"].includes(k));
     if(deadlinePassed&&!canOverride)return json({ok:false,error:"The mark submission deadline has passed. Contact the School Administrator or Examinations Officer for an authorised override."},403);
     if(deadlinePassed&&canOverride)await audit(env.DB,a.user,schoolId,"assessment.deadline.override","assessment",values.assessment_id);
     if(values.score!==undefined&&values.score!==null&&(Number(values.score)<0||Number(values.score)>Number(assessment.max_score)))return json({ok:false,error:"Score must be between zero and the assessment maximum."},400);
