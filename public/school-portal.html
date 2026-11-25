@@ -402,12 +402,12 @@ $("downloadLearnerCsvTemplate").addEventListener("click",async()=>{
   if(!gradeRows.length)throw new Error("No active classes are configured. Add or activate classes first.");
   const today=new Date(Date.now()+3*60*60*1000).toISOString().slice(0,10);
   const year=yearRows.find(x=>x.id===window.navstarCurrentAcademicYearId)||yearRows.find(x=>x.start_date<=today&&x.end_date>=today)||yearRows[0];
-  const headers=["admission_number","first_name","middle_name","last_name","gender","date_of_birth","status","pathway","academic_year","grade","stream"];
+  const headers=["admission_number","first_name","middle_name","last_name","gender","date_of_birth","status","pathway","academic_year","curriculum","grade","stream"];
   const csvRows=[];
   for(const grade of gradeRows){
    const className=schoolGradeLabel(grade),linked=streamRows.filter(s=>s.grade_level_id===grade.id);
    const choices=linked.length?linked:[null];
-   for(const stream of choices)csvRows.push(["","","","","","","active","",year.name,className,stream?.name||""]);
+   for(const stream of choices)csvRows.push(["","","","","","","active","",year.name,grade.curriculum||"",className,stream?.name||""]);
   }
   const csv=[headers.join(","),...csvRows.map(row=>row.map(csvCell).join(","))].join("\r\n");
   const blob=new Blob(["\uFEFF"+csv],{type:"text/csv;charset=utf-8"}),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download="navstar-learner-registration-template.csv";a.click();URL.revokeObjectURL(url);
