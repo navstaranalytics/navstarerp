@@ -1,3 +1,4 @@
+import { syncSchoolCurricula } from "./schools.js";
 import { getSuperAdminSession } from "./auth.js";
 const json=(data,status=200)=>Response.json(data,{status,headers:{"Cache-Control":"no-store"}});
 const allowed=new Set(["terminology","subscription_policy","scheduled_automations","system_guide","session_policy","learning_area_catalogue"]);
@@ -35,6 +36,20 @@ export async function onRequestPost({request,env}){
  }
  try{
   await env.DB.prepare("INSERT INTO platform_settings(setting_key,setting_value,updated_by,updated_at) VALUES(?,?,?,strftime('%Y-%m-%dT%H:%M:%fZ','now')) ON CONFLICT(setting_key) DO UPDATE SET setting_value=excluded.setting_value,updated_by=excluded.updated_by,updated_at=excluded.updated_at").bind(key,JSON.stringify(value),user.id).run();
+  if(key==="learning_area_catalogue"){
+   const schools=await env.DB.prepare("SELECT id,curriculum,curricula_json,school_levels_json FROM schools ORDER BY created_at").all();
+   const results={total:(schools.results||[]).length,synced:0,failed:[]};
+   for(const school of schools.results||[]){
+    let curricula=[],levels=[];
+    try{curricula=JSON.parse(school.curricula_json||"[]")}catch{}
+    if(!Array.isArray(curricula)||!curricula.length)curricula=[school.curriculum||"Kenyan CBE"];
+    try{levels=JSON.parse(school.school_levels_json||"[]")}catch{}
+    if(!Array.isArray(levels))levels=[];
+    try{await syncSchoolCurricula(env.DB,school.id,curricula,levels);results.synced++}
+    catch(error){results.failed.push({school_id:school.id,error:String(error?.message||"Academic catalogue synchronization failed.")});console.error("NAVSTAR catalogue sync failed for school",school.id,error)}
+   }
+   return json({ok:true,message:results.failed.length?"Catalogue saved centrally; some school synchronizations need attention.":"Catalogue saved centrally and synchronized to all configured schools.",sync:results});
+  }
   return json({ok:true,message:"Platform control saved centrally."});
  }catch(error){console.error("NAVSTAR platform controls save",error);return json({ok:false,error:"Could not save platform control."},500)}
 }
