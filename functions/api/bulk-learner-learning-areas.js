@@ -51,7 +51,7 @@ export async function onRequestPost({request,env}){
  }
  if(problems.length)return json({ok:false,imported:0,failed:problems.length,problems,message:"No learner learning-area changes were saved. Correct the highlighted rows and upload again."},422);
  try{
-  const statements=[];for(const x of prepared)for(const a of x.areas)statements.push(env.DB.prepare("INSERT INTO learner_learning_areas(id,school_id,enrollment_id,learner_id,learning_area_id,selection_type,status) VALUES(?,?,?,?,?,?, 'active') ON CONFLICT(enrollment_id,learning_area_id) DO UPDATE SET status='active',selection_type=excluded.selection_type").bind(id(),schoolId,x.enrollmentId,x.learnerId,a.id,Number(a.is_mandatory)===1?"mandatory":"elective"));
+  const statements=[];for(const x of prepared)for(const a of x.areas)statements.push(env.DB.prepare("INSERT INTO learner_learning_areas(id,school_id,enrollment_id,learner_id,learning_area_id,selection_type,status) VALUES(?,?,?,?,?,?, 'active') ON CONFLICT(enrollment_id,learning_area_id) DO UPDATE SET status=CASE WHEN learner_learning_areas.status='completed' THEN 'completed' ELSE 'active' END,selection_type=excluded.selection_type").bind(id(),schoolId,x.enrollmentId,x.learnerId,a.id,Number(a.is_mandatory)===1?"mandatory":"elective"));
   for(let i=0;i<statements.length;i+=80)await env.DB.batch(statements.slice(i,i+80));
   return json({ok:true,imported:prepared.length,assignments:statements.length,failed:0,message:"Learning areas allocated to "+prepared.length+" learners. "+statements.length+" subject assignments saved."},201);
  }catch(e){console.error("Bulk learner learning-area allocation",e);return json({ok:false,error:"Learning-area assignments could not be saved. Check the allocation list before retrying."},500)}
