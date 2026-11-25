@@ -322,9 +322,13 @@ async function validateLearningAreaClassAndPathway(db,name,schoolId,values,curre
  if(!allPathways&&!usesPathways)return "This pathway learning area is only available in CBE Senior School.";
  if(!allPathways&&name!=="teacher-allocations"&&name!=="assessments")return "Choose a pathway-specific learning area through its Senior School pathway workflow.";
  if(!allPathways&&(!selectedPath||selectedPath!==areaPath))return "The selected learning area belongs to the "+area.pathway+" pathway. Select the matching pathway first.";
- if(name==="teacher-allocations"){
+ if(["teacher-allocations","timetable"].includes(name)){
   const staffId=values.staff_id??current.staff_id,code=await db.prepare("SELECT COALESCE(NULLIF(catalogue_code,''),NULLIF(code,''),name) AS subject_code FROM learning_areas WHERE id=? AND school_id=?").bind(areaId,schoolId).first();
-  const combination=staffId&&code?await db.prepare("SELECT id FROM staff_learning_areas WHERE school_id=? AND staff_id=? AND curriculum=? AND lower(learning_area_code)=lower(?) AND status='active'").bind(schoolId,staffId,grade.curriculum,code.subject_code).first():null;
+  const teacher=staffId?await db.prepare("SELECT is_teacher FROM staff_profiles WHERE id=? AND school_id=? AND employment_status='active'").bind(staffId,schoolId).first():null;
+  if(!teacher||Number(teacher.is_teacher)!==1)return "Select an active teacher profile. Non-teaching staff cannot receive subject allocations.";
+  const comboCount=await db.prepare("SELECT COUNT(*) AS total FROM staff_learning_areas WHERE school_id=? AND staff_id=? AND status='active'").bind(schoolId,staffId).first();
+  if(Number(comboCount?.total||0)<2)return "This teacher must have at least two subjects in their teaching combination before allocation.";
+  const combination=code?await db.prepare("SELECT id FROM staff_learning_areas WHERE school_id=? AND staff_id=? AND curriculum=? AND lower(learning_area_code)=lower(?) AND status='active'").bind(schoolId,staffId,grade.curriculum,code.subject_code).first():null;
   if(!combination)return "This teacher has not selected this learning area in their teaching combination. Update the teacher profile first.";
  }
  return null;
