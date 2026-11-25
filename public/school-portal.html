@@ -336,7 +336,24 @@ const $=id=>document.getElementById(id),esc=v=>String(v??"—").replace(/[&<>"']
 function academicPeriodCardHtml(p={}){const y=p.academicYear||null,t=p.term||null,w=p.weekLabel||(p.weekNumber?"Week "+p.weekNumber:"—");return '<div id="academicPeriodBanner" class="panel academic-period-panel"><div class="panelbody" style="display:flex;gap:14px;align-items:center;justify-content:space-between;flex-wrap:wrap"><div><span class="eyebrow">CURRENT ACADEMIC PERIOD</span><div style="font-size:18px;font-weight:850">'+esc(y?.name||"No current academic year")+'</div><small class="muted">'+esc(y?y.start_date+" to "+y.end_date:"School has not set current academic-year dates")+'</small></div><div><span class="muted">Current term</span><div style="font-size:16px;font-weight:800">'+esc(t?.name||"No current term")+'</div><small class="muted">'+esc(t?t.start_date+" to "+t.end_date:"Term dates determine the current term")+'</small></div><div><span class="muted">School week</span><div style="font-size:21px;font-weight:900;color:var(--blue)">'+esc(w)+'</div><small class="muted">'+esc(t?.start_date?"Counted from term start":y?.start_date?"Counted from academic-year start":"No active calendar period")+'</small></div></div></div>'}
 async function loadAcademicPeriod(){try{const p=await api("/api/academic-period");window.navstarCurrentAcademicYearId=p.academicYear?.id||"";window.navstarCurrentTermId=p.term?.id||"";const host=$("academicPeriodBanner");if(host)host.outerHTML=academicPeriodCardHtml(p)}catch(e){console.warn("Academic period unavailable",e)}}
 function relocateSchoolSettingsPanels(){const move=(selector,target)=>{const node=document.querySelector(selector)?.closest(".panel"),host=$(target);if(node&&host&&!host.contains(node))host.append(node)};move('#academic form[data-create-resource="years"]',"settingsAcademicCalendar");move('#academic form[data-create-resource="terms"]',"settingsAcademicCalendar");move('#academic #gradingSchemesList',"settingsGrading");move('#academic #areasList',"learningAreasContent");}
-relocateSchoolSettingsPanels();
+function setupLearningAreasTabs(){
+ const host=$("learningAreasContent"),panel=host?.querySelector(":scope > .panel"),body=panel?.querySelector(":scope > .panelbody");
+ if(!body||body.dataset.learningTabsReady==="1")return;
+ const addPanel=$("primaryLearningAreaPanel"),catalogue=$("areasList"),allocation=$("learnerElectiveSection");
+ if(!addPanel||!catalogue||!allocation)return;
+ const tabs=document.createElement("div");tabs.className="workspace-subtabs";tabs.id="learningAreasSubtabs";tabs.setAttribute("role","tablist");tabs.setAttribute("aria-label","Learning Areas sections");
+ const paneHost=document.createElement("div");paneHost.id="learningAreasPanes";
+ const definitions=[["catalogue","Learning Area Catalogue"],["add","Add Learning Area"],["allocation","Learner Allocation"]];
+ for(let i=0;i<definitions.length;i++){
+  const [key,label]=definitions[i],button=document.createElement("button");button.type="button";button.textContent=label;button.dataset.learningAreaTab=key;button.setAttribute("role","tab");button.setAttribute("aria-selected",i===0?"true":"false");button.classList.toggle("active",i===0);tabs.appendChild(button);
+  const pane=document.createElement("div");pane.dataset.learningAreaPane=key;pane.classList.toggle("hidden",i!==0);paneHost.appendChild(pane);
+ }
+ const panes=Object.fromEntries(Array.from(paneHost.children).map(p=>[p.dataset.learningAreaPane,p]));
+ panes.catalogue.append(catalogue);panes.add.append(addPanel);panes.allocation.append(allocation);
+ body.dataset.learningTabsReady="1";body.insertBefore(paneHost,body.firstChild);body.insertBefore(tabs,paneHost);
+ tabs.addEventListener("click",event=>{const button=event.target.closest("[data-learning-area-tab]");if(!button)return;const key=button.dataset.learningAreaTab;tabs.querySelectorAll("[data-learning-area-tab]").forEach(item=>{const active=item===button;item.classList.toggle("active",active);item.setAttribute("aria-selected",active?"true":"false")});paneHost.querySelectorAll("[data-learning-area-pane]").forEach(pane=>pane.classList.toggle("hidden",pane.dataset.learningAreaPane!==key))});
+}
+relocateSchoolSettingsPanels();setupLearningAreasTabs();
 $("settingsSubtabs")?.addEventListener("click",e=>{const b=e.target.closest("[data-settings-target]");if(!b)return;const id=b.dataset.settingsTarget;document.querySelectorAll("#settingsSubtabs [data-settings-target]").forEach(x=>{const active=x===b;x.classList.toggle("active",active);x.setAttribute("aria-selected",active?"true":"false")});document.querySelectorAll("#school-settings .settings-pane").forEach(x=>x.classList.toggle("hidden",x.id!==id))});
 document.addEventListener("click",e=>{if(e.target.closest("[data-open-learning-areas]"))switchView("learning-areas")});
 $("refreshLearningAreas")?.addEventListener("click",async()=>{const b=$("refreshLearningAreas");b.disabled=true;try{await loadAcademicSetup();message("notice","Learning-area catalogue refreshed from the latest school-level assignments.")}catch(e){message("notice",e.message,true)}finally{b.disabled=false}});
@@ -739,6 +756,10 @@ async function saveGradingBoundaryRows(){const scheme=(window.currentGradingSche
 $("gradingBoundaryScheme")?.addEventListener("change",renderGradingBoundaryTable);$("addGradingRow")?.addEventListener("click",addGradingBoundaryRow);$("saveGradingRows")?.addEventListener("click",saveGradingBoundaryRows);$("gradingBoundaryGrid")?.addEventListener("click",e=>{const b=e.target.closest("[data-remove-boundary]");if(b)b.closest("tr").remove()});
 async function loadAcademicSetup(){
  try{
+  // Resolve form controls explicitly instead of relying on implicit window globals.
+  const electiveForm=$("learnerElectiveForm");
+  const electiveEnrollment=electiveForm?.elements.namedItem("enrollment_id");
+  const electiveArea=electiveForm?.elements.namedItem("learning_area_id");
   const resourceNames=["years","terms","grades","streams","learning-areas","staff","grading-schemes","grade-boundaries","learners","enrollments"];
   const settled=await Promise.allSettled(resourceNames.map(x=>api("/api/data/"+x+(x==="grades"||x==="learning-areas"?"?schoolId="+encodeURIComponent(schoolId)+"&includeInactive=1":"?schoolId="+encodeURIComponent(schoolId)))));
   const cache={years:window.currentAcademicYears,terms:window.currentAcademicTerms,grades:window.currentSchoolGrades,streams:window.currentStreams,"learning-areas":window.currentLearningAreas,staff:window.currentSchoolStaff,"grading-schemes":window.currentGradingSchemes,"grade-boundaries":window.currentGradeBoundaries,learners:window.currentLearners,enrollments:window.currentEnrollments};const loaded={},failed=[];resourceNames.forEach((name,index)=>{const item=settled[index];if(item.status==="fulfilled"&&item.value&&item.value.ok!==false)loaded[name]=item.value;else{const previous=cache[name];loaded[name]={records:Array.isArray(previous)?previous:[]};const reason=item.status==="rejected"?String(item.reason?.message||"Could not load"):String(item.value?.error||"The server did not return a successful response");failed.push(name+": "+reason)}});const areasLoadFailed=failed.some(x=>x.startsWith("learning-areas:"));
