@@ -511,6 +511,7 @@ export async function onRequestPost({request,env}){
       const placeholders=gradeIds.map(()=>"?").join(",");
       const grades=await env.DB.prepare("SELECT id,stage_code,school_level FROM grade_levels WHERE school_id=? AND curriculum=? AND is_active=1 AND id IN ("+placeholders+")").bind(schoolId,curriculum,...gradeIds).all();
       if((grades.results||[]).length!==gradeIds.length)return json({ok:false,error:"One or more selected classes are inactive or belong to another curriculum."},409);
+      if(body.department_id){const department=await env.DB.prepare("SELECT id FROM school_departments WHERE id=? AND school_id=? AND status='active'").bind(String(body.department_id),schoolId).first();if(!department)return json({ok:false,error:"Choose an active department belonging to this school."},409);}
       const phase=g=>{const code=String(g.stage_code||"").toUpperCase();if(/cbe|cbc|competency/i.test(curriculum)){if(/^PP[12]$/.test(code))return "Pre-Primary";if(/^G[1-6]$/.test(code))return "Primary";if(/^G[7-9]$/.test(code))return "Junior School";if(/^G1[0-2]$/.test(code))return "Senior School"}if(/8-4-4|844/i.test(curriculum)){if(/^STD[1-8]$/.test(code))return "Primary";if(/^(FORM|F)[1-4]$/.test(code))return "Secondary"}return String(g.school_level||"Other").toLowerCase()};
       if(new Set((grades.results||[]).map(phase)).size!==1)return json({ok:false,error:"All selected classes must belong to the same curriculum school level."},400);
       const senior=(grades.results||[]).every(g=>/senior|secondary/i.test(String(g.school_level||""))||/^G1[0-2]$/.test(String(g.stage_code||"")));
@@ -954,6 +955,7 @@ export async function onRequestPatch({request,env}){
     const schoolId=cfg.scope?(a.user.is_super_admin?requested:a.user.school_id):"";
     if(cfg.scope&&!schoolId)return json({ok:false,error:"schoolId is required for school records."},400);
     if(cfg.scope&&!a.user.is_super_admin&&requested&&requested!==a.user.school_id)return json({ok:false,error:"You cannot update records in another school."},403);
+    if(name==="learning-areas"&&values.department_id){const department=await env.DB.prepare("SELECT id FROM school_departments WHERE id=? AND school_id=? AND status='active'").bind(String(values.department_id),schoolId).first();if(!department)return json({ok:false,error:"Choose an active department belonging to this school."},409);}
     const current=await env.DB.prepare("SELECT * FROM "+cfg.table+" WHERE "+where).bind(...(cfg.scope?[recordId,schoolId]:[recordId])).first();
     if(!current)return json({ok:false,error:"Record not found in the selected school."},404);
     if(name==="learners"){
