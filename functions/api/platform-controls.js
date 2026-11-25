@@ -1,10 +1,10 @@
 import { syncSchoolCurricula } from "./schools.js";
 import { getSuperAdminSession } from "./auth.js";
 const json=(data,status=200)=>Response.json(data,{status,headers:{"Cache-Control":"no-store"}});
-const allowed=new Set(["terminology","subscription_policy","scheduled_automations","system_guide","session_policy","learning_area_catalogue"]);
+const allowed=new Set(["terminology","subscription_policy","scheduled_automations","system_guide","session_policy","learning_area_catalogue","maintenance_mode"]);
 export async function onRequestGet({request,env}){
  const user=await getSuperAdminSession(request,env);if(!user)return json({ok:false,error:"Only Super Admin can manage platform terminology and access policies."},403);
- try{const rows=await env.DB.prepare("SELECT setting_key,setting_value,updated_at FROM platform_settings WHERE setting_key IN ('terminology','subscription_policy','scheduled_automations','system_guide','session_policy','learning_area_catalogue')").all();const settings={};for(const row of rows.results||[]){try{settings[row.setting_key]=JSON.parse(row.setting_value)}catch{settings[row.setting_key]=row.setting_value}}if(!Array.isArray(settings.learning_area_catalogue)){const catalogue=await env.DB.prepare("SELECT DISTINCT curriculum,stage_code AS level,code,name,pathway,is_mandatory AS mandatory FROM learning_areas WHERE is_active=1 AND COALESCE(school_customized,0)=0 ORDER BY curriculum,stage_code,name LIMIT 5000").all().catch(()=>({results:[]}));settings.learning_area_catalogue=(catalogue.results||[]).map(x=>({...x,mandatory:Number(x.mandatory)===1?1:0}));}const runs=await env.DB.prepare("SELECT task_key,status,started_at,finished_at,summary_json,error_message FROM platform_automation_runs ORDER BY started_at DESC LIMIT 12").all().catch(()=>({results:[]}));return json({ok:true,settings,automationRuns:runs.results||[]})}
+ try{const rows=await env.DB.prepare("SELECT setting_key,setting_value,updated_at FROM platform_settings WHERE setting_key IN ('terminology','subscription_policy','scheduled_automations','system_guide','session_policy','learning_area_catalogue','maintenance_mode')").all();const settings={};for(const row of rows.results||[]){try{settings[row.setting_key]=JSON.parse(row.setting_value)}catch{settings[row.setting_key]=row.setting_value}}if(!Array.isArray(settings.learning_area_catalogue)){const catalogue=await env.DB.prepare("SELECT DISTINCT curriculum,stage_code AS level,code,name,pathway,is_mandatory AS mandatory FROM learning_areas WHERE is_active=1 AND COALESCE(school_customized,0)=0 ORDER BY curriculum,stage_code,name LIMIT 5000").all().catch(()=>({results:[]}));settings.learning_area_catalogue=(catalogue.results||[]).map(x=>({...x,mandatory:Number(x.mandatory)===1?1:0}));}const runs=await env.DB.prepare("SELECT task_key,status,started_at,finished_at,summary_json,error_message FROM platform_automation_runs ORDER BY started_at DESC LIMIT 12").all().catch(()=>({results:[]}));return json({ok:true,settings,automationRuns:runs.results||[]})}
  catch(error){console.error("NAVSTAR platform controls read",error);return json({ok:false,error:"Could not load platform controls."},500)}
 }
 export async function onRequestPost({request,env}){
@@ -12,6 +12,10 @@ export async function onRequestPost({request,env}){
  let body;try{body=await request.json()}catch{return json({ok:false,error:"Invalid settings payload."},400)}
  const key=String(body.key||"");if(!allowed.has(key))return json({ok:false,error:"Unsupported platform control."},400);
  let value=body.value;if(!value||typeof value!=="object"||Array.isArray(value))return json({ok:false,error:"Settings must be a JSON object."},400);
+ if(key==="maintenance_mode"){
+  if(typeof value.enabled!=="boolean"||String(value.message||"").length>500)return json({ok:false,error:"Maintenance mode requires an enabled/disabled choice and a notice of no more than 500 characters."},400);
+  value={enabled:value.enabled,message:String(value.message||"Navstar is temporarily undergoing scheduled maintenance. Please try again shortly.").trim()||"Navstar is temporarily undergoing scheduled maintenance. Please try again shortly.",updated_at:new Date().toISOString()};
+ }
  if(key==="session_policy"){
   const minutes=Number(value.idle_timeout_minutes);
   if(!Number.isInteger(minutes)||minutes<5||minutes>480)return json({ok:false,error:"Inactive session timeout must be between 5 and 480 minutes."},400);
@@ -49,6 +53,11 @@ export async function onRequestPost({request,env}){
     catch(error){results.failed.push({school_id:school.id,error:String(error?.message||"Academic catalogue synchronization failed.")});console.error("NAVSTAR catalogue sync failed for school",school.id,error)}
    }
    return json({ok:true,message:results.failed.length?"Catalogue saved centrally; some school synchronizations need attention.":"Catalogue saved centrally and synchronized to all configured schools.",sync:results});
+  }
+  if(key==="maintenance_mode"){
+   await env.DB.prepare("UPDATE auth_sessions SET revoked_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE revoked_at IS NULL AND user_id IN (SELECT a.user_id FROM user_role_assignments a JOIN roles r ON r.id=a.role_id WHERE a.school_id IS NOT NULL AND r.role_key<>'super_admin')").run().catch(()=>{});
+   try{await env.DB.prepare("INSERT INTO audit_logs(id,actor_user_id,action,resource_type,outcome,details_json) VALUES(?,?,'platform.maintenance.changed','platform','success',?)").bind(crypto.randomUUID(),user.id,JSON.stringify({enabled:value.enabled,message:value.message})).run()}catch{}
+   return json({ok:true,message:value.enabled?"Maintenance mode is ON. School logins and active school sessions are blocked. Super Admin access remains available.":"Maintenance mode is OFF. School access is restored.",maintenance:value});
   }
   return json({ok:true,message:"Platform control saved centrally."});
  }catch(error){console.error("NAVSTAR platform controls save",error);return json({ok:false,error:"Could not save platform control."},500)}
