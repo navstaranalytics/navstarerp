@@ -394,6 +394,40 @@ async function validateAcademicCalendarDates(db,name,schoolId,values,currentId=n
 }
 export async function onRequestPost({request,env}){
   const a=await auth(request,env);if(a.error)return a.error;
+  const pathParts=new URL(request.url).pathname.split("/").filter(Boolean);
+  if(pathParts.slice(-2).join("/") === "grade-boundaries/bulk"){
+    if(!allowed(a.user,permissionFor("grade-boundaries",true)))return json({ok:false,error:"Your role does not have permission to change grading boundaries."},403);
+    await ensureGradeBoundaryScope(env.DB);
+    let body;try{body=await request.json()}catch{return json({ok:false,error:"Invalid grading table data."},400)}
+    const schoolId=a.user.is_super_admin?String(body.school_id||""):a.user.school_id;
+    const records=Array.isArray(body.records)?body.records:[];
+    if(!schoolId)return json({ok:false,error:"School workspace is required."},400);
+    if(!a.user.is_super_admin&&body.school_id&&body.school_id!==a.user.school_id)return json({ok:false,error:"You cannot update another school."},403);
+    if(!records.length||records.length>100)return json({ok:false,error:"Submit between 1 and 100 grading rows."},400);
+    try{
+      const schemeIds=[...new Set(records.map(x=>String(x.scheme_id||"")))];
+      if(schemeIds.length!==1||!schemeIds[0])return json({ok:false,error:"All rows must belong to one grading scheme."},400);
+      const scheme=await env.DB.prepare("SELECT id FROM grading_schemes WHERE id=? AND school_id=?").bind(schemeIds[0],schoolId).first();
+      if(!scheme)return json({ok:false,error:"The selected grading scheme does not belong to this school."},400);
+      const statements=[],ids=[];
+      for(let index=0;index<records.length;index++){
+        const row=records[index],min=Number(row.min_score),max=Number(row.max_score),points=row.points===null||row.points===""||row.points===undefined?null:Number(row.points),label=clean(row.label),idValue=row.id?String(row.id):id();
+        if(!label||!Number.isFinite(min)||!Number.isFinite(max)||min<0||max>100||min>max||(points!==null&&!Number.isFinite(points)))return json({ok:false,error:"Invalid grading values in row "+(index+1)+"."},400);
+        if(row.id){const current=await env.DB.prepare("SELECT id FROM grade_boundaries WHERE id=? AND school_id=? AND scheme_id=?").bind(idValue,schoolId,schemeIds[0]).first();if(!current)return json({ok:false,error:"Grading row "+(index+1)+" no longer exists. Refresh the table before saving."},409);
+          statements.push(env.DB.prepare("UPDATE grade_boundaries SET label=?,min_score=?,max_score=?,points=?,descriptor=?,rubric=?,remark=? WHERE id=? AND school_id=? AND scheme_id=?").bind(label,min,max,points,row.descriptor||null,row.rubric||null,row.remark||null,idValue,schoolId,schemeIds[0]));
+        }else statements.push(env.DB.prepare("INSERT INTO grade_boundaries(id,school_id,scheme_id,label,min_score,max_score,points,descriptor,rubric,remark) VALUES(?,?,?,?,?,?,?,?,?,?)").bind(idValue,schoolId,schemeIds[0],label,min,max,points,row.descriptor||null,row.rubric||null,row.remark||null));
+        ids.push(idValue);
+      }
+      const sorted=records.map(x=>({label:clean(x.label),min:Number(x.min_score),max:Number(x.max_score)})).sort((x,y)=>x.min-y.min);
+      for(let i=1;i<sorted.length;i++)if(sorted[i].min<=sorted[i-1].max)return json({ok:false,error:"Grading ranges overlap between "+sorted[i-1].label+" and "+sorted[i].label+"."},400);
+      await env.DB.batch(statements);
+      const placeholders=ids.map(()=>"?").join(",");
+      const saved=await env.DB.prepare("SELECT id,school_id,scheme_id,label,min_score,max_score,points,descriptor,rubric,remark FROM grade_boundaries WHERE school_id=? AND scheme_id=? AND id IN ("+placeholders+")").bind(schoolId,schemeIds[0],...ids).all();
+      if((saved.results||[]).length!==ids.length)throw new Error("Not all grading rows could be read back after saving.");
+      await audit(env.DB,a.user,schoolId,"grading.boundaries.saved","grading_scheme",schemeIds[0]);
+      return json({ok:true,savedCount:ids.length,records:saved.results});
+    }catch(error){console.error("NAVSTAR bulk grading save",error);return json({ok:false,error:String(error?.message||"The grading table could not be saved. No partial update was committed.")},500)}
+  }
   const name=new URL(request.url).pathname.split("/").pop(),cfg=resources[name];
   if(!cfg)return json({ok:false,error:"Unknown data resource."},404);
   if(!allowed(a.user,permissionFor(name,true)))return json({ok:false,error:"Your role does not have permission to change this resource."},403);
