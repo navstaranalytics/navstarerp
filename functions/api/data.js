@@ -229,7 +229,7 @@ function canonicalCurriculum(value){
 async function findDuplicateGrade(db,schoolId,values,currentId=""){
  const curriculum=canonicalCurriculum(values.curriculum),stage=canonicalStageIdentity(values.stage_code,values.stage_name);
  if(!curriculum||!stage)return null;
- const rows=await db.prepare("SELECT id,curriculum,stage_code,stage_name FROM grade_levels WHERE school_id=? AND id<>?").bind(schoolId,currentId||"").all();
+ const rows=await db.prepare("SELECT id,curriculum,stage_code,stage_name FROM grade_levels WHERE school_id=? AND id<>? AND COALESCE(is_archived,0)=0").bind(schoolId,currentId||"").all();
  return (rows.results||[]).find(row=>canonicalCurriculum(row.curriculum)===curriculum&&canonicalStageIdentity(row.stage_code,row.stage_name)===stage)||null;
 }
 function validateGradeCurriculum(values){
@@ -388,6 +388,7 @@ export async function onRequestGet({request,env}){
       return json({ok:true,records:rows.results||[]});
     }
     let sql="SELECT * FROM "+cfg.table+(cfg.scope?" WHERE school_id=?":"");
+    if(name==="grades")sql+=" AND COALESCE(is_archived,0)=0";
     if(name==="grades"&&!a.user.is_super_admin&&!url.searchParams.has("includeInactive"))sql+=" AND is_active=1";
     if(name==="streams"&&!a.user.is_super_admin&&!url.searchParams.has("includeInactive"))sql+=" AND status='active'";
     if(name==="learning-areas"&&!a.user.is_super_admin){
@@ -737,7 +738,7 @@ export async function onRequestDelete({request,env}){
       const attendanceCount=Number((await env.DB.prepare("SELECT COUNT(*) AS total FROM attendance_sessions WHERE school_id=? AND grade_level_id=?").bind(schoolId,recordId).first())?.total||0);
       if(attendanceCount>0){
         await env.DB.prepare("UPDATE attendance_sessions SET status='archived' WHERE school_id=? AND grade_level_id=?").bind(schoolId,recordId).run();
-        await env.DB.prepare("UPDATE grade_levels SET is_active=0 WHERE id=? AND school_id=?").bind(recordId,schoolId).run();
+        await env.DB.prepare("UPDATE grade_levels SET is_active=0,is_archived=1 WHERE id=? AND school_id=?").bind(recordId,schoolId).run();
         await audit(env.DB,a.user,schoolId,"record.archived","grades",recordId);
         return json({ok:true,message:"Class archived and removed from active choices. "+attendanceCount+" attendance session(s) were archived with their attendance records preserved. You can create a replacement class with the same name."});
       }
@@ -757,7 +758,7 @@ export async function onRequestDelete({request,env}){
       if(protectedRefs.length)return json({ok:false,error:"This class is still linked to non-enrolment records ("+protectedRefs.join("; ")+"). Those records must be reassigned or archived before deleting the class."},409);
       const remaining=await env.DB.prepare("SELECT COUNT(*) AS total FROM learner_enrollments WHERE school_id=? AND grade_level_id=?").bind(schoolId,recordId).first();
       if(Number(remaining?.total||0)>0){
-        await env.DB.prepare("UPDATE grade_levels SET is_active=0 WHERE id=? AND school_id=?").bind(recordId,schoolId).run();
+        await env.DB.prepare("UPDATE grade_levels SET is_active=0,is_archived=1 WHERE id=? AND school_id=?").bind(recordId,schoolId).run();
         await audit(env.DB,a.user,schoolId,"record.archived","grades",recordId);
         return json({ok:true,message:"Class removed from active school choices. Historical enrolments and academic records have been preserved in the archived class."});
       }
