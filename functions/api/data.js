@@ -13,7 +13,7 @@ const resources={
   terms:{table:"terms",scope:true,fields:["academic_year_id","name","start_date","end_date","status"],required:["school_id","academic_year_id","name","start_date","end_date"],refs:{academic_year_id:"academic_years"}},
   grades:{table:"grade_levels",scope:true,fields:["curriculum","stage_code","stage_name","stage_order","school_level","is_active"],required:["school_id","stage_code","stage_name"]},
   streams:{table:"streams",scope:true,fields:["grade_level_id","name","capacity","classroom","status"],required:["school_id","grade_level_id","name"],refs:{grade_level_id:"grade_levels"}},
-  "learning-areas":{table:"learning_areas",scope:true,fields:["curriculum","code","name","stage_code","pathway","is_active","subject_type","is_mandatory","source_template","catalogue_code","school_customized"],required:["school_id","name"]},
+  "learning-areas":{table:"learning_areas",scope:true,fields:["curriculum","code","name","stage_code","pathway","is_active","subject_type","is_mandatory","source_template","catalogue_code","school_customized","department_id"],required:["school_id","name"]},
   "learner-learning-areas":{table:"learner_learning_areas",scope:true,fields:["enrollment_id","learner_id","learning_area_id","selection_type","selected_by","status"],required:["school_id","enrollment_id","learner_id","learning_area_id"],refs:{enrollment_id:"learner_enrollments",learner_id:"learners",learning_area_id:"learning_areas"}},
   staff:{table:"staff_profiles",scope:true,fields:["user_id","staff_number","department","employment_type","employment_status","hire_date","profile_json","is_teacher"],required:["school_id"],refs:{user_id:"users"}},
   "staff-learning-areas":{table:"staff_learning_areas",scope:true,fields:["staff_id","curriculum","learning_area_code","learning_area_name","status"],required:["school_id","staff_id","curriculum","learning_area_code","learning_area_name"],refs:{staff_id:"staff_profiles"}},
@@ -517,8 +517,8 @@ export async function onRequestPost({request,env}){
       if(pathway&&!senior)return json({ok:false,error:"Choose a pathway only when adding a learning area to CBE Senior School."},400);
       const duplicates=await env.DB.prepare("SELECT stage_code FROM learning_areas WHERE school_id=? AND curriculum=? AND upper(COALESCE(NULLIF(code,''),catalogue_code,''))=? AND COALESCE(pathway,'')=COALESCE(?,'') AND stage_code IN ("+placeholders+")").bind(schoolId,curriculum,code,pathway,...(grades.results||[]).map(g=>g.stage_code)).all();
       if((duplicates.results||[]).length)return json({ok:false,error:"This subject code already exists in one or more classes in the selected level. Refresh the catalogue and choose a different code."},409);
-      const records=(grades.results||[]).map(g=>({id:id(),school_id:schoolId,curriculum,stage_code:g.stage_code,name,code,catalogue_code:code,pathway,is_active:1,is_mandatory:isMandatory,subject_type:clean(body.subject_type)||"learning_area",source_template:"school_custom",school_customized:1}));
-      await env.DB.batch(records.map(x=>env.DB.prepare("INSERT INTO learning_areas(id,school_id,curriculum,stage_code,name,code,catalogue_code,pathway,is_active,is_mandatory,subject_type,source_template,school_customized) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)").bind(x.id,x.school_id,x.curriculum,x.stage_code,x.name,x.code,x.catalogue_code,x.pathway,x.is_active,x.is_mandatory,x.subject_type,x.source_template,x.school_customized)));
+      const records=(grades.results||[]).map(g=>({id:id(),school_id:schoolId,curriculum,stage_code:g.stage_code,name,code,catalogue_code:code,pathway,is_active:1,is_mandatory:isMandatory,subject_type:clean(body.subject_type)||"learning_area",source_template:"school_custom",school_customized:1,department_id:clean(body.department_id)||null}));
+      await env.DB.batch(records.map(x=>env.DB.prepare("INSERT INTO learning_areas(id,school_id,curriculum,stage_code,name,code,catalogue_code,pathway,is_active,is_mandatory,subject_type,source_template,school_customized,department_id) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)").bind(x.id,x.school_id,x.curriculum,x.stage_code,x.name,x.code,x.catalogue_code,x.pathway,x.is_active,x.is_mandatory,x.subject_type,x.source_template,x.school_customized,x.department_id)));
       if(isMandatory)await syncCompulsoryLearningAreas(env.DB,schoolId);
       const saved=await env.DB.prepare("SELECT id FROM learning_areas WHERE school_id=? AND id IN ("+records.map(()=>"?").join(",")+")").bind(schoolId,...records.map(x=>x.id)).all();
       if((saved.results||[]).length!==records.length)throw new Error("Learning-area batch verification failed.");
@@ -933,7 +933,7 @@ export async function onRequestPatch({request,env}){
   if(name==="classes")return json({ok:false,error:"Class groups are no longer edited. Classes are centrally configured; manage streams under each class instead."},405);
   if(name==="learning-areas"&&!a.user.is_super_admin){
     let submitted;try{submitted=await request.clone().json()}catch{submitted={}}
-    const allowedFields=new Set(["name","code","is_active","subject_type","is_mandatory"]);
+    const allowedFields=new Set(["name","code","is_active","subject_type","is_mandatory","department_id"]);
     if(!Object.keys(submitted).length||Object.keys(submitted).some(k=>!allowedFields.has(k)))return json({ok:false,error:"Only learning-area details and school offering settings can be changed here."},403);
   }
   if(name==="grade-boundaries")await ensureGradeBoundaryScope(env.DB);
