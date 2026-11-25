@@ -72,11 +72,12 @@ export async function onRequestPost({request,env}){
     statements.push(env.DB.prepare("INSERT INTO learners(id,school_id,admission_number,first_name,middle_name,last_name,gender,date_of_birth,status,pathway,profile_json) VALUES(?,?,?,?,?,?,?,?,?,?, '{}')").bind(x.learnerId,schoolId,x.admission,x.first,x.middle,x.last,x.gender,x.dob,x.status,x.pathway));
     statements.push(env.DB.prepare("INSERT INTO learner_enrollments(id,school_id,learner_id,academic_year_id,grade_level_id,stream_id,status) VALUES(?,?,?,?,?,?, 'active')").bind(x.enrollmentId,schoolId,x.learnerId,x.yearId,x.gradeId,x.streamId));
    }
-   await env.DB.batch(statements);imported+=chunk.length;
+   await env.DB.batch(statements);
+   const placeholders=chunk.map(()=>"?").join(",");
+   const verify=await env.DB.prepare("SELECT COUNT(*) AS total FROM learners WHERE school_id=? AND id IN ("+placeholders+")").bind(schoolId,...chunk.map(x=>x.learnerId)).first();
+   if(Number(verify?.total)!==chunk.length)throw new Error("Database read-back verification failed for import batch starting at row "+(start+2)+".");
+   imported+=chunk.length;
   }
-  const placeholders=prepared.map(()=>"?").join(",");
-  const verify=await env.DB.prepare("SELECT COUNT(*) AS total FROM learners WHERE school_id=? AND id IN ("+placeholders+")").bind(schoolId,...prepared.map(x=>x.learnerId)).first();
-  if(Number(verify?.total)!==prepared.length)return json({ok:false,imported,failed:prepared.length-imported,error:"Final database verification did not match. Check the learner list before retrying."},500);
   return json({ok:true,imported,failed:0,message:imported+" learners registered and enrolled successfully."},201);
  }catch(e){console.error("Bulk learner import",e);return json({ok:false,imported,failed:prepared.length-imported,error:imported?imported+" learners were saved before an error. Check the learner list before retrying; do not upload the same file again yet.":"The import could not be saved. No success was reported; check for duplicate admission numbers and retry."},500)}
 }
