@@ -15,6 +15,7 @@ const resources={
   "learning-areas":{table:"learning_areas",scope:true,fields:["curriculum","code","name","stage_code","pathway","is_active","subject_type","is_mandatory","source_template","catalogue_code","school_customized"],required:["school_id","name"]},
   "learner-learning-areas":{table:"learner_learning_areas",scope:true,fields:["enrollment_id","learner_id","learning_area_id","selection_type","selected_by","status"],required:["school_id","enrollment_id","learner_id","learning_area_id"],refs:{enrollment_id:"learner_enrollments",learner_id:"learners",learning_area_id:"learning_areas"}},
   staff:{table:"staff_profiles",scope:true,fields:["user_id","staff_number","department","employment_type","employment_status","hire_date","profile_json"],required:["school_id"],refs:{user_id:"users"}},
+  "staff-learning-areas":{table:"staff_learning_areas",scope:true,fields:["staff_id","curriculum","learning_area_code","learning_area_name","status"],required:["school_id","staff_id","curriculum","learning_area_code","learning_area_name"],refs:{staff_id:"staff_profiles"}},
   departments:{table:"school_departments",scope:true,fields:["name","code","description","head_staff_id","status"],required:["school_id","name"],refs:{head_staff_id:"staff_profiles"}},
   classes:{table:"classes",scope:true,fields:["academic_year_id","grade_level_id","stream_id","class_teacher_staff_id","capacity","room","status"],required:["school_id","academic_year_id","grade_level_id","stream_id"],refs:{academic_year_id:"academic_years",grade_level_id:"grade_levels",stream_id:"streams",class_teacher_staff_id:"staff_profiles"}},
   learners:{table:"learners",scope:true,fields:["admission_number","assessment_number","upi_number","nemis_number","first_name","middle_name","last_name","gender","date_of_birth","status","pathway","profile_json"],required:["school_id","admission_number","first_name","last_name"]},
@@ -75,7 +76,7 @@ const permissionFor=(name,write=false)=>{
   if(name==="classes")return "classes.manage";
   if(["years","terms","grades","streams","learning-areas","grading-schemes"].includes(name))return "academics.manage";
   if(name==="learner-learning-areas")return write?"learner.learning.areas.manage":"learners.view";
-  if(["staff"].includes(name))return "staff.manage";
+  if(["staff","staff-learning-areas"].includes(name))return "staff.manage";
   if(name==="departments")return "staff.manage";
   if(["learners","enrollments","guardians","transfers"].includes(name))return write?"learners.manage":"learners.view";
   if(name==="teacher-allocations")return "allocations.manage";
@@ -322,6 +323,11 @@ async function validateLearningAreaClassAndPathway(db,name,schoolId,values,curre
  if(!allPathways&&!usesPathways)return "This pathway learning area is only available in CBE Senior School.";
  if(!allPathways&&name!=="teacher-allocations"&&name!=="assessments")return "Choose a pathway-specific learning area through its Senior School pathway workflow.";
  if(!allPathways&&(!selectedPath||selectedPath!==areaPath))return "The selected learning area belongs to the "+area.pathway+" pathway. Select the matching pathway first.";
+ if(name==="teacher-allocations"){
+  const staffId=values.staff_id??current.staff_id,code=await db.prepare("SELECT COALESCE(NULLIF(catalogue_code,''),NULLIF(code,''),name) AS subject_code FROM learning_areas WHERE id=? AND school_id=?").bind(areaId,schoolId).first();
+  const combination=staffId&&code?await db.prepare("SELECT id FROM staff_learning_areas WHERE school_id=? AND staff_id=? AND curriculum=? AND lower(learning_area_code)=lower(?) AND status='active'").bind(schoolId,staffId,grade.curriculum,code.subject_code).first():null;
+  if(!combination)return "This teacher has not selected this learning area in their teaching combination. Update the teacher profile first.";
+ }
  return null;
 }
 async function validateGradeBoundary(db,schoolId,values,excludeId=null){
