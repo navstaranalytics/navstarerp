@@ -5,15 +5,15 @@ export async function onRequestGet({request,env}){
  try{
   const rows=await env.DB.prepare(`SELECT u.id AS user_id,u.full_name,u.username,u.email,u.phone,u.status AS user_status,u.last_login_at,
    m.school_id,m.membership_status,m.job_title,s.name AS school_name,s.school_code,s.status AS school_status,
-   r.role_key,r.role_name,
-   sub.status AS subscription_status,sub.next_due_date
+   GROUP_CONCAT(DISTINCT r.role_key) AS role_keys,GROUP_CONCAT(DISTINCT r.role_name) AS role_names,
+   (SELECT ss.status FROM school_subscriptions ss WHERE ss.school_id=s.id ORDER BY ss.updated_at DESC LIMIT 1) AS subscription_status,
+   (SELECT ss.next_due_date FROM school_subscriptions ss WHERE ss.school_id=s.id ORDER BY ss.updated_at DESC LIMIT 1) AS next_due_date
    FROM school_memberships m JOIN users u ON u.id=m.user_id JOIN schools s ON s.id=m.school_id
    LEFT JOIN user_role_assignments a ON a.user_id=u.id AND a.school_id=m.school_id
    LEFT JOIN roles r ON r.id=a.role_id
-   LEFT JOIN (SELECT ss1.school_id,ss1.status,ss1.next_due_date FROM school_subscriptions ss1 JOIN (SELECT school_id,MAX(updated_at) AS latest FROM school_subscriptions GROUP BY school_id) x ON x.school_id=ss1.school_id AND x.latest=ss1.updated_at) sub ON sub.school_id=s.id
-   ORDER BY s.name,u.full_name`).all();
+   GROUP BY u.id,m.school_id ORDER BY s.name,u.full_name`).all();
   const today=new Date().toISOString().slice(0,10);
-  const users=(rows.results||[]).map(x=>({...x,access_status:x.school_status==="suspended"?"School suspended":x.school_status==="archived"?"Archived":x.user_status!=="active"?x.user_status:x.membership_status!=="active"?x.membership_status:x.subscription_status==="expired"||x.subscription_status==="cancelled"||x.next_due_date&&x.next_due_date<today?"Expired":x.subscription_status==="past_due"?"Past due":x.school_status==="pending"?"Pending approval":"Active"}));
+  const users=(rows.results||[]).map(x=>({...x,access_status:x.school_status==="suspended"?"School suspended":x.school_status==="archived"?"Archived":x.user_status!=="active"?x.user_status:x.membership_status!=="active"?x.membership_status:x.subscription_status==="expired"||x.subscription_status==="cancelled"?"Expired":x.subscription_status==="past_due"||x.next_due_date&&x.next_due_date<today?"Past due":x.school_status==="pending"?"Pending approval":"Active"}));
   return json({ok:true,users,summary:{total:users.length,active:users.filter(x=>x.access_status==="Active").length,suspended:users.filter(x=>["suspended","School suspended"].includes(x.access_status)).length,expired:users.filter(x=>x.access_status==="Expired").length,pending:users.filter(x=>x.access_status==="Pending approval"||x.access_status==="invited").length}});
  }catch(error){console.error("Navstar platform access list failed",String(error?.message||error));return json({ok:false,error:"School-user access records could not be loaded."},500)}
 }
