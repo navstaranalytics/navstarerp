@@ -31,12 +31,12 @@ export async function onRequestPost({request,env}) {
  if(!schoolId||actor.school_id!==schoolId)return json({ok:false,error:"You cannot create accounts in another school workspace."},403);
  if(!actor.is_super_admin&&!actor.permissions.includes("school.users.manage"))return json({ok:false,error:"You do not have permission to manage school users."},403);
  let body;try{body=await request.json()}catch{return json({ok:false,error:"Enter valid account details."},400)}
- const fullName=clean(body.fullName),username=norm(body.username),email=norm(body.email),phone=clean(body.phone);
+ const fullName=clean(body.fullName),username=norm(body.username),email=norm(body.email),phone=clean(body.phone),chosenPassword=String(body.password||"");
  const requestedRoles=Array.isArray(body.roleKeys)?body.roleKeys.map(norm):[norm(body.roleKey)];
  const roleKeys=[...new Set(requestedRoles.filter(Boolean))];
  const roleKey=roleKeys[0]||"";
- if(!fullName||fullName.length>120||!/^[a-z0-9._-]{3,32}$/.test(username)||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||email.length>190||!roleKeys.length||roleKeys.some(k=>!allowedRoles.has(k)))
-  return json({ok:false,error:"Enter a valid name, username, email and at least one valid role."},400);
+ if(!fullName||fullName.length>120||!/^[a-z0-9._-]{3,32}$/.test(username)||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||email.length>190||!roleKeys.length||roleKeys.some(k=>!allowedRoles.has(k))||(chosenPassword&&chosenPassword.length<10))
+  return json({ok:false,error:"Enter a valid name, available username, email and role. A password, when supplied, must be at least 10 characters."},400);
  try {
   const usernameTaken=await env.DB.prepare("SELECT 1 AS found FROM users WHERE username_normalized=? LIMIT 1").bind(username).first();
   if(usernameTaken)return json({ok:false,error:"That username is already taken across Navstar. Please choose a different username."},409);
@@ -55,7 +55,7 @@ export async function onRequestPost({request,env}) {
   const linkedLearners=[];
   for(const admission of learnerNumbers){const learner=await env.DB.prepare("SELECT id FROM learners WHERE school_id=? AND admission_number=?").bind(schoolId,admission).first();if(!learner)return json({ok:false,error:"Learner admission number "+admission+" was not found in this school."},404);linkedLearners.push(learner.id);}
   const userId=id(),membershipId=id(),assignmentId=id();
-  const bootstrapPassword=Array.from(crypto.getRandomValues(new Uint8Array(32)),b=>b.toString(16).padStart(2,"0")).join("");
+  const bootstrapPassword=chosenPassword||Array.from(crypto.getRandomValues(new Uint8Array(32)),b=>b.toString(16).padStart(2,"0")).join("");
   const passwordHash=await hashPassword(bootstrapPassword);
   const statements=[
    env.DB.prepare("INSERT INTO users(id,email,email_normalized,username,username_normalized,phone,full_name,password_hash,status,password_changed_at) VALUES(?,?,?,?,?,?,?,?,'active',strftime('%Y-%m-%dT%H:%M:%fZ','now'))").bind(userId,email,email,username,username,phone||null,fullName,passwordHash),
