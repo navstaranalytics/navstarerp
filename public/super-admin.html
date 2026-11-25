@@ -803,7 +803,7 @@ async function loadSignedInUser(){
       try{
         // The private photo endpoint requires the tab-scoped X-Navstar-Session
         // header; a native <img src> request cannot send that header.
-        const photoResponse=await fetch('/api/auth/profile-photo',{credentials:'same-origin',cache:'no-store'});
+        const sessionToken=sessionStorage.getItem('navstar_session_token');const photoResponse=await fetch('/api/auth/profile-photo',{credentials:'same-origin',cache:'no-store',headers:sessionToken?{'X-Navstar-Session':sessionToken}:{}});
         if(photoResponse.ok){
           const photoBlob=await photoResponse.blob();
           const photoObjectUrl=URL.createObjectURL(photoBlob);
