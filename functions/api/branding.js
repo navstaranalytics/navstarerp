@@ -150,13 +150,22 @@ export async function onRequestPostProfilePhoto({request,env}){
   const key="profile-"+actor.id,r2Key="profiles/"+actor.id,bytes=new Uint8Array(await file.arrayBuffer());
   if(env.R2){
    await env.R2.put(r2Key,bytes,{httpMetadata:{contentType:file.type,cacheControl:"private, no-store"}});
+   const storedObject=await env.R2.get(r2Key);
+   if(!storedObject)throw new Error("Profile photo R2 read-back verification failed.");
+   const storedBytes=new Uint8Array(await storedObject.arrayBuffer());
+   if(storedBytes.byteLength!==bytes.byteLength)throw new Error("Profile photo R2 size verification failed.");
    await env.DB.prepare("INSERT INTO platform_branding_assets(asset_key,content_type,image_data,storage_provider,object_key,updated_by,updated_at) VALUES(?,?,X'','r2',?,?,strftime('%Y-%m-%dT%H:%M:%fZ','now')) ON CONFLICT(asset_key) DO UPDATE SET content_type=excluded.content_type,image_data=X'',storage_provider='r2',object_key=excluded.object_key,updated_by=excluded.updated_by,updated_at=excluded.updated_at").bind(key,file.type,r2Key,actor.id).run();
   }else{
    await env.DB.prepare("INSERT INTO platform_branding_assets(asset_key,content_type,image_data,storage_provider,object_key,updated_by,updated_at) VALUES(?,?,?,'d1',NULL,?,strftime('%Y-%m-%dT%H:%M:%fZ','now')) ON CONFLICT(asset_key) DO UPDATE SET content_type=excluded.content_type,image_data=excluded.image_data,storage_provider='d1',object_key=NULL,updated_by=excluded.updated_by,updated_at=excluded.updated_at").bind(key,file.type,bytes,actor.id).run();
   }
+  const asset=await env.DB.prepare("SELECT storage_provider,object_key,content_type FROM platform_branding_assets WHERE asset_key=?").bind(key).first();
+  if(!asset||asset.storage_provider!==(env.R2?"r2":"d1")||(env.R2&&asset.object_key!==r2Key))throw new Error("Profile photo metadata verification failed.");
   const photoUrl="/api/auth/profile-photo";
-  await env.DB.prepare("UPDATE users SET profile_photo_url=?,updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?").bind(photoUrl,actor.id).run();
-  return json({ok:true,profilePhotoUrl:photoUrl+"?v="+Date.now(),storage:env.R2?"R2":"D1",message:"Profile picture uploaded successfully."});
+  const updated=await env.DB.prepare("UPDATE users SET profile_photo_url=?,updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?").bind(photoUrl,actor.id).run();
+  if(!Number(updated.meta?.changes||0))throw new Error("Profile photo account reference could not be saved.");
+  const user=await env.DB.prepare("SELECT profile_photo_url FROM users WHERE id=?").bind(actor.id).first();
+  if(user?.profile_photo_url!==photoUrl)throw new Error("Profile photo account reference verification failed.");
+  return json({ok:true,profilePhotoUrl:photoUrl,storage:env.R2?"R2":"D1",message:"Profile picture saved and verified."});
  }catch(error){console.error("Navstar profile photo upload failed:",String(error?.message||error));return json({ok:false,error:"Profile picture upload failed. Please try again."},500)}
 }
 export async function onRequestGetProfilePhoto({request,env}){
