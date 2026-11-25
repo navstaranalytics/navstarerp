@@ -125,7 +125,7 @@ export async function getAuthenticatedSession(request, env) {
       await env.DB.prepare("UPDATE auth_sessions SET revoked_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE token_hash=? AND revoked_at IS NULL").bind(tokenHash).run();
       return null;
     }
-  }catch(error){console.error("Maintenance mode check failed:",String(error?.message||error));}
+  }catch(error){console.error("Maintenance mode check failed:",String(error?.message||error));if(row.role_key!=="super_admin")return null;}
   let sessionPolicy={idle_timeout_minutes:30};
   try{const setting=await env.DB.prepare("SELECT setting_value FROM platform_settings WHERE setting_key='session_policy'").first();if(setting?.setting_value){const parsed=JSON.parse(setting.setting_value);const minutes=Number(parsed.idle_timeout_minutes);if(Number.isInteger(minutes)&&minutes>=5&&minutes<=480)sessionPolicy={idle_timeout_minutes:minutes};}}catch(error){console.error("Session policy lookup failed:",String(error?.message||error));}
   const lastActivity=Date.parse(row.last_seen_at||row.created_at||"");
@@ -281,7 +281,7 @@ export async function onRequestPostLogin({ request, env }) {
       await audit(env,user?.id,"auth.login","denied",{reason:"invalid_credentials"});
       return json({ok:false,error:"The username or password is incorrect, or the account is not active."},401);
     }
-    let maintenanceMode={};try{const setting=await env.DB.prepare("SELECT setting_value FROM platform_settings WHERE setting_key='maintenance_mode'").first();maintenanceMode=JSON.parse(setting?.setting_value||"{}")}catch{}
+    let maintenanceMode={};try{const setting=await env.DB.prepare("SELECT setting_value FROM platform_settings WHERE setting_key='maintenance_mode'").first();maintenanceMode=JSON.parse(setting?.setting_value||"{}")}catch(error){console.error("Maintenance mode login check failed:",String(error?.message||error));if(user.role_key!=="super_admin")return json({ok:false,error:"The system availability check failed. Please try again shortly."},503)}
     if(maintenanceMode.enabled&&user.role_key!=="super_admin"){
       await audit(env,user.id,"auth.login","denied",{reason:"platform_maintenance"});
       return json({ok:false,maintenance:true,error:maintenanceMode.message||"Navstar is temporarily undergoing scheduled maintenance. Please try again shortly."},503);
