@@ -504,6 +504,7 @@ export async function onRequestPost({request,env}){
     if(!schoolId||!staffId||(!a.user.is_super_admin&&body.school_id&&body.school_id!==schoolId))return json({ok:false,error:"School and staff profile are required."},400);
     const unique=new Map();for(const item of subjects){const curriculum=clean(item.curriculum),code=String(item.code||"").trim(),name=clean(item.name);if(curriculum&&code&&name)unique.set(curriculum+"|"+code.toLowerCase(),{curriculum,code,name})}
     if(isTeacher&&unique.size<2)return json({ok:false,error:"A teacher must have at least two distinct subjects in their teaching combination."},400);
+    if(!isTeacher)unique.clear();const desiredCount=unique.size;
     try{
       const staff=await env.DB.prepare("SELECT id FROM staff_profiles WHERE id=? AND school_id=?").bind(staffId,schoolId).first();
       if(!staff)return json({ok:false,error:"Staff profile does not belong to this school."},404);
@@ -516,7 +517,7 @@ export async function onRequestPost({request,env}){
       for(const item of unique.values())statements.push(env.DB.prepare("INSERT INTO staff_learning_areas(id,school_id,staff_id,curriculum,learning_area_code,learning_area_name,status) VALUES(?,?,?,?,?,?, 'active')").bind(id(),schoolId,staffId,item.curriculum,item.code,item.name));
       await env.DB.batch(statements);
       const verify=await env.DB.prepare("SELECT COUNT(*) AS total FROM staff_learning_areas WHERE school_id=? AND staff_id=? AND status='active'").bind(schoolId,staffId).first(),profile=await env.DB.prepare("SELECT is_teacher FROM staff_profiles WHERE id=? AND school_id=?").bind(staffId,schoolId).first();
-      if(Number(profile?.is_teacher)!==(isTeacher?1:0)||Number(verify?.total)!==(isTeacher?subjects.length:0))throw new Error("Teacher subject-combination verification failed.");
+      if(Number(profile?.is_teacher)!==(isTeacher?1:0)||Number(verify?.total)!==desiredCount)throw new Error("Teacher subject-combination verification failed.");
       await audit(env.DB,a.user,schoolId,"teacher.subject_combination_updated","staff_profiles",staffId);
       return json({ok:true,is_teacher:isTeacher?1:0,subjectCount:Number(verify?.total||0),message:isTeacher?"Teacher profile and subject combination saved.":"Teaching profile disabled."});
     }catch(error){console.error("NAVSTAR teacher subject combination update",error);return json({ok:false,error:"Teacher profile and subject combination could not be saved and verified."},500)}
