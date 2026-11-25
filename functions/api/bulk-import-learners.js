@@ -59,7 +59,7 @@ export async function onRequestPost({request,env}){
   if(!year){problems.push({row:line,error:"Academic year '"+r.academic_year+"' was not found."});continue}
   if(!grade){problems.push({row:line,error:"Class '"+r.grade+"' was not found or is inactive."});continue}
   let streamId=null;
-  if(r.stream){const stream=streamMap.get(grade.id+":"+r.stream.toLowerCase());if(!stream){problems.push({row:line,error:"Stream '"+r.stream+"' was not found in the selected class."});continue}streamId=stream.id}
+  if(r.stream){const stream=streamMap.get(grade.id+":"+r.stream.toLowerCase());if(!stream){const available=(streams.results||[]).filter(s=>s.grade_level_id===grade.id).map(s=>s.name);const detail=available.length?"Available streams in this class: "+available.join(", ")+".":"This class has no active streams; leave the stream column blank or create a stream for this class first.";problems.push({row:line,error:"Stream '"+r.stream+"' was not found in class '"+(grade.stage_name||r.grade)+"'. "+detail+" Download a fresh school-generated learner CSV template to use the correct class/stream pairs."});continue}streamId=stream.id}
   if(r.date_of_birth&&!/^\d{4}-\d{2}-\d{2}$/.test(r.date_of_birth)){problems.push({row:line,error:"Date of birth must use YYYY-MM-DD."});continue}
   prepared.push({learnerId:id(),enrollmentId:id(),admission,first,middle:r.middle_name||null,last,gender:r.gender||null,dob:r.date_of_birth||null,status:(r.status||"active").toLowerCase(),pathway:r.pathway||null,yearId:year.id,gradeId:grade.id,streamId});
  }
