@@ -402,13 +402,28 @@ export async function onRequestGet({request,env}){
     // This repairs older schools and picks up new Super Admin catalogue entries
     // without resetting optional offering choices already made by the school.
     if(name==="learning-areas"&&!a.user.is_super_admin){
-      const schoolRow=await env.DB.prepare("SELECT curriculum,curricula_json,school_levels_json FROM schools WHERE id=?").bind(schoolId).first();
-      let configuredLevels=[];try{configuredLevels=JSON.parse(schoolRow?.school_levels_json||"[]")}catch{}
-      let curricula=[];try{curricula=JSON.parse(schoolRow?.curricula_json||"[]")}catch{}
-      if(!Array.isArray(curricula))curricula=[];
-      const configured=await env.DB.prepare("SELECT DISTINCT curriculum FROM grade_levels WHERE school_id=? AND is_active=1 AND curriculum IS NOT NULL AND trim(curriculum)<>''").bind(schoolId).all();
-      curricula=[...new Set([...curricula,...(configured.results||[]).map(x=>x.curriculum),schoolRow?.curriculum].filter(Boolean).map(String))];
-      for(const curriculum of curricula) await syncSchoolLearningAreas(env.DB,schoolId,curriculum,configuredLevels);
+      // The active grade-level records are the authoritative source for what this
+      // school actually configured. Do not let legacy/stale school_levels_json
+      // labels hide the catalogue or prevent its synchronization.
+      const configured=await env.DB.prepare("SELECT DISTINCT curriculum,stage_code,school_level FROM grade_levels WHERE school_id=? AND is_active=1 AND curriculum IS NOT NULL AND trim(curriculum)<>''").bind(schoolId).all();
+      const byCurriculum=new Map();
+      for(const grade of configured.results||[]){
+        const curriculum=String(grade.curriculum||"").trim(),code=String(grade.stage_code||"").toUpperCase();
+        if(!curriculum)continue;
+        let level=String(grade.school_level||"").trim();
+        if(/cbe|cbc|competency/i.test(curriculum)){
+          if(/^PP[12]$/.test(code))level="Pre-Primary";
+          else if(/^G[1-6]$/.test(code))level="Primary";
+          else if(/^G[7-9]$/.test(code))level="Junior School";
+          else if(/^G1[0-2]$/.test(code))level="Senior School";
+        }else if(/8-4-4|844/i.test(curriculum)){
+          if(/^STD[1-8]$/.test(code))level="8-4-4 Primary";
+          else if(/^FORM[1-4]$/.test(code))level="8-4-4 Secondary";
+        }
+        if(!byCurriculum.has(curriculum))byCurriculum.set(curriculum,new Set());
+        if(level)byCurriculum.get(curriculum).add(level);
+      }
+      for(const [curriculum,levels] of byCurriculum)await syncSchoolLearningAreas(env.DB,schoolId,curriculum,[...levels]);
     }
     if(name==="settings"){
       const rows=await env.DB.prepare("SELECT setting_key,setting_value,updated_at FROM platform_settings ORDER BY setting_key").all();
@@ -457,10 +472,8 @@ export async function onRequestGet({request,env}){
       const allSchoolGrades=rows.results||[];const visibleGrades=a.user.is_super_admin||url.searchParams.has("includeInactive")?allSchoolGrades:allSchoolGrades.filter(g=>gradeBelongsToSelectedLevels(g,levels));return json({ok:true,records:visibleGrades,school:{curriculum:school?.curriculum||"Kenyan CBE",levels}});
     }
     if(name==="learning-areas"&&!a.user.is_super_admin){
-      const school=await env.DB.prepare("SELECT school_levels_json FROM schools WHERE id=?").bind(schoolId).first();
-      let levels=[];try{levels=JSON.parse(school?.school_levels_json||"[]")}catch{}
-      const gradeRows=await env.DB.prepare("SELECT curriculum,stage_code,school_level FROM grade_levels WHERE school_id=? AND is_active=1").bind(schoolId).all();
-      const allowed=new Set((gradeRows.results||[]).filter(g=>gradeBelongsToSelectedLevels(g,levels)).map(g=>String(g.curriculum)+"|"+String(g.stage_code)));
+      const gradeRows=await env.DB.prepare("SELECT curriculum,stage_code FROM grade_levels WHERE school_id=? AND is_active=1").bind(schoolId).all();
+      const allowed=new Set((gradeRows.results||[]).map(g=>String(g.curriculum)+"|"+String(g.stage_code)));
       return json({ok:true,records:(rows.results||[]).filter(x=>allowed.has(String(x.curriculum)+"|"+String(x.stage_code)))});
     }
     return json({ok:true,records:rows.results||[]});
