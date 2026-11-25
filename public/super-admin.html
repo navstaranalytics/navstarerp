@@ -715,8 +715,28 @@ async function persistPlatformSettings(next){
 function mapDatabasePlan(row){let capabilities=[],methods=[],stages=[];try{capabilities=JSON.parse(row.capabilities_json||"[]")}catch{}try{methods=JSON.parse(row.payment_methods_json||"[]")}catch{}try{stages=JSON.parse(row.school_levels_json||"[]")}catch{}return {id:row.id,planCode:row.plan_code,name:row.name,price:Number(row.rate_kes||0),rate:Number(row.rate_kes||0),learners:Number(row.max_learners||0),storage:Number(row.storage_gb||0),ai:Number(row.ai_credits||0),setupFee:Number(row.onboarding_fee_kes||0),graceDays:Number(row.grace_period_days||0),countBasis:row.learner_count_basis||"active",paymentMethods:methods,stages,modules:Array.isArray(capabilities)?capabilities.join(", "):String(capabilities||""),billingModel:row.billing_model,description:row.description||"",active:Number(row.is_active)!==0}}
 function normalizePlanModules(value){if(Array.isArray(value))return value.map(x=>String(x??"").trim()).filter(Boolean);if(value&&typeof value==="object"){if(Array.isArray(value.modules))return normalizePlanModules(value.modules);if(Array.isArray(value.capabilities))return normalizePlanModules(value.capabilities);return Object.values(value).map(x=>String(x??"").trim()).filter(Boolean)}if(typeof value==="string"){const raw=value.trim();if(!raw)return [];try{const parsed=JSON.parse(raw);if(Array.isArray(parsed))return normalizePlanModules(parsed)}catch{}return raw.split(/[,;+]/).map(x=>x.trim()).filter(Boolean)}return []}
 async function loadPlansFromDatabase(){
- const data=await schoolApi("/api/data/plans");
- const records=(data.records||[]).map(mapDatabasePlan);
+ let data=await schoolApi("/api/data/plans");
+ let rows=data.records||[];
+ if(!rows.length){
+  const settings=await schoolApi("/api/data/settings");
+  const marker="navstar.subscription.default_plans_seeded.v1";
+  const seeded=(settings.records||[]).some(x=>x.setting_key===marker&&x.setting_value==="yes");
+  if(!seeded){
+   const defaults=[
+    {name:"Starter",rate:2500,learners:300,storage:5,ai:100,modules:"Core school operations"},
+    {name:"Professional",rate:6500,learners:1200,storage:25,ai:500,modules:"Core, Academics, Reports, Analytics"},
+    {name:"Enterprise",rate:15000,learners:5000,storage:100,ai:2500,modules:"All modules, Priority support"},
+    {name:"Trial",rate:0,learners:100,storage:2,ai:25,modules:"Evaluation access"}
+   ];
+   for(const p of defaults){
+    const code=p.name.toLowerCase().replace(/[^a-z0-9]+/g,"-");
+    await schoolApi("/api/data/plans",{method:"POST",body:JSON.stringify({plan_code:code,name:p.name,description:p.modules,billing_model:"flat_school_month",rate_kes:p.rate,max_learners:p.learners,storage_gb:p.storage,ai_credits:p.ai,onboarding_fee_kes:0,grace_period_days:7,learner_count_basis:"active",capabilities_json:JSON.stringify(p.modules.split(/[,;+]/).map(x=>x.trim())),school_levels_json:JSON.stringify(["PP1","PP2","Class 1–6","Class 7–9","Class 10–12","Forms 1–4"]),payment_methods_json:JSON.stringify(["mpesa","bank","card","manual"]),is_active:1})});
+   }
+   await schoolApi("/api/data/settings",{method:"POST",body:JSON.stringify({setting_key:marker,setting_value:"yes"})});
+   data=await schoolApi("/api/data/plans");rows=data.records||[];
+  }
+ }
+ const records=rows.map(mapDatabasePlan);
  plans.splice(0,plans.length,...records);
  return records;
 }
