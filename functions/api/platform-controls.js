@@ -14,7 +14,9 @@ export async function onRequestPost({request,env}){
  let value=body.value;if(!value||typeof value!=="object"||Array.isArray(value))return json({ok:false,error:"Settings must be a JSON object."},400);
  if(key==="maintenance_mode"){
   if(typeof value.enabled!=="boolean"||String(value.message||"").length>500)return json({ok:false,error:"Maintenance mode requires an enabled/disabled choice and a notice of no more than 500 characters."},400);
-  value={enabled:value.enabled,message:String(value.message||"Navstar is temporarily undergoing scheduled maintenance. Please try again shortly.").trim()||"Navstar is temporarily undergoing scheduled maintenance. Please try again shortly.",updated_at:new Date().toISOString()};
+  const endAt=String(value.endAt||"").trim();
+  if(value.enabled&&(!endAt||!Number.isFinite(Date.parse(endAt))||Date.parse(endAt)<=Date.now()))return json({ok:false,error:"Choose an expected return date and time in the future."},400);
+  value={enabled:value.enabled,message:String(value.message||"Navstar is temporarily undergoing scheduled maintenance. Please try again shortly.").trim()||"Navstar is temporarily undergoing scheduled maintenance. Please try again shortly.",endAt:value.enabled?new Date(endAt).toISOString():null,updated_at:new Date().toISOString()};
  }
  if(key==="session_policy"){
   const minutes=Number(value.idle_timeout_minutes);
