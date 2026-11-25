@@ -95,7 +95,7 @@ export async function onRequestPost({request,env}){
     x.admission=await allocateAdmission(env.DB,schoolId,actor.id);
     statements.push(env.DB.prepare("INSERT INTO learners(id,school_id,admission_number,assessment_number,upi_number,nemis_number,first_name,middle_name,last_name,gender,date_of_birth,status,pathway,profile_json) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?, '{}')").bind(x.learnerId,schoolId,x.admission,x.assessment||null,x.upi||null,x.nemis||null,x.first,x.middle,x.last,x.gender,x.dob,x.status,x.pathway));
     statements.push(env.DB.prepare("INSERT INTO learner_enrollments(id,school_id,learner_id,academic_year_id,grade_level_id,stream_id,status) VALUES(?,?,?,?,?,?, 'active')").bind(x.enrollmentId,schoolId,x.learnerId,x.yearId,x.gradeId,x.streamId));
-    for(const areaId of [...x.compulsoryAreas,...x.electiveAreas])statements.push(env.DB.prepare("INSERT OR IGNORE INTO learner_learning_areas(id,school_id,enrollment_id,learner_id,learning_area_id,selection_type,selected_by,status) VALUES(?,?,?,?,?,?,?,'active')").bind(id(),schoolId,x.enrollmentId,x.learnerId,areaId,x.compulsoryAreas.includes(areaId)?"compulsory":"elective",x.compulsoryAreas.includes(areaId)?"system":"school"));
+    for(const areaId of [...x.compulsoryAreas,...x.electiveAreas])statements.push(env.DB.prepare("INSERT OR IGNORE INTO learner_learning_areas(id,school_id,enrollment_id,learner_id,learning_area_id,selection_type,selected_by,status) VALUES(?,?,?,?,?,?,?,'active')").bind(id(),schoolId,x.enrollmentId,x.learnerId,areaId,x.compulsoryAreas.includes(areaId)?"mandatory":"elective",x.compulsoryAreas.includes(areaId)?actor.id:actor.id));
    }
    await env.DB.batch(statements);
    const placeholders=chunk.map(()=>"?").join(",");
