@@ -4,5 +4,5 @@ UPDATE staff_profiles SET is_teacher=1 WHERE id IN (
  SELECT sp.id FROM staff_profiles sp
  JOIN user_role_assignments ura ON ura.user_id=sp.user_id AND ura.school_id=sp.school_id
  JOIN roles r ON r.id=ura.role_id
- WHERE r.role_key IN ('teacher','class_teacher','principal','school_admin')
+ WHERE r.role_key IN ('teacher','class_teacher','principal','school_admin','school_administrator')
 );
