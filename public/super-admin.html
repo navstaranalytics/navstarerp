@@ -504,7 +504,7 @@ function recordD1Payment(){
   schoolSelect.addEventListener("change",()=>{invoiceSelect.innerHTML=invoiceOptions;[...invoiceSelect.options].forEach(option=>{if(option.value)option.hidden=option.dataset.school!==schoolSelect.value});invoiceSelect.value=""});
   schoolSelect.dispatchEvent(new Event("change"));
 }
-document.body.addEventListener("click",e=>{const b=e.target.closest("[data-action]");if(!b)return;if(b.dataset.action==="new-invoice")createD1Invoice();if(b.dataset.action==="new-payment")recordD1Payment()if(b.dataset.action==="invoice-pdf")printNavstarInvoice(b.dataset.id)});
+document.body.addEventListener("click",e=>{const b=e.target.closest("[data-action]");if(!b)return;if(b.dataset.action==="new-invoice")createD1Invoice();if(b.dataset.action==="new-payment")recordD1Payment();if(b.dataset.action==="invoice-pdf")printNavstarInvoice(b.dataset.id)});
 
 const PLATFORM_WORKSPACES_KEY="navstar.platform.workspaces.v1";
 async function loadExtraFromDatabase(){
