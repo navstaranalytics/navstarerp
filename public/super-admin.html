@@ -189,10 +189,10 @@ async function wireLearningAreaCatalogue(){
   try{
    const r=await fetch('/api/platform-controls',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:'learning_area_catalogue',value:{areas}})});
    const d=await r.json();if(!r.ok||!d.ok)throw new Error(d.error||'Catalogue could not be saved.');
-   const sync=await fetch('/api/schools',{credentials:'same-origin',cache:'no-store'}),sd=await sync.json();
-   if(!sync.ok||!sd.ok)throw new Error('Catalogue saved, but school synchronization needs a retry: '+(sd.error||'school records could not be refreshed.'));
-   status.textContent='Saved centrally and synchronized to '+(sd.schools||[]).length+' school records.';
-   toast('Learning-area catalogue saved permanently.');
+   const sync=d.sync||{total:0,synced:0,failed:[]};
+   status.textContent='Saved centrally. Synchronized to '+sync.synced+' of '+sync.total+' schools.'+(sync.failed?.length?' '+sync.failed.length+' school(s) need attention.':' All configured school records are updated.');
+   if(sync.failed?.length)console.error('Learning-area catalogue synchronization failures',sync.failed);
+   toast(sync.failed?.length?'Catalogue saved, but '+sync.failed.length+' school synchronization(s) need attention.':'Learning-area catalogue saved and synchronized to all configured schools.');
   }catch(e){status.textContent=e.message;toast(e.message)}
   finally{save.disabled=false}
  };
