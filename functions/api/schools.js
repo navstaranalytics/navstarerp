@@ -292,6 +292,7 @@ export async function onRequestPatch({request,env}){
     const curricula=normalizeCurricula(body,previousCurricula.length?previousCurricula:(existing.curriculum||"Kenyan CBE"));
     const curriculumIssue=validateCurricula(curricula,selectedLevels);if(curriculumIssue)return json({ok:false,error:curriculumIssue},400);
     const levels=JSON.stringify(selectedLevels);
+    const academicConfigChanged=JSON.stringify(curricula)!==JSON.stringify(previousCurricula)||levels!==String(existing.school_levels_json||"[]");
     meta.modules=Array.isArray(body.modules)?[...new Set(body.modules.map(clean).filter(Boolean))]:modulesForLevels(selectedLevels);
     const curriculum=curricula.length>1?"Multiple curricula":(curricula[0]||existing.curriculum);
     await env.DB.batch([
@@ -301,8 +302,8 @@ export async function onRequestPatch({request,env}){
         .bind(id,JSON.stringify({...current,navstar_school_meta:meta}))
     ]);
     let syncWarning=null;
-    try{await syncSchoolCurricula(env.DB,id,curricula,selectedLevels)}
-    catch(error){syncWarning="School profile was saved, but academic setup synchronization needs attention: "+String(error?.message||"Please retry academic setup.");console.error("Navstar school profile academic sync failed:",error)}
+    if(academicConfigChanged){try{await syncSchoolCurricula(env.DB,id,curricula,selectedLevels)}
+    catch(error){syncWarning="School profile was saved, but academic setup synchronization needs attention: "+String(error?.message||"Please retry academic setup.");console.error("Navstar school profile academic sync failed:",error)}}
     const row=await env.DB.prepare(`SELECT s.*,ss.settings_json,
       (SELECT u.id FROM school_memberships m JOIN users u ON u.id=m.user_id JOIN user_role_assignments a ON a.user_id=u.id AND a.school_id=s.id JOIN roles r ON r.id=a.role_id AND r.role_key='school_admin' WHERE m.school_id=s.id AND m.membership_status IN ('active','invited') ORDER BY m.created_at LIMIT 1) AS admin_user_id,
       (SELECT u.full_name FROM school_memberships m JOIN users u ON u.id=m.user_id JOIN user_role_assignments a ON a.user_id=u.id AND a.school_id=s.id JOIN roles r ON r.id=a.role_id AND r.role_key='school_admin' WHERE m.school_id=s.id AND m.membership_status IN ('active','invited') ORDER BY m.created_at LIMIT 1) AS admin_full_name,
