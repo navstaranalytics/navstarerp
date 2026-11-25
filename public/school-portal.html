@@ -920,13 +920,13 @@ async function loadAllocations(){
 async function loadDepartments(){
  const host=$("departmentsTable"),form=$("departmentForm");if(!host||!form||!schoolId||!has("staff.manage"))return;
  try{
-  const [d,staff]=await Promise.all([api("/api/data/departments?schoolId="+encodeURIComponent(schoolId)),api("/api/data/staff?schoolId="+encodeURIComponent(schoolId))]);
+  const [d,staff,areas]=await Promise.all([api("/api/data/departments?schoolId="+encodeURIComponent(schoolId)),api("/api/data/staff?schoolId="+encodeURIComponent(schoolId)),api("/api/data/learning-areas?schoolId="+encodeURIComponent(schoolId)+"&includeInactive=1")]);
   const staffRows=staff.records||[],select=form.elements.head_staff_id,old=select.value;
   select.innerHTML='<option value="">Not assigned</option>'+staffRows.map(x=>'<option value="'+esc(x.id)+'">'+esc(x.full_name||x.staff_number||x.id)+'</option>').join("");
   if(staffRows.some(x=>x.id===old))select.value=old;
   window.currentSchoolDepartments=d.records||[];
-  const staffNames=new Map(staffRows.map(x=>[x.id,x.full_name||x.staff_number||""]));
-  host.innerHTML=window.currentSchoolDepartments.length?'<table><thead><tr><th>Department</th><th>Code</th><th>Head of department</th><th>Description</th><th>Status</th><th>Actions</th></tr></thead><tbody>'+window.currentSchoolDepartments.map(x=>'<tr><td><b>'+esc(x.name)+'</b></td><td>'+esc(x.code||"—")+'</td><td>'+esc(staffNames.get(x.head_staff_id)||"Not assigned")+'</td><td>'+esc(x.description||"—")+'</td><td>'+esc(x.status||"active")+'</td><td><button class="btn" type="button" data-edit-department="'+esc(x.id)+'">Edit</button> <button class="btn" type="button" data-delete-department="'+esc(x.id)+'">Delete</button></td></tr>').join("")+'</tbody></table>':'<div class="empty">No departments have been created yet.</div>';
+  const staffNames=new Map(staffRows.map(x=>[x.id,x.full_name||x.staff_number||""])),areaRows=areas.records||[];
+  host.innerHTML=window.currentSchoolDepartments.length?'<table><thead><tr><th>Department</th><th>Code</th><th>Head of department</th><th>Learning areas</th><th>Description</th><th>Status</th><th>Actions</th></tr></thead><tbody>'+window.currentSchoolDepartments.map(x=>'<tr><td><b>'+esc(x.name)+'</b></td><td>'+esc(x.code||"—")+'</td><td>'+esc(staffNames.get(x.head_staff_id)||"Not assigned")+'</td><td>'+esc(areaRows.filter(a=>a.department_id===x.id).map(a=>a.name+(Number(a.is_active)===1?"":" (not offered)")).join(", ")||"No learning areas assigned")+'</td><td>'+esc(x.description||"—")+'</td><td>'+esc(x.status||"active")+'</td><td><button class="btn" type="button" data-edit-department="'+esc(x.id)+'">Edit</button> <button class="btn" type="button" data-delete-department="'+esc(x.id)+'">Delete</button></td></tr>').join("")+'</tbody></table>':'<div class="empty">No departments have been created yet.</div>';
  }catch(error){host.innerHTML='<div class="empty">'+esc(error.message)+'</div>'}
 }
 $("departmentRefresh")?.addEventListener("click",loadDepartments);
