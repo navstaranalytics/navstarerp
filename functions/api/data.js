@@ -323,7 +323,9 @@ async function validateLearningAreaClassAndPathway(db,name,schoolId,values,curre
  if(!allPathways&&name!=="teacher-allocations"&&name!=="assessments")return "Choose a pathway-specific learning area through its Senior School pathway workflow.";
  if(!allPathways&&(!selectedPath||selectedPath!==areaPath))return "The selected learning area belongs to the "+area.pathway+" pathway. Select the matching pathway first.";
  if(["teacher-allocations","timetable"].includes(name)){
-  const staffId=values.staff_id??current.staff_id;if(name==="timetable"&&!staffId)return null;const code=await db.prepare("SELECT COALESCE(NULLIF(catalogue_code,''),NULLIF(code,''),name) AS subject_code FROM learning_areas WHERE id=? AND school_id=?").bind(areaId,schoolId).first();
+  const staffId=values.staff_id??current.staff_id;if(name==="timetable"&&!staffId)return null;
+  const streamId=values.stream_id??current.stream_id;if(streamId){const stream=await db.prepare("SELECT grade_level_id FROM streams WHERE id=? AND school_id=? AND status='active'").bind(streamId,schoolId).first();if(!stream||stream.grade_level_id!==gradeId)return "The selected stream does not belong to the selected class."}
+  const code=await db.prepare("SELECT COALESCE(NULLIF(catalogue_code,''),NULLIF(code,''),name) AS subject_code FROM learning_areas WHERE id=? AND school_id=?").bind(areaId,schoolId).first();
   const teacher=staffId?await db.prepare("SELECT is_teacher FROM staff_profiles WHERE id=? AND school_id=? AND employment_status='active'").bind(staffId,schoolId).first():null;
   if(!teacher||Number(teacher.is_teacher)!==1)return "Select an active teacher profile. Non-teaching staff cannot receive subject allocations.";
   const comboCount=await db.prepare("SELECT COUNT(*) AS total FROM staff_learning_areas WHERE school_id=? AND staff_id=? AND status='active'").bind(schoolId,staffId).first();
