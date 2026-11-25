@@ -2,9 +2,13 @@
 "use strict";
 const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const safeUrl=v=>{try{const u=new URL(String(v||""),location.origin);return ["http:","https:"].includes(u.protocol)?u.href:""}catch{return ""}};
-function sectionHtml(s){let out='<section class="doc-section">';if(s.heading)out+='<h2>'+esc(s.heading)+'</h2>';if(s.paragraphs)out+=s.paragraphs.filter(x=>x!==null&&x!==undefined&&String(x)!=="").map(x=>'<p>'+esc(x)+'</p>').join("");if(s.bullets?.length)out+='<ul>'+s.bullets.map(x=>'<li>'+esc(x)+'</li>').join("")+'</ul>';if(s.rows?.length){out+='<table'+(s.header?' class="with-head"':'')+'>';s.rows.forEach((r,i)=>{out+='<tr>'+r.map(v=>i===0&&s.header?'<th>'+esc(v)+'</th>':'<td>'+esc(v)+'</td>').join("")+'</tr>'});out+='</table>'}return out+'</section>'}
+function safeRichHtml(raw){
+ const parsed=new DOMParser().parseFromString("<body>"+String(raw||"")+"</body>","text/html"),allowed=new Set(["P","BR","STRONG","B","EM","I","U","UL","OL","LI","H3","H4","BLOCKQUOTE","A","IMG","DIV","SPAN"]);
+ function cleanNode(node){if(node.nodeType===Node.TEXT_NODE)return esc(node.nodeValue);if(node.nodeType!==Node.ELEMENT_NODE)return "";const tag=node.tagName;if(!allowed.has(tag))return Array.from(node.childNodes).map(cleanNode).join("");let attrs="";if(tag==="A"){const href=safeUrl(node.getAttribute("href"));if(href)attrs+=' href="'+esc(href)+'" target="_blank" rel="noopener noreferrer"'}if(tag==="IMG"){const src=safeUrl(node.getAttribute("src"));if(!src)return "";attrs+=' src="'+esc(src)+'" alt="'+esc(node.getAttribute("alt")||"Guide image")+'" loading="eager"'}const body=Array.from(node.childNodes).map(cleanNode).join("");return "<"+tag.toLowerCase()+attrs+">"+(tag==="IMG"||tag==="BR"?"":body+"</"+tag.toLowerCase()+">")}return Array.from(parsed.body.childNodes).map(cleanNode).join("");
+}
+function sectionHtml(s){let out='<section class="doc-section">';if(s.heading)out+='<h2>'+esc(s.heading)+'</h2>';if(s.html)out+=safeRichHtml(s.html);else if(s.paragraphs)out+=s.paragraphs.filter(x=>x!==null&&x!==undefined&&String(x)!=="").map(x=>'<p>'+esc(x)+'</p>').join("");if(s.bullets?.length)out+='<ul>'+s.bullets.map(x=>'<li>'+esc(x)+'</li>').join("")+'</ul>';if(s.rows?.length){out+='<table'+(s.header?' class="with-head"':'')+'>';s.rows.forEach((r,i)=>{out+='<tr>'+r.map(v=>i===0&&s.header?'<th>'+esc(v)+'</th>':'<td>'+esc(v)+'</td>').join("")+'</tr>'});out+='</table>'}return out+'</section>'}
 async function download(options){
- const o=options||{},popup=window.open("","_blank");
+ const o=options||{},pageFormat=({"A4":"A4","Letter":"Letter","Legal":"Legal"}[o.pageSize]||"A4"),popup=window.open("","_blank");
  if(!popup)throw new Error("Your browser blocked the document preview. Allow pop-ups for Navstar and try again.");
  try{
   const brand=await fetch("/api/branding",{credentials:"same-origin"}).then(r=>r.ok?r.json():null).catch(()=>null),b=brand?.branding||{};
