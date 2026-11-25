@@ -1,4 +1,5 @@
 import { getAuthenticatedSession } from "./auth.js";
+import { syncSchoolLearningAreas } from "./schools.js";
 
 const json=(data,status=200)=>Response.json(data,{status,headers:{"Cache-Control":"no-store"}});
 const id=()=>crypto.randomUUID();
@@ -397,6 +398,18 @@ export async function onRequestGet({request,env}){
   if(cfg.scope&&!await env.DB.prepare("SELECT 1 FROM schools WHERE id=?"+(a.user.is_super_admin?"":" AND status='active'")).bind(schoolId).first())return json({ok:false,error:"School not found or inactive."},404);
   if(name==="enrollments"&&cfg.scope&&(a.user.is_super_admin||a.user.permissions.includes("learners.manage")||a.user.permissions.includes("academics.manage")))await syncCompulsoryLearningAreas(env.DB,schoolId);
   try{
+    // Keep the tenant catalogue synchronized on read as well as on school setup.
+    // This repairs older schools and picks up new Super Admin catalogue entries
+    // without resetting optional offering choices already made by the school.
+    if(name==="learning-areas"&&!a.user.is_super_admin){
+      const schoolRow=await env.DB.prepare("SELECT curriculum,curricula_json,school_levels_json FROM schools WHERE id=?").bind(schoolId).first();
+      let configuredLevels=[];try{configuredLevels=JSON.parse(schoolRow?.school_levels_json||"[]")}catch{}
+      let curricula=[];try{curricula=JSON.parse(schoolRow?.curricula_json||"[]")}catch{}
+      if(!Array.isArray(curricula))curricula=[];
+      const configured=await env.DB.prepare("SELECT DISTINCT curriculum FROM grade_levels WHERE school_id=? AND is_active=1 AND curriculum IS NOT NULL AND trim(curriculum)<>''").bind(schoolId).all();
+      curricula=[...new Set([...curricula,...(configured.results||[]).map(x=>x.curriculum),schoolRow?.curriculum].filter(Boolean).map(String))];
+      for(const curriculum of curricula) await syncSchoolLearningAreas(env.DB,schoolId,curriculum,configuredLevels);
+    }
     if(name==="settings"){
       const rows=await env.DB.prepare("SELECT setting_key,setting_value,updated_at FROM platform_settings ORDER BY setting_key").all();
       return json({ok:true,records:rows.results||[]});
