@@ -2,6 +2,12 @@ import { getAuthenticatedSession } from "./auth.js";
 const json=(data,status=200)=>Response.json(data,{status,headers:{"Cache-Control":"no-store"}});
 const id=()=>crypto.randomUUID();
 const MAX_ROWS=5000,MAX_BYTES=10_000_000,WRITE_CHUNK=40;
+async function ensureLearnerIdentifierColumns(db){
+ const info=await db.prepare("PRAGMA table_info(learners)").all();
+ const columns=new Set((info.results||[]).map(x=>x.name));
+ if(!columns.has("assessment_number"))await db.prepare("ALTER TABLE learners ADD COLUMN assessment_number TEXT").run();
+ if(!columns.has("upi_number"))await db.prepare("ALTER TABLE learners ADD COLUMN upi_number TEXT").run();
+}
 function parseCsv(text){
  const rows=[];let row=[],field="",quoted=false;
  for(let i=0;i<text.length;i++){const ch=text[i],next=text[i+1];
@@ -24,6 +30,7 @@ export async function onRequestPost({request,env}){
  if(!actor)return json({ok:false,error:"Sign in to continue."},401);
  if(actor.is_super_admin===false&&!actor.permissions.includes("learners.manage"))return json({ok:false,error:"Your role cannot bulk register learners."},403);
  const schoolId=actor.school_id||new URL(request.url).searchParams.get("schoolId");
+ try{await ensureLearnerIdentifierColumns(env.DB)}catch(error){console.error("Learner identifier schema",error);return json({ok:false,error:"Learner registration fields are not ready. Please contact support."},500)}
  if(!schoolId)return json({ok:false,error:"School workspace is required."},400);
  const raw=await request.text();
  if(raw.length>MAX_BYTES)return json({ok:false,error:"CSV file exceeds the 10 MB import limit."},413);
@@ -39,19 +46,24 @@ export async function onRequestPost({request,env}){
    env.DB.prepare("SELECT id,name FROM academic_years WHERE school_id=?").bind(schoolId).all(),
    env.DB.prepare("SELECT id,stage_name,stage_code,curriculum,school_level FROM grade_levels WHERE school_id=? AND is_active=1").bind(schoolId).all(),
    env.DB.prepare("SELECT id,grade_level_id,name FROM streams WHERE school_id=? AND status='active'").bind(schoolId).all(),
-   env.DB.prepare("SELECT lower(admission_number) AS admission_number FROM learners WHERE school_id=?").bind(schoolId).all()
+   env.DB.prepare("SELECT lower(admission_number) AS admission_number,lower(COALESCE(assessment_number,'')) AS assessment_number,lower(COALESCE(upi_number,'')) AS upi_number FROM learners WHERE school_id=?").bind(schoolId).all()
   ]);
  }catch(e){console.error("Bulk learner import lookup",e);return json({ok:false,error:"School reference data could not be loaded. No learners were imported."},500)}
  const yearMap=new Map((years.results||[]).map(x=>[String(x.name).toLowerCase(),x]));
  const gradeRows=grades.results||[];
  const streamMap=new Map((streams.results||[]).map(x=>[x.grade_level_id+":"+String(x.name).toLowerCase(),x]));
  const existingAdmissions=new Set((existing.results||[]).map(x=>x.admission_number));
- const problems=[],prepared=[],seen=new Set();
+ const existingAssessment=new Set((existing.results||[]).map(x=>x.assessment_number).filter(Boolean));
+ const existingUpi=new Set((existing.results||[]).map(x=>x.upi_number).filter(Boolean));
+ const problems=[],prepared=[],seen=new Set(),seenAssessment=new Set(),seenUpi=new Set();
  for(let i=0;i<rows.length;i++){
   const r=rows[i],line=i+2,admission=(r.admission_number||"").trim(),first=(r.first_name||"").trim(),last=(r.last_name||"").trim();
   if(!admission||!first||!last){problems.push({row:line,error:"Admission number, first name and last name are required."});continue}
+  const assessment=(r.assessment_number||"").trim(),upi=(r.upi_number||"").trim();
   const duplicate=admission.toLowerCase();if(seen.has(duplicate)){problems.push({row:line,error:"Duplicate admission number in this CSV."});continue}seen.add(duplicate);
   if(existingAdmissions.has(duplicate)){problems.push({row:line,error:"Admission number already exists in this school."});continue}
+  if(assessment){const key=assessment.toLowerCase();if(seenAssessment.has(key)||existingAssessment.has(key)){problems.push({row:line,error:"Assessment number already exists in this school or is duplicated in this CSV."});continue}seenAssessment.add(key)}
+  if(upi){const key=upi.toLowerCase();if(seenUpi.has(key)||existingUpi.has(key)){problems.push({row:line,error:"UPI number already exists in this school or is duplicated in this CSV."});continue}seenUpi.add(key)}
   if(!["","male","female","other"].includes((r.gender||"").toLowerCase())){problems.push({row:line,error:"Gender must be Male, Female, Other or blank."});continue}
   if(r.status&&!["applicant","active","transferred","graduated","withdrawn","inactive"].includes(r.status.toLowerCase())){problems.push({row:line,error:"Status must be applicant, active, transferred, graduated, withdrawn or inactive."});continue}
   if(r.pathway&&!["STEM","Social Sciences","Arts & Sports Science"].includes(r.pathway)){problems.push({row:line,error:"Pathway must be STEM, Social Sciences or Arts & Sports Science."});continue}
@@ -67,7 +79,7 @@ export async function onRequestPost({request,env}){
   let streamId=null;
   if(r.stream){const stream=streamMap.get(grade.id+":"+r.stream.toLowerCase());if(!stream){const available=(streams.results||[]).filter(s=>s.grade_level_id===grade.id).map(s=>s.name);const detail=available.length?"Available streams in this class: "+available.join(", ")+".":"This class has no active streams; leave the stream column blank or create a stream for this class first.";problems.push({row:line,error:"Stream '"+r.stream+"' was not found in class '"+(grade.stage_name||r.grade)+"'. "+detail+" Download a fresh school-generated learner CSV template to use the correct class/stream pairs."});continue}streamId=stream.id}
   if(r.date_of_birth&&!/^\d{4}-\d{2}-\d{2}$/.test(r.date_of_birth)){problems.push({row:line,error:"Date of birth must use YYYY-MM-DD."});continue}
-  prepared.push({learnerId:id(),enrollmentId:id(),admission,first,middle:r.middle_name||null,last,gender:r.gender||null,dob:r.date_of_birth||null,status:(r.status||"active").toLowerCase(),pathway:r.pathway||null,yearId:year.id,gradeId:grade.id,streamId});
+  prepared.push({learnerId:id(),enrollmentId:id(),admission,assessment,upi,first,middle:r.middle_name||null,last,gender:r.gender||null,dob:r.date_of_birth||null,status:(r.status||"active").toLowerCase(),pathway:r.pathway||null,yearId:year.id,gradeId:grade.id,streamId});
  }
  if(problems.length)return json({ok:false,imported:0,failed:problems.length,problems,message:"No records were imported. Correct the listed rows and upload the CSV again."},422);
  let imported=0;
@@ -75,7 +87,7 @@ export async function onRequestPost({request,env}){
   for(let start=0;start<prepared.length;start+=WRITE_CHUNK){
    const chunk=prepared.slice(start,start+WRITE_CHUNK),statements=[];
    for(const x of chunk){
-    statements.push(env.DB.prepare("INSERT INTO learners(id,school_id,admission_number,first_name,middle_name,last_name,gender,date_of_birth,status,pathway,profile_json) VALUES(?,?,?,?,?,?,?,?,?,?, '{}')").bind(x.learnerId,schoolId,x.admission,x.first,x.middle,x.last,x.gender,x.dob,x.status,x.pathway));
+    statements.push(env.DB.prepare("INSERT INTO learners(id,school_id,admission_number,assessment_number,upi_number,first_name,middle_name,last_name,gender,date_of_birth,status,pathway,profile_json) VALUES(?,?,?,?,?,?,?,?,?,?,?,?, '{}')").bind(x.learnerId,schoolId,x.admission,x.assessment||null,x.upi||null,x.first,x.middle,x.last,x.gender,x.dob,x.status,x.pathway));
     statements.push(env.DB.prepare("INSERT INTO learner_enrollments(id,school_id,learner_id,academic_year_id,grade_level_id,stream_id,status) VALUES(?,?,?,?,?,?, 'active')").bind(x.enrollmentId,schoolId,x.learnerId,x.yearId,x.gradeId,x.streamId));
    }
    await env.DB.batch(statements);

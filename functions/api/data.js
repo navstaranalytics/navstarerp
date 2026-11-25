@@ -17,7 +17,7 @@ const resources={
   staff:{table:"staff_profiles",scope:true,fields:["user_id","staff_number","department","employment_type","employment_status","hire_date","profile_json"],required:["school_id"],refs:{user_id:"users"}},
   departments:{table:"school_departments",scope:true,fields:["name","code","description","head_staff_id","status"],required:["school_id","name"],refs:{head_staff_id:"staff_profiles"}},
   classes:{table:"classes",scope:true,fields:["academic_year_id","grade_level_id","stream_id","class_teacher_staff_id","capacity","room","status"],required:["school_id","academic_year_id","grade_level_id","stream_id"],refs:{academic_year_id:"academic_years",grade_level_id:"grade_levels",stream_id:"streams",class_teacher_staff_id:"staff_profiles"}},
-  learners:{table:"learners",scope:true,fields:["admission_number","first_name","middle_name","last_name","gender","date_of_birth","status","pathway","profile_json"],required:["school_id","admission_number","first_name","last_name"]},
+  learners:{table:"learners",scope:true,fields:["admission_number","assessment_number","upi_number","first_name","middle_name","last_name","gender","date_of_birth","status","pathway","profile_json"],required:["school_id","admission_number","first_name","last_name"]},
   enrollments:{table:"learner_enrollments",scope:true,fields:["learner_id","academic_year_id","grade_level_id","stream_id","status","enrolled_at"],required:["school_id","learner_id","academic_year_id","grade_level_id"],refs:{learner_id:"learners",academic_year_id:"academic_years",grade_level_id:"grade_levels",stream_id:"streams"}},
   guardians:{table:"guardians",scope:true,fields:["user_id","title","full_name","phone","email","relationship","national_id","occupation","postal_address","is_primary"],required:["school_id","full_name"],refs:{user_id:"users"}},
   "school-events":{table:"school_calendar_events",scope:true,fields:["title","description","event_type","start_at","end_at","audience","reminder_minutes","reminder_sent_at","created_by","status"],required:["school_id","title","start_at"],refs:{created_by:"users"}},
@@ -299,6 +299,12 @@ async function validateRefs(db,config,values,schoolId){
   }
   return null;
 }
+async function ensureLearnerIdentifierColumns(db){
+ const info=await db.prepare("PRAGMA table_info(learners)").all();
+ const columns=new Set((info.results||[]).map(x=>x.name));
+ if(!columns.has("assessment_number"))await db.prepare("ALTER TABLE learners ADD COLUMN assessment_number TEXT").run();
+ if(!columns.has("upi_number"))await db.prepare("ALTER TABLE learners ADD COLUMN upi_number TEXT").run();
+}
 function normalizePathway(value){return String(value||"").toLowerCase().replace(/&/g,"and").replace(/[^a-z0-9]+/g," ").trim();}
 async function validateLearningAreaClassAndPathway(db,name,schoolId,values,current={}){
  if(!["assessments","teacher-allocations","timetable","competency-assessments"].includes(name))return null;
@@ -355,6 +361,7 @@ export async function onRequestGet({request,env}){
   const url=new URL(request.url),name=url.pathname.split("/").pop(),cfg=resources[name];
   if(!cfg)return json({ok:false,error:"Unknown data resource."},404);
   if(name==="departments")await ensureDepartments(env.DB);
+  if(name==="learners")await ensureLearnerIdentifierColumns(env.DB);
   const needed=permissionFor(name,false);if(!allowed(a.user,needed))return json({ok:false,error:"Your role does not have permission to view this resource."},403);
   if(name==="grade-boundaries")await ensureGradeBoundaryScope(env.DB);
   if(name==="platform-users"){
@@ -504,6 +511,7 @@ export async function onRequestPost({request,env}){
   const name=new URL(request.url).pathname.split("/").pop(),cfg=resources[name];
   if(!cfg)return json({ok:false,error:"Unknown data resource."},404);
   if(name==="departments")await ensureDepartments(env.DB);
+  if(name==="learners")await ensureLearnerIdentifierColumns(env.DB);
   if(!allowed(a.user,permissionFor(name,true)))return json({ok:false,error:"Your role does not have permission to change this resource."},403);
   if(name==="grades"&&!a.user.is_super_admin)return json({ok:false,error:"Classes are configured by Navstar Super Admin. School Admins may create streams only."},403);
   if(name==="classes")return json({ok:false,error:"Class groups are no longer created. Classes are centrally configured; manage streams under each class instead."},405);
@@ -532,6 +540,16 @@ export async function onRequestPost({request,env}){
     const duplicate=await env.DB.prepare("SELECT 1 AS found FROM learning_areas WHERE school_id=? AND curriculum=? AND stage_code=? AND upper(code)=? LIMIT 1").bind(schoolId,curriculum,stage,code).first();
     if(duplicate)return json({ok:false,error:"That learning-area code already exists for this class."},409);
     values.name=areaName;values.code=code;values.pathway=null;values.is_active=1;values.is_mandatory=Number(values.is_mandatory)===1?1:0;values.subject_type=String(values.subject_type||"learning_area");values.school_customized=1;values.source_template="school_custom";
+  }
+  if(name==="learners"){
+    for(const field of ["assessment_number","upi_number"]){
+      const value=String(values[field]||"").trim();if(!value)continue;
+      const duplicate=await env.DB.prepare("SELECT admission_number FROM learners WHERE school_id=? AND lower("+field+")=lower(?) LIMIT 1").bind(schoolId,value).first();
+      if(duplicate)return json({ok:false,error:"That "+field.replace("_"," ")+" is already assigned to learner "+duplicate.admission_number+"."},409);
+      values[field]=value;
+    }
+    const p=String(values.pathway||"").trim();
+    if(p&&!["STEM","Social Sciences","Arts & Sports Science"].includes(p))return json({ok:false,error:"Choose a valid CBE Senior School pathway."},400);
   }
   if(name==="learners"&&values.profile_json){
     let profile;try{profile=typeof values.profile_json==="string"?JSON.parse(values.profile_json):values.profile_json}catch{return json({ok:false,error:"Learner profile details must be valid JSON."},400)}
@@ -812,6 +830,7 @@ export async function onRequestPatch({request,env}){
   const parts=new URL(request.url).pathname.split("/"),name=parts[parts.length-2],recordId=decodeURIComponent(parts[parts.length-1]||""),cfg=resources[name];
   if(!cfg||!recordId)return json({ok:false,error:"Unknown resource or record."},404);
   if(name==="departments")await ensureDepartments(env.DB);
+  if(name==="learners")await ensureLearnerIdentifierColumns(env.DB);
   if(!allowed(a.user,permissionFor(name,true)))return json({ok:false,error:"Your role does not have permission to change this resource."},403);
   if(name==="grades"&&!a.user.is_super_admin){
     let submitted;try{submitted=await request.clone().json()}catch{submitted={}}
@@ -843,6 +862,16 @@ export async function onRequestPatch({request,env}){
     if(cfg.scope&&!a.user.is_super_admin&&requested&&requested!==a.user.school_id)return json({ok:false,error:"You cannot update records in another school."},403);
     const current=await env.DB.prepare("SELECT * FROM "+cfg.table+" WHERE "+where).bind(...(cfg.scope?[recordId,schoolId]:[recordId])).first();
     if(!current)return json({ok:false,error:"Record not found in the selected school."},404);
+    if(name==="learners"){
+      for(const field of ["assessment_number","upi_number"]){
+        const value=String(values[field]??current[field]??"").trim();if(!value)continue;
+        const duplicate=await env.DB.prepare("SELECT admission_number FROM learners WHERE school_id=? AND id<>? AND lower("+field+")=lower(?) LIMIT 1").bind(schoolId,recordId,value).first();
+        if(duplicate)return json({ok:false,error:"That "+field.replace("_"," ")+" is already assigned to learner "+duplicate.admission_number+"."},409);
+        values[field]=value;
+      }
+      const p=String(values.pathway??current.pathway??"").trim();
+      if(p&&!["STEM","Social Sciences","Arts & Sports Science"].includes(p))return json({ok:false,error:"Choose a valid CBE Senior School pathway."},400);
+    }
     if(name==="grades"){const nextGrade={...current,...values},curriculumError=validateGradeCurriculum(nextGrade);if(curriculumError)return json({ok:false,error:curriculumError},400);const duplicate=await findDuplicateGrade(env.DB,schoolId,nextGrade,recordId);if(duplicate)return json({ok:false,error:"Another class with the same curriculum and class level already exists. Keep one record and edit it instead.",existing_grade_id:duplicate.id},409);}
     const calendarError=await validateAcademicCalendarDates(env.DB,name,schoolId,{...current,...values},recordId);if(calendarError)return json({ok:false,error:calendarError},400);
     if(name.startsWith("competency-")||name==="rubric-criteria"){const competencyError=await validateCompetencyRecord(env.DB,name,schoolId,{...current,...values},a.user);if(competencyError)return json({ok:false,error:competencyError},400)}
