@@ -523,8 +523,8 @@ export async function onRequestPost({request,env}){
         for(const grade of targets){
           const key=grade.id+"|"+code.toLowerCase()+"|"+(pathway||"").toLowerCase();if(seen.has(key))continue;seen.add(key);
           const existing=await env.DB.prepare("SELECT id FROM learning_areas WHERE school_id=? AND curriculum=? AND stage_code=? AND lower(COALESCE(NULLIF(catalogue_code,''),NULLIF(code,''),name))=lower(?) AND COALESCE(pathway,'')=COALESCE(?,'') LIMIT 1").bind(schoolId,curriculum,grade.stage_code,code,pathway).first();
-          if(existing)statements.push(env.DB.prepare("UPDATE learning_areas SET is_active=1,is_mandatory=?,subject_type=CASE WHEN ?=1 THEN 'compulsory' ELSE 'optional' END WHERE id=? AND school_id=?").bind(mandatory,mandatory,existing.id,schoolId));
-          else statements.push(env.DB.prepare("INSERT INTO learning_areas(id,school_id,curriculum,code,name,stage_code,pathway,is_active,is_mandatory,subject_type,source_template,catalogue_code) VALUES(?,?,?,?,?,?,?,1,?,?,?,?)").bind(crypto.randomUUID(),schoolId,curriculum,code,name,grade.stage_code,pathway,mandatory,mandatory?"compulsory":"optional","superadmin-central-catalogue",code));
+          if(existing)statements.push(env.DB.prepare("UPDATE learning_areas SET is_active=1,is_mandatory=? WHERE id=? AND school_id=?").bind(mandatory,existing.id,schoolId));
+          else statements.push(env.DB.prepare("INSERT INTO learning_areas(id,school_id,curriculum,code,name,stage_code,pathway,is_active,is_mandatory,source_template,catalogue_code) VALUES(?,?,?,?,?,?,?,1,?,?,?)").bind(crypto.randomUUID(),schoolId,curriculum,code,name,grade.stage_code,pathway,mandatory,"superadmin-central-catalogue",code));
         }
       }
       if(statements.length)await env.DB.batch(statements);
