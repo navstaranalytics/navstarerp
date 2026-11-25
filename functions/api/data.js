@@ -744,12 +744,12 @@ export async function onRequestDelete({request,env}){
       return json({ok:true,message:"Learner permanently deleted. Linked records configured to cascade have also been removed."});
     }
     if(name==="learning-areas"){
-      const area=await env.DB.prepare("SELECT id,name,stage_code,curriculum,is_mandatory FROM learning_areas WHERE id=? AND school_id=?").bind(recordId,schoolId).first();
+      const area=await env.DB.prepare("SELECT id,name,stage_code,curriculum,is_mandatory,school_customized,source_template FROM learning_areas WHERE id=? AND school_id=?").bind(recordId,schoolId).first();
       if(!area)return json({ok:false,error:"Learning area not found in this school."},404);
       if(!a.user.is_super_admin){
         const grade=await env.DB.prepare("SELECT school_level,stage_code FROM grade_levels WHERE school_id=? AND curriculum=? AND stage_code=? AND is_active=1").bind(schoolId,area.curriculum,area.stage_code).first();
-        const level=String(grade?.school_level||"").toLowerCase(),stage=String(area.stage_code||"").toUpperCase(),primary=!!grade&&(/pre-primary|primary/.test(level)&&!/junior/.test(level)||/^PP[12]$/.test(stage)||/^G[1-6]$/.test(stage)||/^STD[1-8]$/.test(stage));
-        if(!primary)return json({ok:false,error:"Only Primary and Pre-Primary learning areas can be deleted by a School Admin."},403);
+        const level=String(grade?.school_level||"").toLowerCase(),stage=String(area.stage_code||"").toUpperCase(),primary=!!grade&&(/pre-primary|primary/.test(level)&&!/junior/.test(level)||/^PP[12]$/.test(stage)||/^G[1-6]$/.test(stage)||/^STD[1-8]$/.test(stage)),schoolCustom=Number(area.school_customized)===1||String(area.source_template||"")==="school_custom";
+        if(!primary&&!schoolCustom)return json({ok:false,error:"School Admins can delete only school-created learning areas. Central catalogue areas can be deactivated instead."},403);
       }
       const linked=await env.DB.prepare("SELECT COUNT(*) AS total FROM learner_learning_areas WHERE school_id=? AND learning_area_id=?").bind(schoolId,recordId).first();
       if(Number(linked?.total||0)>0)return json({ok:false,error:"This learning area is already attached to learner records. Deactivate it instead to preserve historical records."},409);
