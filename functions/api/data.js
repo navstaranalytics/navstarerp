@@ -728,11 +728,15 @@ export async function onRequestDelete({request,env}){
         if(!names.has("grade_level_id"))continue;
         const hasSchool=names.has("school_id");
         const count=await env.DB.prepare("SELECT COUNT(*) AS total FROM "+table+" WHERE grade_level_id=?"+(hasSchool?" AND school_id=?":"")).bind(...(hasSchool?[recordId,schoolId]:[recordId])).first();
-        if(Number(count?.total||0)>0)protectedRefs.push(table.replace(/_/g," ")+": "+count.total);
+        if(Number(count?.total||0)>0&&!(table==="learner_enrollments"&&targetGradeId))protectedRefs.push(table.replace(/_/g," ")+": "+count.total);
       }
       if(protectedRefs.length)return json({ok:false,error:"This class is still linked to non-enrolment records ("+protectedRefs.join("; ")+"). Those records must be reassigned or archived before deleting the class."},409);
       const remaining=await env.DB.prepare("SELECT COUNT(*) AS total FROM learner_enrollments WHERE school_id=? AND grade_level_id=?").bind(schoolId,recordId).first();
-      if(Number(remaining?.total||0)>0)return json({ok:false,error:"Some historical enrolments remain. Transfer or archive them before deleting this class."},409);
+      if(Number(remaining?.total||0)>0){
+        await env.DB.prepare("UPDATE grade_levels SET is_active=0 WHERE id=? AND school_id=?").bind(recordId,schoolId).run();
+        await audit(env.DB,a.user,schoolId,"record.archived","grades",recordId);
+        return json({ok:true,message:"Class removed from active school choices. Historical enrolments and academic records have been preserved in the archived class."});
+      }
       await env.DB.prepare("DELETE FROM grade_levels WHERE id=? AND school_id=?").bind(recordId,schoolId).run();
       const verify=await env.DB.prepare("SELECT id FROM grade_levels WHERE id=? AND school_id=?").bind(recordId,schoolId).first();
       if(verify)throw new Error("Class still exists after deletion.");
