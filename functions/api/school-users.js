@@ -62,7 +62,7 @@ export async function onRequestPost({request,env}) {
    env.DB.prepare("INSERT INTO school_memberships(id,school_id,user_id,membership_status,job_title,joined_at) VALUES(?,?,?,'active',?,strftime('%Y-%m-%dT%H:%M:%fZ','now'))").bind(membershipId,schoolId,userId,roleRows.map(r=>r.role_name).join(" / ")),
   ];
   for(const role of roleRows)statements.push(env.DB.prepare("INSERT INTO user_role_assignments(id,user_id,role_id,school_id,scope_json,assigned_by) VALUES(?,?,?,?,?,?)").bind(id(),userId,role.id,schoolId,JSON.stringify({scope:"school",level:"all"}),actor.id));
-  if(roleKeys.some(k=>staffRoles.has(k)))statements.push(env.DB.prepare("INSERT INTO staff_profiles(id,school_id,user_id,staff_number,department,employment_status) VALUES(?,?,?,?,?,'active')").bind(id(),schoolId,userId,clean(body.staffNumber)||null,clean(body.department)||null));
+  if(roleKeys.some(k=>staffRoles.has(k)))statements.push(env.DB.prepare("INSERT INTO staff_profiles(id,school_id,user_id,staff_number,department,employment_status,is_teacher) VALUES(?,?,?,?,?,'active',?)").bind(id(),schoolId,userId,clean(body.staffNumber)||null,clean(body.department)||null,roleKeys.some(k=>["teacher","class_teacher","principal"].includes(k))?1:0));
   if(roleKeys.includes("parent")){
    const guardianId=id();
    statements.push(env.DB.prepare("INSERT INTO guardians(id,school_id,user_id,full_name,phone,email,relationship) VALUES(?,?,?,?,?,?,?)").bind(guardianId,schoolId,userId,fullName,phone||null,email,clean(body.relationship)||"Parent/Guardian"));
