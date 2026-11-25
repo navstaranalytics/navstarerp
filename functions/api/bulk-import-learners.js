@@ -44,13 +44,14 @@ export async function onRequestPost({request,env}){
  const required=["first_name","last_name","academic_year","grade"];
  const missing=required.filter(k=>!Object.keys(rows[0]).includes(k));
  if(missing.length)return json({ok:false,error:"Missing required columns: "+missing.join(", ")},400);
- let years,grades,streams,existing;
+ let years,grades,streams,existing,areas;
  try{
   [years,grades,streams,existing]=await Promise.all([
    env.DB.prepare("SELECT id,name FROM academic_years WHERE school_id=?").bind(schoolId).all(),
    env.DB.prepare("SELECT id,stage_name,stage_code,curriculum,school_level FROM grade_levels WHERE school_id=? AND is_active=1").bind(schoolId).all(),
    env.DB.prepare("SELECT id,grade_level_id,name FROM streams WHERE school_id=? AND status='active'").bind(schoolId).all(),
-   env.DB.prepare("SELECT lower(admission_number) AS admission_number,lower(COALESCE(assessment_number,'')) AS assessment_number,lower(COALESCE(upi_number,'')) AS upi_number FROM learners WHERE school_id=?").bind(schoolId).all()
+   env.DB.prepare("SELECT lower(admission_number) AS admission_number,lower(COALESCE(assessment_number,'')) AS assessment_number,lower(COALESCE(upi_number,'')) AS upi_number FROM learners WHERE school_id=?").bind(schoolId).all(),
+   env.DB.prepare("SELECT id,stage_code,curriculum,pathway,is_mandatory FROM learning_areas WHERE school_id=? AND is_active=1").bind(schoolId).all()
   ]);
  }catch(e){console.error("Bulk learner import lookup",e);return json({ok:false,error:"School reference data could not be loaded. No learners were imported."},500)}
  const yearMap=new Map((years.results||[]).map(x=>[String(x.name).toLowerCase(),x]));
@@ -83,7 +84,7 @@ export async function onRequestPost({request,env}){
   let streamId=null;
   if(r.stream){const stream=streamMap.get(grade.id+":"+r.stream.toLowerCase());if(!stream){const available=(streams.results||[]).filter(s=>s.grade_level_id===grade.id).map(s=>s.name);const detail=available.length?"Available streams in this class: "+available.join(", ")+".":"This class has no active streams; leave the stream column blank or create a stream for this class first.";problems.push({row:line,error:"Stream '"+r.stream+"' was not found in class '"+(grade.stage_name||r.grade)+"'. "+detail+" Download a fresh school-generated learner CSV template to use the correct class/stream pairs."});continue}streamId=stream.id}
   if(r.date_of_birth&&!/^\d{4}-\d{2}-\d{2}$/.test(r.date_of_birth)){problems.push({row:line,error:"Date of birth must use YYYY-MM-DD."});continue}
-  prepared.push({learnerId:id(),enrollmentId:id(),admission:"",assessment,upi,nemis,first,middle:r.middle_name||null,last,gender:r.gender||null,dob:r.date_of_birth||null,status:(r.status||"active").toLowerCase(),pathway:r.pathway||null,yearId:year.id,gradeId:grade.id,streamId});
+  const norm=v=>String(v||"").toLowerCase().replace(/&/g,"and").replace(/[^a-z0-9]+/g," ").trim(),path=norm(r.pathway),gradeAreas=(areas.results||[]).filter(a=>a.stage_code===grade.stage_code&&a.curriculum===grade.curriculum),compulsoryAreas=gradeAreas.filter(a=>Number(a.is_mandatory)===1&&(!norm(a.pathway)||["all","all pathways"].includes(norm(a.pathway))||norm(a.pathway)===path)).map(a=>a.id),electiveNames=String(r.elective_learning_areas||"").split(/[;|]/).map(x=>x.trim()).filter(Boolean),electiveAreas=[];for(const name of electiveNames){const match=gradeAreas.find(a=>Number(a.is_mandatory)!==1&&String(a.name||"").toLowerCase()===name.toLowerCase()&&(!norm(a.pathway)||["all","all pathways"].includes(norm(a.pathway))||norm(a.pathway)===path));if(!match){problems.push({row:line,error:"Elective learning area '"+name+"' is not configured as an active elective for this class and pathway."});break}electiveAreas.push(match.id)}if(problems.some(p=>p.row===line))continue;prepared.push({learnerId:id(),enrollmentId:id(),admission:"",assessment,upi,nemis,first,middle:r.middle_name||null,last,gender:r.gender||null,dob:r.date_of_birth||null,status:(r.status||"active").toLowerCase(),pathway:r.pathway||null,yearId:year.id,gradeId:grade.id,streamId,compulsoryAreas,electiveAreas});
  }
  if(problems.length)return json({ok:false,imported:0,failed:problems.length,problems,message:"No records were imported. Correct the listed rows and upload the CSV again."},422);
  let imported=0;
@@ -94,6 +95,7 @@ export async function onRequestPost({request,env}){
     x.admission=await allocateAdmission(env.DB,schoolId,actor.id);
     statements.push(env.DB.prepare("INSERT INTO learners(id,school_id,admission_number,assessment_number,upi_number,nemis_number,first_name,middle_name,last_name,gender,date_of_birth,status,pathway,profile_json) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?, '{}')").bind(x.learnerId,schoolId,x.admission,x.assessment||null,x.upi||null,x.nemis||null,x.first,x.middle,x.last,x.gender,x.dob,x.status,x.pathway));
     statements.push(env.DB.prepare("INSERT INTO learner_enrollments(id,school_id,learner_id,academic_year_id,grade_level_id,stream_id,status) VALUES(?,?,?,?,?,?, 'active')").bind(x.enrollmentId,schoolId,x.learnerId,x.yearId,x.gradeId,x.streamId));
+    for(const areaId of [...x.compulsoryAreas,...x.electiveAreas])statements.push(env.DB.prepare("INSERT OR IGNORE INTO learner_learning_areas(id,school_id,enrollment_id,learner_id,learning_area_id,selection_type,selected_by,status) VALUES(?,?,?,?,?,?,?,'active')").bind(id(),schoolId,x.enrollmentId,x.learnerId,areaId,x.compulsoryAreas.includes(areaId)?"compulsory":"elective",x.compulsoryAreas.includes(areaId)?"system":"school"));
    }
    await env.DB.batch(statements);
    const placeholders=chunk.map(()=>"?").join(",");
