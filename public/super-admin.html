@@ -349,6 +349,7 @@ configureSchoolBilling=function(id){
     selectField("Preferred payment method", "paymentMethod",["Use plan default","M-Pesa","Bank transfer","Card / online gateway","Cheque","Cash / manual receipt"],billing.paymentMethod||"Use plan default")+
     field("Payment terms","paymentTerms","e.g. Due within 14 days","text",billing.paymentTerms||"Due within 14 days")+
     selectFieldRich("Subscription status","status",statuses,billing.status||"trial")+
+    '<div class="form-field full" id="subscriptionPlanSummary" style="padding:12px;background:#f3f7ff;border-radius:9px;font-size:11px">Plan limits and included capabilities will appear here.</div>'+
     '</div>',async d=>{
       const selected=plans.find(x=>x.name===d.get("plan")&&x.id&&x.active!==false);if(!selected?.id){toast(plans.some(x=>x.id&&x.active!==false)?"Choose an active plan from the list.":"No active subscription plan is saved in D1 yet. Create and save a plan in Subscriptions & plans first.");return}
       const model=d.get("billingModel"),raw=d.get("rate"),rate=raw===""?null:Number(raw),discount=Number(d.get("discount"))||0;
@@ -374,6 +375,25 @@ configureSchoolBilling=function(id){
         closeModal();render();toast((schoolStatus==="active"?"Subscription saved, school confirmed and dashboard activated.":"Subscription saved and school approval status updated.")+invoiceNotice);
       }catch(error){toast(error.message||"Subscription could not be saved.");if(button){button.disabled=false;button.textContent="Save record"}}
     });
+  const planSelect=$("modalBody")?.querySelector('[name="plan"]');
+  const refreshPlanSummary=()=>{
+    const chosen=plans.find(x=>x.name===planSelect?.value&&x.id&&x.active!==false);
+    const box=$("subscriptionPlanSummary");
+    if(!box)return;
+    if(!chosen){box.textContent="Choose an active plan to load its limits and capabilities.";return}
+    const modules=normalizePlanModules(chosen.modules);
+    box.innerHTML="<b>"+esc(chosen.name)+" plan defaults</b><div>Billing: "+esc(billingModel(chosen).label)+" · Learner limit: "+(chosen.learners?Number(chosen.learners).toLocaleString():"Unlimited")+" · Storage: "+esc(chosen.storage)+" GB · AI credits: "+esc(chosen.ai)+"</div><div style='margin-top:5px'>Included capabilities: "+esc(modules.join(", ")||"Core")+"</div><div style='margin-top:5px;color:#63758b'>Selecting another plan loads its defaults. A custom rate or billing override is optional.</div>";
+  };
+  planSelect?.addEventListener("change",()=>{
+    const chosen=plans.find(x=>x.name===planSelect.value&&x.id&&x.active!==false);
+    if(!chosen)return;
+    const model=$("modalBody")?.querySelector('[name="billingModel"]'),rateInput=$("modalBody")?.querySelector('[name="rate"]'),method=$("modalBody")?.querySelector('[name="paymentMethod"]');
+    if(model)model.value="plan";
+    if(rateInput)rateInput.value="";
+    if(method)method.value="Use plan default";
+    refreshPlanSummary();
+  });
+  refreshPlanSummary();
 };
 
 addPlan=function(){
@@ -726,7 +746,7 @@ async function persistPlatformSettings(next){
  settings=next;
  const status=$("saveState");if(status)status.textContent="Saved centrally in D1 · "+new Date().toLocaleTimeString();
 }
-function mapDatabasePlan(row){let capabilities=[],methods=[],stages=[];try{capabilities=JSON.parse(row.capabilities_json||"[]")}catch{}try{methods=JSON.parse(row.payment_methods_json||"[]")}catch{}try{stages=JSON.parse(row.school_levels_json||"[]")}catch{}return {id:row.id,planCode:row.plan_code,name:row.name,price:Number(row.rate_kes||0),rate:Number(row.rate_kes||0),learners:Number(row.max_learners||0),storage:Number(row.storage_gb||0),ai:Number(row.ai_credits||0),setupFee:Number(row.onboarding_fee_kes||0),graceDays:Number(row.grace_period_days||0),countBasis:row.learner_count_basis||"active",paymentMethods:methods,stages,modules:Array.isArray(capabilities)?capabilities.join(", "):String(capabilities||""),billingModel:row.billing_model,description:row.description||"",active:Number(row.is_active)!==0}}
+function mapDatabasePlan(row){let capabilities=[],methods=[],stages=[];try{capabilities=JSON.parse(row.capabilities_json||"[]")}catch{}try{methods=JSON.parse(row.payment_methods_json||"[]")}catch{}try{stages=JSON.parse(row.school_levels_json||"[]")}catch{}return {id:row.id,planCode:row.plan_code,name:row.name,price:Number(row.rate_kes||0),rate:Number(row.rate_kes||0),learners:Number(row.max_learners||0),storage:Number(row.storage_gb||0),ai:Number(row.ai_credits||0),setupFee:Number(row.onboarding_fee_kes||0),graceDays:Number(row.grace_period_days||0),countBasis:row.learner_count_basis||"active",paymentMethods:methods,stages,modules:normalizePlanModules(capabilities),billingModel:["flat_year","flat_half_year","flat_term","flat_month","one_time","custom"].includes(row.billing_model)?row.billing_model:"flat_year",description:row.description||"",active:Number(row.is_active)!==0}}
 function normalizePlanModules(value){if(Array.isArray(value))return value.map(x=>String(x??"").trim()).filter(Boolean);if(value&&typeof value==="object"){if(Array.isArray(value.modules))return normalizePlanModules(value.modules);if(Array.isArray(value.capabilities))return normalizePlanModules(value.capabilities);return Object.values(value).map(x=>String(x??"").trim()).filter(Boolean)}if(typeof value==="string"){const raw=value.trim();if(!raw)return [];try{const parsed=JSON.parse(raw);if(Array.isArray(parsed))return normalizePlanModules(parsed)}catch{}return raw.split(/[,;+]/).map(x=>x.trim()).filter(Boolean)}return []}
 async function loadPlansFromDatabase(){
  let data=await schoolApi("/api/data/plans");
