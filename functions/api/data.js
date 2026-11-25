@@ -366,22 +366,6 @@ export async function onRequestGet({request,env}){
     if(cfg.scope)sql+=teacherFilter(name,a.user);
     sql+=(name==="audit"?" ORDER BY created_at DESC LIMIT 500":" ORDER BY rowid DESC LIMIT 1000");
     const rows=cfg.scope?await env.DB.prepare(sql).bind(schoolId).all():await env.DB.prepare(sql).all();
-    if(name==="learning-areas"){
-      const area=await env.DB.prepare("SELECT id,name,stage_code,curriculum,is_mandatory FROM learning_areas WHERE id=? AND school_id=?").bind(recordId,schoolId).first();
-      if(!area)return json({ok:false,error:"Learning area not found in this school."},404);
-      if(!a.user.is_super_admin){
-        const grade=await env.DB.prepare("SELECT school_level,stage_code FROM grade_levels WHERE school_id=? AND curriculum=? AND stage_code=? AND is_active=1").bind(schoolId,area.curriculum,area.stage_code).first();
-        const level=String(grade?.school_level||"").toLowerCase(),stage=String(area.stage_code||"").toUpperCase(),primary=!!grade&&(/pre-primary|primary/.test(level)&&!/junior/.test(level)||/^PP[12]$/.test(stage)||/^G[1-6]$/.test(stage)||/^STD[1-8]$/.test(stage));
-        if(!primary)return json({ok:false,error:"Only Primary and Pre-Primary learning areas can be deleted by a School Admin."},403);
-      }
-      const linked=await env.DB.prepare("SELECT COUNT(*) AS total FROM learner_learning_areas WHERE school_id=? AND learning_area_id=?").bind(schoolId,recordId).first();
-      if(Number(linked?.total||0)>0)return json({ok:false,error:"This learning area is already attached to learner records. Deactivate it instead to preserve historical records."},409);
-      await env.DB.prepare("DELETE FROM learning_areas WHERE id=? AND school_id=?").bind(recordId,schoolId).run();
-      const verify=await env.DB.prepare("SELECT id FROM learning_areas WHERE id=? AND school_id=?").bind(recordId,schoolId).first();
-      if(verify)throw new Error("Learning area still exists after deletion.");
-      await audit(env.DB,a.user,schoolId,"record.deleted","learning-areas",recordId);
-      return json({ok:true,message:"School learning area deleted. The central Navstar catalogue was not changed."});
-    }
     if(name==="grades"){
       const school=await env.DB.prepare("SELECT curriculum,school_levels_json FROM schools WHERE id=?").bind(schoolId).first();
       let levels=[];try{levels=JSON.parse(school?.school_levels_json||"[]")}catch{}
@@ -663,6 +647,22 @@ export async function onRequestDelete({request,env}){
   if(cfg.scope&&!schoolId)return json({ok:false,error:"School workspace is required."},400);
   if(cfg.scope&&!a.user.is_super_admin&&requested&&requested!==a.user.school_id)return json({ok:false,error:"You cannot delete records in another school."},403);
   try{
+    if(name==="learning-areas"){
+      const area=await env.DB.prepare("SELECT id,name,stage_code,curriculum,is_mandatory FROM learning_areas WHERE id=? AND school_id=?").bind(recordId,schoolId).first();
+      if(!area)return json({ok:false,error:"Learning area not found in this school."},404);
+      if(!a.user.is_super_admin){
+        const grade=await env.DB.prepare("SELECT school_level,stage_code FROM grade_levels WHERE school_id=? AND curriculum=? AND stage_code=? AND is_active=1").bind(schoolId,area.curriculum,area.stage_code).first();
+        const level=String(grade?.school_level||"").toLowerCase(),stage=String(area.stage_code||"").toUpperCase(),primary=!!grade&&(/pre-primary|primary/.test(level)&&!/junior/.test(level)||/^PP[12]$/.test(stage)||/^G[1-6]$/.test(stage)||/^STD[1-8]$/.test(stage));
+        if(!primary)return json({ok:false,error:"Only Primary and Pre-Primary learning areas can be deleted by a School Admin."},403);
+      }
+      const linked=await env.DB.prepare("SELECT COUNT(*) AS total FROM learner_learning_areas WHERE school_id=? AND learning_area_id=?").bind(schoolId,recordId).first();
+      if(Number(linked?.total||0)>0)return json({ok:false,error:"This learning area is already attached to learner records. Deactivate it instead to preserve historical records."},409);
+      await env.DB.prepare("DELETE FROM learning_areas WHERE id=? AND school_id=?").bind(recordId,schoolId).run();
+      const verify=await env.DB.prepare("SELECT id FROM learning_areas WHERE id=? AND school_id=?").bind(recordId,schoolId).first();
+      if(verify)throw new Error("Learning area still exists after deletion.");
+      await audit(env.DB,a.user,schoolId,"record.deleted","learning-areas",recordId);
+      return json({ok:true,message:"School learning area deleted. The central Navstar catalogue was not changed."});
+    }
     if(name==="grades"){
       const grade=await env.DB.prepare("SELECT id,stage_name,stage_code,curriculum FROM grade_levels WHERE id=? AND school_id=?").bind(recordId,schoolId).first();
       if(!grade)return json({ok:false,error:"Class not found in this school."},404);
