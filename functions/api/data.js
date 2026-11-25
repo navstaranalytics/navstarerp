@@ -387,6 +387,14 @@ export async function onRequestGet({request,env}){
       const rows=await env.DB.prepare("SELECT sp.*,u.full_name,u.username,u.email FROM staff_profiles sp LEFT JOIN users u ON u.id=sp.user_id WHERE sp.school_id=? ORDER BY u.full_name").bind(schoolId).all();
       return json({ok:true,records:rows.results||[]});
     }
+    if(name==="streams"){
+      // Keep the query tenant-scoped and aligned with the composite indexes
+      // created in migration 0017; avoid a full-table scan across schools.
+      const includeInactive=a.user.is_super_admin||url.searchParams.has("includeInactive");
+      const sql="SELECT id,school_id,grade_level_id,name,capacity,classroom,status FROM streams WHERE school_id=?"+(includeInactive?"":" AND status='active'")+" ORDER BY grade_level_id,name LIMIT 1000";
+      const rows=await env.DB.prepare(sql).bind(schoolId).all();
+      return json({ok:true,records:rows.results||[]});
+    }
     let sql="SELECT * FROM "+cfg.table+(cfg.scope?" WHERE school_id=?":"");
     if(name==="grades")sql+=" AND COALESCE(is_archived,0)=0";
     if(name==="grades"&&!a.user.is_super_admin&&!url.searchParams.has("includeInactive"))sql+=" AND is_active=1";
