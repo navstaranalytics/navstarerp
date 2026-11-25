@@ -672,13 +672,20 @@ export async function onRequestDelete({request,env}){
   const parts=new URL(request.url).pathname.split("/"),name=parts[parts.length-2],recordId=decodeURIComponent(parts[parts.length-1]||""),cfg=resources[name];
   if(!cfg||!recordId)return json({ok:false,error:"Unknown resource or record."},404);
   if(name==="departments")await ensureDepartments(env.DB);
-  if(!["years","terms","school-events","grading-schemes","streams","departments","grades","learning-areas"].includes(name))return json({ok:false,error:"Deletion is not enabled for this resource."},405);
+  if(!["years","terms","school-events","grading-schemes","streams","departments","grades","learning-areas","learners"].includes(name))return json({ok:false,error:"Deletion is not enabled for this resource."},405);
   if(!allowed(a.user,permissionFor(name,true)))return json({ok:false,error:"Your role does not have permission to delete this record."},403);
   const requested=new URL(request.url).searchParams.get("schoolId")||"";
   const schoolId=cfg.scope?(a.user.is_super_admin?requested:a.user.school_id):"";
   if(cfg.scope&&!schoolId)return json({ok:false,error:"School workspace is required."},400);
   if(cfg.scope&&!a.user.is_super_admin&&requested&&requested!==a.user.school_id)return json({ok:false,error:"You cannot delete records in another school."},403);
   try{
+    if(name==="learners"){
+      const learner=await env.DB.prepare("SELECT id,first_name,last_name,status FROM learners WHERE id=? AND school_id=?").bind(recordId,schoolId).first();
+      if(!learner)return json({ok:false,error:"Learner not found in this school."},404);
+      await env.DB.prepare("UPDATE learners SET status='withdrawn' WHERE id=? AND school_id=?").bind(recordId,schoolId).run();
+      await audit(env.DB,a.user,schoolId,"learner.archived","learners",recordId);
+      return json({ok:true,message:"Learner archived as withdrawn. Enrolments, results, attendance, fee history and guardian records have been preserved."});
+    }
     if(name==="learning-areas"){
       const area=await env.DB.prepare("SELECT id,name,stage_code,curriculum,is_mandatory FROM learning_areas WHERE id=? AND school_id=?").bind(recordId,schoolId).first();
       if(!area)return json({ok:false,error:"Learning area not found in this school."},404);
@@ -698,6 +705,18 @@ export async function onRequestDelete({request,env}){
     if(name==="grades"){
       const grade=await env.DB.prepare("SELECT id,stage_name,stage_code,curriculum FROM grade_levels WHERE id=? AND school_id=?").bind(recordId,schoolId).first();
       if(!grade)return json({ok:false,error:"Class not found in this school."},404);
+      const targetGradeId=new URL(request.url).searchParams.get("transferTo")||"";
+      if(targetGradeId){
+        if(targetGradeId===recordId)return json({ok:false,error:"Choose a different destination class."},400);
+        const target=await env.DB.prepare("SELECT id,curriculum FROM grade_levels WHERE id=? AND school_id=? AND is_active=1").bind(targetGradeId,schoolId).first();
+        if(!target||target.curriculum!==grade.curriculum)return json({ok:false,error:"Choose an active destination class in the same curriculum."},400);
+        const linked=await env.DB.prepare("SELECT id,learner_id,academic_year_id FROM learner_enrollments WHERE school_id=? AND grade_level_id=? AND status='active'").bind(schoolId,recordId).all();
+        for(const enrol of linked.results||[]){
+          const exists=await env.DB.prepare("SELECT id FROM learner_enrollments WHERE school_id=? AND learner_id=? AND academic_year_id=? AND grade_level_id=? AND status='active'").bind(schoolId,enrol.learner_id,enrol.academic_year_id,targetGradeId).first();
+          if(exists)await env.DB.prepare("UPDATE learner_enrollments SET status='transferred' WHERE id=? AND school_id=?").bind(enrol.id,schoolId).run();
+          else await env.DB.prepare("UPDATE learner_enrollments SET grade_level_id=?,stream_id=NULL WHERE id=? AND school_id=?").bind(targetGradeId,enrol.id,schoolId).run();
+        }
+      }
       const tableRows=await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table'").all();
       const tableNames=new Set((tableRows.results||[]).map(x=>x.name));
       const protectedRefs=[];
@@ -711,7 +730,9 @@ export async function onRequestDelete({request,env}){
         const count=await env.DB.prepare("SELECT COUNT(*) AS total FROM "+table+" WHERE grade_level_id=?"+(hasSchool?" AND school_id=?":"")).bind(...(hasSchool?[recordId,schoolId]:[recordId])).first();
         if(Number(count?.total||0)>0)protectedRefs.push(table.replace(/_/g," ")+": "+count.total);
       }
-      if(protectedRefs.length)return json({ok:false,error:"This class is already used by school records and cannot be deleted safely ("+protectedRefs.join("; ")+"). Deactivate it instead, or move those records first."},409);
+      if(protectedRefs.length)return json({ok:false,error:"This class is still linked to non-enrolment records ("+protectedRefs.join("; ")+"). Those records must be reassigned or archived before deleting the class."},409);
+      const remaining=await env.DB.prepare("SELECT COUNT(*) AS total FROM learner_enrollments WHERE school_id=? AND grade_level_id=?").bind(schoolId,recordId).first();
+      if(Number(remaining?.total||0)>0)return json({ok:false,error:"Some historical enrolments remain. Transfer or archive them before deleting this class."},409);
       await env.DB.prepare("DELETE FROM grade_levels WHERE id=? AND school_id=?").bind(recordId,schoolId).run();
       const verify=await env.DB.prepare("SELECT id FROM grade_levels WHERE id=? AND school_id=?").bind(recordId,schoolId).first();
       if(verify)throw new Error("Class still exists after deletion.");
