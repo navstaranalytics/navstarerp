@@ -62,9 +62,9 @@ export async function onRequestPost({request,env}) {
    const studentId=student?.id||id(),parentId=parent?.id||id(),statements=[];
    if(!student){
     const passwordHash=await hashPassword(studentPassword);
-    statements.push(env.DB.prepare("INSERT INTO users(id,email,email_normalized,username,username_normalized,phone,full_name,password_hash,status,password_changed_at) VALUES(?,?,?,?,?,?,?,?,'active',strftime('%Y-%m-%dT%H:%M:%fZ','now'))").bind(studentId,studentEmail,studentEmail,studentUsername,studentUsername,parentPhone||null,studentName,passwordHash));
+    statements.push(env.DB.prepare("INSERT INTO users(id,email,email_normalized,username,username_normalized,phone,full_name,password_hash,status,password_changed_at) VALUES(?,?,?,?,?,?,?,?,'active',strftime('%Y-%m-%dT%H:%M:%fZ','now'))").bind(studentId,studentEmail,studentEmail,studentUsername,studentUsername,null,studentName,passwordHash));
     statements.push(env.DB.prepare("INSERT OR IGNORE INTO school_memberships(id,school_id,user_id,membership_status,job_title,joined_at) VALUES(?,?,?,'active','Student',strftime('%Y-%m-%dT%H:%M:%fZ','now'))").bind(id(),schoolId,studentId));
-    statements.push(env.DB.prepare("INSERT OR IGNORE INTO user_role_assignments(id,user_id,role_id,school_id,scope_json,assigned_by) VALUES(?,?,?,?,?,?)").bind(id(),studentId,roles[0].id,schoolId,JSON.stringify({scope:"school",level:"learner"}),actor.id));
+    statements.push(env.DB.prepare("INSERT INTO user_role_assignments(id,user_id,role_id,school_id,scope_json,assigned_by) SELECT ?,?,?,?,?,? WHERE NOT EXISTS (SELECT 1 FROM user_role_assignments WHERE user_id=? AND role_id=? AND school_id=?)").bind(id(),studentId,roles[0].id,schoolId,JSON.stringify({scope:"school",level:"learner"}),actor.id,studentId,roles[0].id,schoolId));
     statements.push(env.DB.prepare("INSERT INTO learner_user_links(id,school_id,learner_id,user_id,created_by) VALUES(?,?,?,?,?)").bind(id(),schoolId,learner.id,studentId,actor.id));
    }
    if(!parent){
@@ -72,7 +72,7 @@ export async function onRequestPost({request,env}) {
     statements.push(env.DB.prepare("INSERT INTO users(id,email,email_normalized,username,username_normalized,phone,full_name,password_hash,status,password_changed_at) VALUES(?,?,?,?,?,?,?,?,'active',strftime('%Y-%m-%dT%H:%M:%fZ','now'))").bind(parentId,parentEmail,parentEmail,parentUsername,parentUsername,parentPhone||null,parentName,passwordHash));
    }
    statements.push(env.DB.prepare("INSERT OR IGNORE INTO school_memberships(id,school_id,user_id,membership_status,job_title,joined_at) VALUES(?,?,?,'active','Parent / Guardian',strftime('%Y-%m-%dT%H:%M:%fZ','now'))").bind(id(),schoolId,parentId));
-   statements.push(env.DB.prepare("INSERT OR IGNORE INTO user_role_assignments(id,user_id,role_id,school_id,scope_json,assigned_by) VALUES(?,?,?,?,?,?)").bind(id(),parentId,roles[1].id,schoolId,JSON.stringify({scope:"school",level:"linked_learners"}),actor.id));
+   statements.push(env.DB.prepare("INSERT INTO user_role_assignments(id,user_id,role_id,school_id,scope_json,assigned_by) SELECT ?,?,?,?,?,? WHERE NOT EXISTS (SELECT 1 FROM user_role_assignments WHERE user_id=? AND role_id=? AND school_id=?)").bind(id(),parentId,roles[1].id,schoolId,JSON.stringify({scope:"school",level:"linked_learners"}),actor.id,parentId,roles[1].id,schoolId));
    const linkedGuardian=await env.DB.prepare("SELECT g.id FROM guardians g JOIN learner_guardians lg ON lg.guardian_id=g.id WHERE lg.learner_id=? AND g.school_id=? AND (g.user_id=? OR lower(COALESCE(g.email,''))=lower(?)) ORDER BY CASE WHEN g.user_id=? THEN 0 ELSE 1 END LIMIT 1").bind(learner.id,schoolId,parentId,parentEmail,parentId).first();
    if(linkedGuardian)statements.push(env.DB.prepare("UPDATE guardians SET user_id=?,full_name=CASE WHEN full_name IS NULL OR trim(full_name)='' THEN ? ELSE full_name END,phone=COALESCE(phone,?),email=COALESCE(email,?) WHERE id=? AND school_id=?").bind(parentId,parentName,parentPhone||null,parentEmail,linkedGuardian.id,schoolId));
    else{
