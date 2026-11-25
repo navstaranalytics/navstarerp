@@ -36,7 +36,8 @@ import { onRequestGet as schoolUsersGet, onRequestPost as schoolUsersPost } from
 import { onRequestGet as schoolNameRequestsGet, onRequestPost as schoolNameRequestsPost, onRequestPatch as schoolNameRequestsPatch } from "./functions/api/school-name-requests.js";
 import { onRequestPost as auditEventPost } from "./functions/api/audit-events.js";
 import { onRequestGet as portalGet } from "./functions/api/portal.js";
-import { onRequestGet as brandingGet, onRequestPost as brandingPost, onRequestGetLogo as brandingLogoGet, onRequestPostLogo as brandingLogoPost, onRequestGetStorageStatus as storageStatusGet, onRequestGetLoginBackground as loginBackgroundGet, onRequestPostLoginBackground as loginBackgroundPost, onRequestPostProfilePhoto as profilePhotoPost, onRequestGetProfilePhoto as profilePhotoGet } from "./functions/api/branding.js";
+import { onRequestGet as brandingGet, onRequestPost as brandingPost, onRequestGetLogo as brandingLogoGet, onRequestPostLogo as brandingLogoPost, onRequestGetStorageStatus as storageStatusGet, onRequestGetLoginBackground as loginBackgroundGet, onRequestPostLoginBackground as loginBackgroundPost } from "./functions/api/branding.js";
+import { onRequestGet as profilePhotoGet, onRequestPost as profilePhotoPost } from "./functions/api/auth/profile-photo.js";
 import { onRequestPost as accountLookupPost, onRequestPostUsernameAvailability } from "./functions/api/account-lookup.js";
 import {
   onRequestPostSetupAdmin,
