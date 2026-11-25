@@ -480,12 +480,15 @@ export async function onRequestPost({request,env}){
     if(!schoolId||(!a.user.is_super_admin&&body.school_id&&body.school_id!==schoolId))return json({ok:false,error:"School workspace is required."},403);
     if(!curriculum||!name||!code||!gradeIds.length||gradeIds.length>30)return json({ok:false,error:"Choose a curriculum and level, enter a subject name and code, and select its active classes."},400);
     if(pathway&&!/cbe|cbc|competency/i.test(curriculum))return json({ok:false,error:"Pathways are available only for CBE Senior School."},400);
+    if(pathway&&!["STEM","Social Sciences","Arts & Sports Science"].includes(pathway))return json({ok:false,error:"Choose a valid CBE Senior School pathway."},400);
     try{
       const placeholders=gradeIds.map(()=>"?").join(",");
       const grades=await env.DB.prepare("SELECT id,stage_code,school_level FROM grade_levels WHERE school_id=? AND curriculum=? AND is_active=1 AND id IN ("+placeholders+")").bind(schoolId,curriculum,...gradeIds).all();
       if((grades.results||[]).length!==gradeIds.length)return json({ok:false,error:"One or more selected classes are inactive or belong to another curriculum."},409);
+      const phase=g=>{const code=String(g.stage_code||"").toUpperCase();if(/cbe|cbc|competency/i.test(curriculum)){if(/^PP[12]$/.test(code))return "Pre-Primary";if(/^G[1-6]$/.test(code))return "Primary";if(/^G[7-9]$/.test(code))return "Junior School";if(/^G1[0-2]$/.test(code))return "Senior School"}if(/8-4-4|844/i.test(curriculum)){if(/^STD[1-8]$/.test(code))return "Primary";if(/^(FORM|F)[1-4]$/.test(code))return "Secondary"}return String(g.school_level||"Other").toLowerCase()};
+      if(new Set((grades.results||[]).map(phase)).size!==1)return json({ok:false,error:"All selected classes must belong to the same curriculum school level."},400);
       const senior=(grades.results||[]).every(g=>/senior|secondary/i.test(String(g.school_level||""))||/^G1[0-2]$/.test(String(g.stage_code||"")));
-      if(pathway&&!senior)return json({ok:false,error:"Choose a pathway only when adding a CBE Senior School learning area."},400);
+      if(pathway&&!senior)return json({ok:false,error:"Choose a pathway only when adding a learning area to CBE Senior School."},400);
       const duplicates=await env.DB.prepare("SELECT stage_code FROM learning_areas WHERE school_id=? AND curriculum=? AND upper(COALESCE(NULLIF(code,''),catalogue_code,''))=? AND COALESCE(pathway,'')=COALESCE(?,'') AND stage_code IN ("+placeholders+")").bind(schoolId,curriculum,code,pathway,...(grades.results||[]).map(g=>g.stage_code)).all();
       if((duplicates.results||[]).length)return json({ok:false,error:"This subject code already exists in one or more classes in the selected level. Refresh the catalogue and choose a different code."},409);
       const records=(grades.results||[]).map(g=>({id:id(),school_id:schoolId,curriculum,stage_code:g.stage_code,name,code,catalogue_code:code,pathway,is_active:1,is_mandatory:isMandatory,subject_type:clean(body.subject_type)||"learning_area",source_template:"school_custom",school_customized:1}));
