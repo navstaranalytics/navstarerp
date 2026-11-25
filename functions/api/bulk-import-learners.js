@@ -75,7 +75,9 @@ export async function onRequestPost({request,env}){
    await env.DB.batch(statements);
    const placeholders=chunk.map(()=>"?").join(",");
    const verify=await env.DB.prepare("SELECT COUNT(*) AS total FROM learners WHERE school_id=? AND id IN ("+placeholders+")").bind(schoolId,...chunk.map(x=>x.learnerId)).first();
-   if(Number(verify?.total)!==chunk.length)throw new Error("Database read-back verification failed for import batch starting at row "+(start+2)+".");
+   if(Number(verify?.total)!==chunk.length)throw new Error("Learner database read-back verification failed for import batch starting at row "+(start+2)+".");
+   const enrollmentVerify=await env.DB.prepare("SELECT COUNT(*) AS total FROM learner_enrollments WHERE school_id=? AND id IN ("+chunk.map(()=>"?").join(",")+")").bind(schoolId,...chunk.map(x=>x.enrollmentId)).first();
+   if(Number(enrollmentVerify?.total)!==chunk.length)throw new Error("Enrolment database read-back verification failed for import batch starting at row "+(start+2)+".");
    imported+=chunk.length;
   }
   return json({ok:true,imported,failed:0,message:imported+" learners registered and enrolled successfully."},201);
