@@ -33,7 +33,7 @@ export async function onRequestPost({request,env}){
   if(matches.length!==1){problems.push({row:line,error:matches.length?"Class is ambiguous; specify curriculum.":"Active class was not found."});continue}
   const grade=matches[0],isCbe=/cbe|cbc|competency/i.test(grade.curriculum||""),senior=/senior|secondary/i.test(grade.school_level||"")||/^G1[0-2]$/i.test(grade.stage_code||""),usesPath=isCbe&&senior,pathway=String(r.pathway||learner.pathway||"").trim();
   if(usesPath&&!["STEM","Social Sciences","Arts & Sports Science"].includes(pathway)){problems.push({row:line,error:"A CBE Senior School pathway is required."});continue}
-  if(!usesPath&&(r.pathway||learner.pathway)){problems.push({row:line,error:"Pathway must be blank for 8-4-4 and non-Senior CBE classes."});continue}
+  if(!usesPath&&r.pathway){problems.push({row:line,error:"Pathway must be blank for 8-4-4 and non-Senior CBE classes."});continue}
   const enrollment=enrollmentRows.find(x=>x.learner_id===learner.id&&x.academic_year_id===year.id&&x.grade_level_id===grade.id);
   if(!enrollment){problems.push({row:line,error:"This learner has no active enrolment in the selected academic year and class."});continue}
   if(r.stream){const stream=streamRows.find(x=>x.grade_level_id===grade.id&&norm(x.name)===norm(r.stream)&&x.status==="active");if(!stream||stream.id!==enrollment.stream_id){problems.push({row:line,error:"Stream does not match the learner's active class enrolment."});continue}}
