@@ -600,7 +600,7 @@ $("learnerForm").addEventListener("submit",async e=>{
     slip.classList.remove("hidden");window.lastLearnerAccountSlip="Learner username: "+familyResult.student.username+"\n"+(familyResult.student.existing?"Existing password unchanged":"Learner initial password: "+studentPassword)+"\nParent username: "+familyResult.parent.username+"\n"+(familyResult.parent.existing?"Existing password unchanged":"Parent initial password: "+parentPassword);
    }catch(accountError){familyError=accountError.message||"Portal accounts could not be created."}
   }
-  message("learnerNotice","Learner registered"+(yearId&&gradeId?" and enrolled in the selected class":"")+(guardian.full_name&&guardianSaved?" with parent/guardian details saved.":"")+(familyResult?" Both learner and parent portal accounts are ready.":familyError?" Portal accounts need attention: "+familyError:".");!!familyError);
+  message("learnerNotice","Learner registered"+(yearId&&gradeId?" and enrolled in the selected class":"")+(guardian.full_name&&guardianSaved?" with parent/guardian details saved.":"")+(familyResult?" Both learner and parent portal accounts are ready.":familyError?" Portal accounts need attention: "+familyError:"."),!!familyError);
   form.reset();updateFamilyAccountFields();
   // Do not hold the Save button open while refreshing the full learner table,
   // admission settings and next admission number. These are follow-up reads.
