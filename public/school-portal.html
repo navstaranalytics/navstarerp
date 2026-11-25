@@ -815,7 +815,7 @@ function renderProfileAvatar(){
 }
 $("profilePhotoInput").addEventListener("change",async e=>{
  const file=e.target.files?.[0];if(!file)return;
- if(file.size>1800*1024){message("notice","Profile picture must be 1.8 MB or smaller.",true);e.target.value="";return}
+ if(file.size>4*1024*1024){message("notice","Profile picture must be 4 MB or smaller.",true);e.target.value="";return}
  const fd=new FormData();fd.append("photo",file);
  try{const r=await fetch("/api/auth/profile-photo",{method:"POST",credentials:"same-origin",body:fd});const d=await r.json();if(!r.ok||!d.ok)throw new Error(d.error||"Profile picture upload failed.");const fresh=await api("/api/auth/me");me=fresh.user;renderProfileAvatar();message("notice","Profile picture updated successfully.");}
  catch(error){message("notice",error.message,true)}
