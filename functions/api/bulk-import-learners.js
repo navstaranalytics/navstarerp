@@ -92,7 +92,7 @@ export async function onRequestPost({request,env}){
    const chunk=prepared.slice(start,start+WRITE_CHUNK),statements=[];
    for(const x of chunk){
     x.admission=await allocateAdmission(env.DB,schoolId,actor.id);
-    statements.push(env.DB.prepare("INSERT INTO learners(id,school_id,admission_number,assessment_number,upi_number,nemis_number,first_name,middle_name,last_name,gender,date_of_birth,status,pathway,profile_json) VALUES(?,?,?,?,?,?,?,?,?,?,?,?, '{}')").bind(x.learnerId,schoolId,x.admission,x.assessment||null,x.upi||null,x.nemis||null,x.first,x.middle,x.last,x.gender,x.dob,x.status,x.pathway));
+    statements.push(env.DB.prepare("INSERT INTO learners(id,school_id,admission_number,assessment_number,upi_number,nemis_number,first_name,middle_name,last_name,gender,date_of_birth,status,pathway,profile_json) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?, '{}')").bind(x.learnerId,schoolId,x.admission,x.assessment||null,x.upi||null,x.nemis||null,x.first,x.middle,x.last,x.gender,x.dob,x.status,x.pathway));
     statements.push(env.DB.prepare("INSERT INTO learner_enrollments(id,school_id,learner_id,academic_year_id,grade_level_id,stream_id,status) VALUES(?,?,?,?,?,?, 'active')").bind(x.enrollmentId,schoolId,x.learnerId,x.yearId,x.gradeId,x.streamId));
    }
    await env.DB.batch(statements);
