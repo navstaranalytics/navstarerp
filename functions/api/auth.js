@@ -264,17 +264,16 @@ export async function onRequestPostLogin({ request, env }) {
     if(attempt?.locked_until&&attempt.locked_until>new Date().toISOString())
       return json({ok:false,error:"Too many unsuccessful attempts. Please wait 15 minutes before trying again."},429);
     const user=await env.DB.prepare(`
-      SELECT u.id,u.full_name,u.password_hash,u.status,r.role_key,r.role_name,a.school_id,sc.name AS school_name
+      SELECT u.id,u.full_name,u.password_hash,u.status,r.role_key,r.role_name,a.school_id,sc.name AS school_name,sm.membership_status,sc.status AS school_status
       FROM users u JOIN user_role_assignments a ON a.user_id=u.id
       JOIN roles r ON r.id=a.role_id
       LEFT JOIN school_memberships sm ON sm.user_id=u.id AND sm.school_id=a.school_id
       LEFT JOIN schools sc ON sc.id=a.school_id
       WHERE u.username_normalized=? AND
-        ((a.school_id IS NULL AND r.role_key='super_admin') OR
-         (a.school_id IS NOT NULL AND sm.membership_status='active' AND sc.status IN ('active','suspended')))
+        ((a.school_id IS NULL AND r.role_key='super_admin') OR a.school_id IS NOT NULL)
       ORDER BY CASE WHEN r.role_key='super_admin' THEN 0 ELSE 1 END LIMIT 1
     `).bind(username).first();
-    const valid=user&&user.status==='active'&&await verifyPassword(password,user.password_hash);
+    const valid=user&&await verifyPassword(password,user.password_hash);
     if(!valid){
       const failures=Number(attempt?.failed_count||0)+1,lockedUntil=failures>=5?new Date(Date.now()+15*60*1000).toISOString():null;
       await env.DB.prepare(`INSERT INTO auth_login_attempts(identifier,failed_count,locked_until,updated_at)
@@ -289,6 +288,10 @@ export async function onRequestPostLogin({ request, env }) {
       await audit(env,user.id,"auth.login","denied",{reason:"platform_maintenance"});
       return json({ok:false,maintenance:true,error:maintenanceMode.message||"Navstar is temporarily undergoing scheduled maintenance. Please try again shortly."},503);
     }
+    if(user.status!=="active")return json({ok:false,error:"Your Navstar account is "+String(user.status||"inactive").replace(/_/g," ")+". Please contact your school administrator to resolve this access status."},403);
+    if(user.role_key!=="super_admin"&&user.membership_status!=="active")return json({ok:false,error:"Your school membership is "+String(user.membership_status||"not active").replace(/_/g," ")+". Please contact your school administrator."},403);
+    if(user.role_key!=="super_admin"&&user.school_status==="suspended")return json({ok:false,error:"Your school dashboard has been suspended. Please contact Navstar support or your school administrator."},403);
+    if(user.role_key!=="super_admin"&&user.school_status!=="active")return json({ok:false,error:"Your school is "+String(user.school_status||"not active").replace(/_/g," ")+". Access will be available after the school status is resolved."},403);
     await env.DB.prepare("DELETE FROM auth_login_attempts WHERE identifier=?").bind(username).run();
     const issued=await issueSession(env,request,user.id,body.remember===true);
     await env.DB.prepare("UPDATE users SET last_login_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?").bind(user.id).run();
