@@ -55,7 +55,7 @@ export async function onRequestPost({request,env}){
    return json({ok:true,message:results.failed.length?"Catalogue saved centrally; some school synchronizations need attention.":"Catalogue saved centrally and synchronized to all configured schools.",sync:results});
   }
   if(key==="maintenance_mode"){
-   await env.DB.prepare("UPDATE auth_sessions SET revoked_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE revoked_at IS NULL AND user_id IN (SELECT a.user_id FROM user_role_assignments a JOIN roles r ON r.id=a.role_id WHERE a.school_id IS NOT NULL AND r.role_key<>'super_admin')").run().catch(()=>{});
+   await env.DB.prepare("UPDATE auth_sessions SET revoked_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE revoked_at IS NULL AND user_id IN (SELECT a.user_id FROM user_role_assignments a JOIN roles r ON r.id=a.role_id WHERE a.school_id IS NOT NULL AND r.role_key<>'super_admin' AND NOT EXISTS (SELECT 1 FROM user_role_assignments sa JOIN roles sr ON sr.id=sa.role_id WHERE sa.user_id=a.user_id AND sa.school_id IS NULL AND sr.role_key='super_admin'))").run().catch(()=>{});
    try{await env.DB.prepare("INSERT INTO audit_logs(id,actor_user_id,action,resource_type,outcome,details_json) VALUES(?,?,'platform.maintenance.changed','platform','success',?)").bind(crypto.randomUUID(),user.id,JSON.stringify({enabled:value.enabled,message:value.message})).run()}catch{}
    return json({ok:true,message:value.enabled?"Maintenance mode is ON. School logins and active school sessions are blocked. Super Admin access remains available.":"Maintenance mode is OFF. School access is restored.",maintenance:value});
   }
