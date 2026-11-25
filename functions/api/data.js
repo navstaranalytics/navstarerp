@@ -371,6 +371,15 @@ async function audit(db,user,schoolId,action,resource,resourceId){
 export async function onRequestGet({request,env}){
   const a=await auth(request,env);if(a.error)return a.error;
   const url=new URL(request.url),name=url.pathname.split("/").pop(),cfg=resources[name];
+  if(name==="learning-area-catalogue"){
+    if(!allowed(a.user,"academics.manage"))return json({ok:false,error:"Your role does not have permission to view the central learning-area catalogue."},403);
+    try{
+      const saved=await env.DB.prepare("SELECT setting_value FROM platform_settings WHERE setting_key='learning_area_catalogue'").first();
+      let areas=[];try{const parsed=JSON.parse(saved?.setting_value||"{}");areas=Array.isArray(parsed.areas)?parsed.areas:[]}catch{}
+      if(!areas.length){const rows=await env.DB.prepare("SELECT DISTINCT curriculum,stage_code AS level,code,name,pathway,is_mandatory AS mandatory FROM learning_areas WHERE is_active=1 AND COALESCE(school_customized,0)=0 ORDER BY curriculum,stage_code,name LIMIT 5000").all();areas=(rows.results||[]).map(x=>({...x,mandatory:Number(x.mandatory)===1?1:0}));}
+      return json({ok:true,records:areas});
+    }catch(error){console.error("NAVSTAR central learning-area catalogue read",error);return json({ok:false,error:"Could not load the central learning-area catalogue."},500)}
+  }
   if(!cfg)return json({ok:false,error:"Unknown data resource."},404);
   if(name==="departments")await ensureDepartments(env.DB);
   if(name==="learners")await ensureLearnerIdentifierColumns(env.DB);
@@ -499,6 +508,30 @@ async function validateAcademicCalendarDates(db,name,schoolId,values,currentId=n
 export async function onRequestPost({request,env}){
   const a=await auth(request,env);if(a.error)return a.error;
   const pathParts=new URL(request.url).pathname.split("/").filter(Boolean);
+  if(pathParts.slice(-2).join("/")==="learning-area-catalogue/select"){
+    if(!allowed(a.user,"academics.manage"))return json({ok:false,error:"Your role does not have permission to configure school learning areas."},403);
+    let body;try{body=await request.json()}catch{return json({ok:false,error:"Invalid learning-area selection."},400)}
+    const schoolId=a.user.is_super_admin?String(body.school_id||""):a.user.school_id,selected=Array.isArray(body.selected)?body.selected:[];
+    if(!schoolId||(!a.user.is_super_admin&&body.school_id&&body.school_id!==schoolId)||selected.length>1000)return json({ok:false,error:"A valid school and learning-area selection are required."},400);
+    try{
+      const grades=await env.DB.prepare("SELECT id,curriculum,stage_code FROM grade_levels WHERE school_id=? AND is_active=1").bind(schoolId).all();
+      const gradeRows=grades.results||[],statements=[],seen=new Set();
+      for(const item of selected){
+        const curriculum=clean(item.curriculum),level=String(item.level||"").trim(),code=String(item.code||"").trim().toUpperCase(),name=clean(item.name),pathway=clean(item.pathway)||null,mandatory=Number(item.mandatory)===1?1:0;
+        if(!curriculum||!level||!code||!name)continue;
+        const targets=gradeRows.filter(g=>String(g.curriculum||"").toLowerCase()===curriculum.toLowerCase()&&String(g.stage_code||"").toLowerCase()===level.toLowerCase());
+        for(const grade of targets){
+          const key=grade.id+"|"+code.toLowerCase()+"|"+(pathway||"").toLowerCase();if(seen.has(key))continue;seen.add(key);
+          const existing=await env.DB.prepare("SELECT id FROM learning_areas WHERE school_id=? AND curriculum=? AND stage_code=? AND lower(COALESCE(NULLIF(catalogue_code,''),NULLIF(code,''),name))=lower(?) AND COALESCE(pathway,'')=COALESCE(?,'') LIMIT 1").bind(schoolId,curriculum,grade.stage_code,code,pathway).first();
+          if(existing)statements.push(env.DB.prepare("UPDATE learning_areas SET is_active=1,is_mandatory=?,subject_type=CASE WHEN ?=1 THEN 'compulsory' ELSE 'optional' END WHERE id=? AND school_id=?").bind(mandatory,mandatory,existing.id,schoolId));
+          else statements.push(env.DB.prepare("INSERT INTO learning_areas(id,school_id,curriculum,code,name,stage_code,pathway,is_active,is_mandatory,subject_type,source_template,catalogue_code) VALUES(?,?,?,?,?,?,?,1,?,?,?,?)").bind(crypto.randomUUID(),schoolId,curriculum,code,name,grade.stage_code,pathway,mandatory,mandatory?"compulsory":"optional","superadmin-central-catalogue",code));
+        }
+      }
+      if(statements.length)await env.DB.batch(statements);
+      const verified=await env.DB.prepare("SELECT COUNT(*) AS total FROM learning_areas WHERE school_id=? AND is_active=1").bind(schoolId).first();
+      return json({ok:true,savedCount:statements.length,activeLearningAreas:Number(verified?.total||0),message:"Selected central catalogue learning areas were added or enabled. Existing unselected records were preserved."});
+    }catch(error){console.error("NAVSTAR central catalogue selection",error);return json({ok:false,error:"Selected learning areas could not be saved. Existing school records were not intentionally removed."},500)}
+  }
   if(pathParts.slice(-2).join("/") === "learning-areas/bulk-create"){
     if(!allowed(a.user,permissionFor("learning-areas",true)))return json({ok:false,error:"Your role does not have permission to manage learning areas."},403);
     let body;try{body=await request.json()}catch{return json({ok:false,error:"Invalid learning-area details."},400)}
