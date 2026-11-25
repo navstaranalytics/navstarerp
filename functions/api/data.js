@@ -497,6 +497,30 @@ export async function onRequestPost({request,env}){
       return json({ok:true,savedCount:records.length,records,message:name+" added to "+records.length+" classes in "+body.level+"."},201);
     }catch(error){console.error("NAVSTAR bulk learning-area create",error);return json({ok:false,error:"The learning area could not be added to every class in this level. No successful save was confirmed."},500)}
   }
+  if(pathParts.slice(-2).join("/") === "staff-learning-areas/bulk"){
+    if(!allowed(a.user,permissionFor("staff-learning-areas",true)))return json({ok:false,error:"Your role does not have permission to manage teacher subject combinations."},403);
+    let body;try{body=await request.json()}catch{return json({ok:false,error:"Invalid teacher subject combination."},400)}
+    const schoolId=a.user.is_super_admin?String(body.school_id||""):a.user.school_id,staffId=String(body.staff_id||""),isTeacher=Number(body.is_teacher)===1,subjects=Array.isArray(body.subjects)?body.subjects:[];
+    if(!schoolId||!staffId||(!a.user.is_super_admin&&body.school_id&&body.school_id!==schoolId))return json({ok:false,error:"School and staff profile are required."},400);
+    const unique=new Map();for(const item of subjects){const curriculum=clean(item.curriculum),code=String(item.code||"").trim(),name=clean(item.name);if(curriculum&&code&&name)unique.set(curriculum+"|"+code.toLowerCase(),{curriculum,code,name})}
+    if(isTeacher&&unique.size<2)return json({ok:false,error:"A teacher must have at least two distinct subjects in their teaching combination."},400);
+    try{
+      const staff=await env.DB.prepare("SELECT id FROM staff_profiles WHERE id=? AND school_id=?").bind(staffId,schoolId).first();
+      if(!staff)return json({ok:false,error:"Staff profile does not belong to this school."},404);
+      for(const item of unique.values()){
+        const found=await env.DB.prepare("SELECT 1 AS found FROM learning_areas WHERE school_id=? AND curriculum=? AND is_active=1 AND lower(COALESCE(NULLIF(catalogue_code,''),NULLIF(code,''),name))=lower(?) LIMIT 1").bind(schoolId,item.curriculum,item.code).first();
+        if(!found)return json({ok:false,error:"Subject "+item.name+" is no longer active in the school catalogue. Refresh and try again."},409);
+      }
+      const current=await env.DB.prepare("SELECT * FROM staff_learning_areas WHERE school_id=? AND staff_id=?").bind(schoolId,staffId).all(),existing=new Map((current.results||[]).map(x=>[x.curriculum+"|"+String(x.learning_area_code).toLowerCase(),x])),statements=[env.DB.prepare("UPDATE staff_profiles SET is_teacher=? WHERE id=? AND school_id=?").bind(isTeacher?1:0,staffId,schoolId)];
+      for(const [key,row] of existing){const wanted=unique.get(key);statements.push(env.DB.prepare("UPDATE staff_learning_areas SET status=?,learning_area_name=? WHERE id=? AND school_id=?").bind(wanted?"active":"inactive",wanted?.name||row.learning_area_name,row.id,schoolId));unique.delete(key)}
+      for(const item of unique.values())statements.push(env.DB.prepare("INSERT INTO staff_learning_areas(id,school_id,staff_id,curriculum,learning_area_code,learning_area_name,status) VALUES(?,?,?,?,?,?, 'active')").bind(id(),schoolId,staffId,item.curriculum,item.code,item.name));
+      await env.DB.batch(statements);
+      const verify=await env.DB.prepare("SELECT COUNT(*) AS total FROM staff_learning_areas WHERE school_id=? AND staff_id=? AND status='active'").bind(schoolId,staffId).first(),profile=await env.DB.prepare("SELECT is_teacher FROM staff_profiles WHERE id=? AND school_id=?").bind(staffId,schoolId).first();
+      if(Number(profile?.is_teacher)!==(isTeacher?1:0)||Number(verify?.total)!==(isTeacher?subjects.length:0))throw new Error("Teacher subject-combination verification failed.");
+      await audit(env.DB,a.user,schoolId,"teacher.subject_combination_updated","staff_profiles",staffId);
+      return json({ok:true,is_teacher:isTeacher?1:0,subjectCount:Number(verify?.total||0),message:isTeacher?"Teacher profile and subject combination saved.":"Teaching profile disabled."});
+    }catch(error){console.error("NAVSTAR teacher subject combination update",error);return json({ok:false,error:"Teacher profile and subject combination could not be saved and verified."},500)}
+  }
   if(pathParts.slice(-2).join("/") === "learning-areas/bulk"){
     if(!allowed(a.user,permissionFor("learning-areas",true)))return json({ok:false,error:"Your role does not have permission to manage learning areas."},403);
     let body;try{body=await request.json()}catch{return json({ok:false,error:"Invalid learning-area update."},400)}
