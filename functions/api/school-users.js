@@ -12,7 +12,8 @@ export async function onRequestGet({request,env}) {
  const actor=await getAuthenticatedSession(request,env);
  if(!actor)return json({ok:false,error:"Sign in to continue."},401);
  const schoolId=decodeURIComponent(new URL(request.url).pathname.split("/").slice(-2,-1)[0]||"");
- if(!actor.is_super_admin&&actor.school_id!==schoolId)return json({ok:false,error:"You cannot view users in another school's workspace."},403);
+ if(actor.is_super_admin)return json({ok:false,error:"School user accounts are managed by the School Administrator inside that school workspace."},403);
+ if(actor.school_id!==schoolId)return json({ok:false,error:"You cannot view users in another school workspace."},403);
  if(!actor.is_super_admin&&!actor.permissions.includes("school.users.manage"))return json({ok:false,error:"You do not have permission to manage school users."},403);
  const rows=await env.DB.prepare(`SELECT u.id,u.full_name,u.username,u.email,u.phone,u.status,m.job_title,m.membership_status,GROUP_CONCAT(DISTINCT r.role_key) AS role_keys,GROUP_CONCAT(DISTINCT r.role_name) AS role_names
   FROM school_memberships m JOIN users u ON u.id=m.user_id
@@ -26,7 +27,8 @@ export async function onRequestPost({request,env}) {
  const actor=await getAuthenticatedSession(request,env);
  if(!actor)return json({ok:false,error:"Sign in to continue."},401);
  const schoolId=decodeURIComponent(new URL(request.url).pathname.split("/").slice(-2,-1)[0]||"");
- if(!schoolId||(!actor.is_super_admin&&actor.school_id!==schoolId))return json({ok:false,error:"You cannot create accounts in another school's workspace."},403);
+ if(actor.is_super_admin)return json({ok:false,error:"School user accounts must be created by the School Administrator inside that school workspace."},403);
+ if(!schoolId||actor.school_id!==schoolId)return json({ok:false,error:"You cannot create accounts in another school workspace."},403);
  if(!actor.is_super_admin&&!actor.permissions.includes("school.users.manage"))return json({ok:false,error:"You do not have permission to manage school users."},403);
  let body;try{body=await request.json()}catch{return json({ok:false,error:"Enter valid account details."},400)}
  const fullName=clean(body.fullName),username=norm(body.username),email=norm(body.email),phone=clean(body.phone);

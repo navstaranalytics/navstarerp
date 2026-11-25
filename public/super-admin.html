@@ -106,7 +106,24 @@ function schoolsPage(){let q=($('schoolSearch')?.value||'').toLowerCase(),sf=$('
 function regionsPage(){let counts=counties.map(c=>({c,n:schools.filter(s=>s.county===c).length}));return head('GEOGRAPHIC OVERSIGHT','Regional & county management','View school coverage and coordinate onboarding across Kenya.')+'<div class="stats">'+stat('Counties covered',new Set(schools.map(s=>s.county)).size,'Counties with a registered school','⌖')+stat('Counties available',47,'Kenyan county directory','▦')+stat('Schools in Busia',schools.filter(s=>s.county==='Busia').length,'Current directory records','⌖')+stat('Unassigned region',schools.filter(s=>!s.county).length,'Records needing location','!')+'</div>'+panel('County coverage','School count by county','<div class="county-grid">'+counts.map(x=>'<div class="county"><b>'+x.c+'</b><div class="muted">'+x.n+' schools</div></div>').join('')+'</div>')+panel('Regional administrators','Delegate operational oversight by region','<div class="empty">Regional administrator assignment will be enabled when platform user roles and server-side permissions are connected.</div>')}
 function subscriptionsPage(){return head('REVENUE & ACCESS','Subscriptions and plans','Configure subscription tiers, trials, renewals, limits and school entitlements.','<button class="btn" data-action="add-plan">＋ Add plan</button>')+'<div class="grid3">'+plans.map(p=>'<div class="panel panel-pad"><div class="eyebrow">'+p.name+' PLAN</div><h2 style="font-size:24px;margin:8px 0">'+money(p.price)+'<span class="muted small"> / month</span></h2><div class="muted small">'+p.modules+'</div><div class="list" style="padding:10px 0"><div class="list-row"><b>Learner limit</b><span>'+p.learners.toLocaleString()+'</span></div><div class="list-row"><b>Storage</b><span>'+p.storage+' GB</span></div><div class="list-row"><b>AI credits</b><span>'+p.ai+'</span></div></div><button class="btn light" data-action="edit-plan" data-plan="'+p.name+'">Edit plan</button></div>').join('')+'</div>'+panel('School subscriptions','Plan assignments and renewals','<div class="table-wrap"><table><thead><tr><th>School</th><th>Plan</th><th>Monthly value</th><th>Renewal / expiry</th><th>Status</th><th>Action</th></tr></thead><tbody>'+(schools.map(s=>'<tr><td>'+esc(s.name)+'</td><td>'+esc(s.plan||'Starter')+'</td><td>'+money(plans.find(p=>p.name===s.plan)?.price||0)+'</td><td>'+esc(s.expiry||'Not set')+'</td><td>'+pill(s.status)+'</td><td><button class="tiny" data-action="school-details" data-id="'+s.id+'">Edit school</button></td></tr>').join('')||'<tr><td colspan="6" class="empty">No subscriptions yet.</td></tr>')+'</tbody></table></div>')+'<div class="notice warn">Plan prices and entitlements are editable planning values for this prototype. No actual charges, renewals or payment processing occur here.</div>'}
 function billingPage(){let total=schools.reduce((a,s)=>a+(plans.find(p=>p.name===s.plan)?.price||0),0);return head('FINANCIAL OPERATIONS','Billing & payments','Monitor invoices, payment status, M-Pesa and bank reconciliation.')+'<div class="stats">'+stat('Indicative monthly plan value',money(total),'Active and pending records not reconciled','◈')+stat('Invoices issued','0','Backend not connected','▤')+stat('Payments received',money(0),'No live payment feed','✓')+stat('Outstanding balance',money(0),'Awaiting billing engine','◷')+'</div>'+panel('Payment channels','Planned integrations and reconciliation','<div class="list">'+['M-Pesa Daraja API','Bank transfer / statement import','Card and online payment gateway','Manual payment recording and receipt allocation'].map(x=>'<div class="list-row"><b>'+x+'</b>'+pill('Not connected')+'</div>').join('')+'</div>')+panel('Invoice register','Invoices and receipts will appear when billing services are connected','<div class="empty">No live invoices or payment records. Connect the billing backend before using this area for financial operations.</div>')}
-function usersPage(){return head('IDENTITY & ACCESS','Platform users','View accounts assigned platform-wide roles. School users remain within their own school workspace.')+panel('Global administrator directory','Live accounts loaded from the central Navstar database','<div class="table-wrap"><table><thead><tr><th>Name</th><th>Username</th><th>Email</th><th>Platform role</th><th>Status</th><th>Last sign-in</th></tr></thead><tbody>'+(users.map(u=>'<tr><td><b>'+esc(u.name)+'</b></td><td>'+esc(u.username)+'</td><td>'+esc(u.email)+'</td><td>'+esc(u.role)+'</td><td>'+pill(u.status)+'</td><td>'+esc(u.lastLogin||'—')+'</td></tr>').join('')||'<tr><td colspan="6" class="empty">No global platform accounts found.</td></tr>')+'</tbody></table></div>')+'<div class="notice">This directory displays platform-level accounts only. School administrators and school staff are managed within their own school workspaces.</div>'}
+function usersPage(){
+ const rows=superAdminDirectory;
+ const canCreate=rows.length<2;
+ return head('IDENTITY & ACCESS','Super Admin accounts','Manage the two authorised platform administrator accounts. School users are created and managed by each School Administrator.')+
+ '<div class="stats">'+stat('Super Admin accounts',rows.length+' / 2','Maximum platform-wide accounts','♙')+stat('Available slots',Math.max(0,2-rows.length),'No third account can be created','✓')+'</div>'+
+ panel('Create Super Admin','Only two Super Admin accounts are permitted across Navstar. When both slots are occupied, reset an existing account instead of creating another.','<form id="superAdminCreateForm" class="form-grid">'+
+ '<div class="form-field"><label>Full name *</label><input class="field" name="fullName" maxlength="120" required '+(!canCreate?'disabled':'')+'></div>'+
+ '<div class="form-field"><label>Username *</label><input class="field" name="username" minlength="3" maxlength="32" required '+(!canCreate?'disabled':'')+'></div>'+
+ '<div class="form-field"><label>Email *</label><input class="field" name="email" type="email" required '+(!canCreate?'disabled':'')+'></div>'+
+ '<div class="form-field"><label>Phone</label><input class="field" name="phone" '+(!canCreate?'disabled':'')+'></div>'+
+ '<div class="form-field"><label>Designation</label><input class="field" name="designation" value="Super Administrator" '+(!canCreate?'disabled':'')+'></div>'+
+ '<div class="form-field"><label>Initial password *</label><input class="field" name="password" type="password" minlength="6" required '+(!canCreate?'disabled':'')+'></div>'+
+ '<div class="form-field full"><button class="btn" type="submit" '+(!canCreate?'disabled':'')+'>'+(canCreate?'＋ Create Super Admin':'Maximum of two accounts reached')+'</button> <span id="superAdminCreateStatus" class="small muted">'+(canCreate?'The new account will appear in the directory after database verification.':'Both Super Admin slots are occupied. Use Edit / Reset credentials below.')+'</span></div></form>')+
+ panel('Registered Super Admin accounts','Edit account details, reset lost credentials, or remove a secondary account. The primary owner account is protected.','<div class="table-wrap"><table><thead><tr><th>Name</th><th>Username</th><th>Email</th><th>Designation</th><th>Status</th><th>Last sign-in</th><th>Actions</th></tr></thead><tbody>'+
+ (rows.map(u=>'<tr><td><b>'+esc(u.full_name)+'</b>'+(Number(u.is_primary_owner)===1?'<div class="subline">Primary platform owner</div>':'')+'</td><td>'+esc(u.username)+'</td><td>'+esc(u.email)+'</td><td>'+esc(u.designation||'Super Administrator')+'</td><td>'+pill(u.status)+'</td><td>'+esc(u.last_login_at||'—')+'</td><td><div class="row-actions"><button class="tiny" data-superadmin-edit="'+esc(u.id)+'">Edit</button><button class="tiny" data-superadmin-reset="'+esc(u.id)+'">Reset credentials</button>'+(Number(u.is_primary_owner)===1?'<button class="tiny" disabled>Protected</button>':'<button class="tiny" data-superadmin-delete="'+esc(u.id)+'">Delete</button>')+'</div></td></tr>').join('')||'<tr><td colspan="7" class="empty">No Super Admin records found.</td></tr>')+
+ '</tbody></table></div>')+
+ '<div class="notice">Security rule: no more than two Super Admin profiles can exist at once. A lost password is recovered by resetting the existing account; a third account is never created. School teachers, staff, parents and learners are managed by their own School Administrator.</div>';
+}
 function academicsPage(){
  const stageGroups=[["Pre-Primary","PP1 · PP2"],["Primary","Classes 1–6"],["Junior School","Classes 7–9"],["Senior School","Classes 10–12"],["8-4-4 Primary","Standards 1–8"],["8-4-4 Secondary","Forms 1–4"]];
  const cbeAreas=[
@@ -822,7 +839,7 @@ schoolDetails=function(id){
   const entitlement=document.createElement("div");entitlement.className="notice";
   entitlement.textContent="Automatic module access from the selected school levels: "+allowed.join(", ")+". Core modules are included for every school; Junior and Senior tools appear when those levels are selected.";
   body.appendChild(entitlement);
-  const schoolUsersPanel=document.createElement("section");schoolUsersPanel.className="panel";schoolUsersPanel.style.cssText="padding:16px;margin-top:16px";
+  const schoolUsersPanel=document.createElement("section");schoolUsersPanel.className="panel";schoolUsersPanel.style.cssText="padding:16px;margin-top:16px";schoolUsersPanel.style.display="none";
   schoolUsersPanel.innerHTML="<h3 style='margin:0 0 6px'>Add School User</h3><p class='muted'>Create teachers, staff, parents, learners and other school accounts directly from Super Admin. Each school can have only one School Administrator.</p><div class='form-grid'><div class='form-field'><label>Full name *</label><input id='saUserFullName' maxlength='120'></div><div class='form-field'><label>Username *</label><input id='saUserUsername' minlength='3' maxlength='32' pattern='[A-Za-z0-9._-]'><small id='saUserUsernameStatus' class='muted'></small></div><div class='form-field'><label>Email *</label><input id='saUserEmail' type='email'></div><div class='form-field'><label>Phone</label><input id='saUserPhone' type='tel'></div><div class='form-field'><label>Role *</label><select id='saUserRole'><option value='teacher'>Teacher</option><option value='class_teacher'>Class Teacher</option><option value='principal'>Principal / Headteacher</option><option value='deputy_principal'>Deputy Principal</option><option value='director_of_studies'>Director of Studies</option><option value='deputy_director_of_studies'>Deputy Director of Studies</option><option value='head_of_department'>Head of Department</option><option value='examinations_officer'>Examinations Officer</option><option value='bursar_accountant'>Bursar / Accountant</option><option value='hr_administrator'>HR Administrator</option><option value='admissions_registrar'>Admissions / Registrar</option><option value='librarian'>Librarian</option><option value='school_owner'>School Owner / Director</option><option value='parent'>Parent / Guardian</option><option value='student'>Learner</option></select></div><div class='form-field'><label>Linked learner admission numbers (parent/learner)</label><input id='saUserLearners' placeholder='NS-001, NS-002'></div><div class='form-field'><label>Staff number (optional)</label><input id='saUserStaffNo'></div><div class='form-field'><label>Department (optional)</label><input id='saUserDepartment'></div></div><button type='button' id='saCreateSchoolUser' class='btn' style='margin-top:12px'>Create School User</button><div id='saUserFeedback' class='muted' style='margin-top:8px'></div>";
   body.appendChild(schoolUsersPanel);
   let schoolUserUsernameTimer=null;$("saUserUsername").addEventListener("input",()=>{clearTimeout(schoolUserUsernameTimer);const value=$("saUserUsername").value.trim().toLowerCase(),status=$("saUserUsernameStatus");status.textContent="";if(!/^[a-z0-9._-]{3,32}$/.test(value)){status.textContent="Use 3–32 letters, numbers, dots, underscores or hyphens.";return}status.textContent="Checking…";schoolUserUsernameTimer=setTimeout(async()=>{try{const result=await schoolApi("/api/auth/username-availability",{method:"POST",body:JSON.stringify({username:value})});status.textContent=result.available?"✓ Username is available.":"✕ Username already taken. Choose another.";status.style.color=result.available?"#16845b":"#b33b3b"}catch(error){status.textContent=error.message||"Could not check username."}},350)});
@@ -1176,5 +1193,67 @@ loadSignedInUser();
     render();
   }
 })();
+
+
+/* Dedicated two-account Super Admin directory. */
+let superAdminDirectory=[],superAdminDirectoryLoaded=false,superAdminDirectoryLoading=false;
+const originalPlatformRender=render;
+const originalPlatformWirePage=wirePage;
+async function loadSuperAdminDirectory(force=false){
+ if(page!=="users"||superAdminDirectoryLoading||(!force&&superAdminDirectoryLoaded))return;
+ superAdminDirectoryLoading=true;
+ try{
+  const response=await fetch("/api/super-admins",{credentials:"same-origin",cache:"no-store"});
+  const data=await response.json();
+  if(!response.ok||!data.ok)throw new Error(data.error||"Super Admin accounts could not be loaded.");
+  superAdminDirectory=Array.isArray(data.records)?data.records:[];
+  users=superAdminDirectory.map(u=>({id:u.id,name:u.full_name,username:u.username,email:u.email,role:"Super Admin",status:u.status==="active"?"Active":u.status,lastLogin:u.last_login_at||""}));
+  superAdminDirectoryLoaded=true;
+ }catch(error){toast(error.message||"Could not load Super Admin accounts.");}
+ finally{superAdminDirectoryLoading=false;if(page==="users")originalPlatformRender();}
+}
+wirePage=function(){originalPlatformWirePage();if(page==="users")loadSuperAdminDirectory();};
+document.addEventListener("submit",async e=>{
+ const form=e.target.closest("#superAdminCreateForm");if(!form)return;
+ e.preventDefault();const button=form.querySelector('button[type="submit"]'),status=$("superAdminCreateStatus");
+ const payload=Object.fromEntries(new FormData(form).entries());
+ button.disabled=true;button.textContent="Creating account…";if(status)status.textContent="Saving and verifying the new account…";
+ try{
+  const response=await fetch("/api/super-admins",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
+  const data=await response.json();if(!response.ok||!data.ok)throw new Error(data.error||"Super Admin account could not be created.");
+  superAdminDirectory=data.records||[...superAdminDirectory,data.record];superAdminDirectoryLoaded=true;form.reset();
+  toast("Super Admin account created and verified.");originalPlatformRender();
+ }catch(error){if(status)status.textContent=error.message||"Account creation failed.";toast(error.message||"Account creation failed.");button.disabled=false;button.textContent="＋ Create Super Admin";}
+});
+document.addEventListener("click",async e=>{
+ const edit=e.target.closest("[data-superadmin-edit]"),reset=e.target.closest("[data-superadmin-reset]"),del=e.target.closest("[data-superadmin-delete]");
+ if(!edit&&!reset&&!del)return;
+ const userId=(edit||reset||del).dataset.superadminEdit||(edit||reset||del).dataset.superadminReset||(edit||reset||del).dataset.superadminDelete;
+ const record=superAdminDirectory.find(x=>x.id===userId);if(!record)return;
+ let payload={userId,fullName:record.full_name,username:record.username,email:record.email,phone:record.phone||"",designation:record.designation||"Super Administrator"};
+ if(edit){
+  payload.fullName=prompt("Full name:",payload.fullName);if(payload.fullName===null)return;
+  payload.username=prompt("Username:",payload.username);if(payload.username===null)return;
+  payload.email=prompt("Email:",payload.email);if(payload.email===null)return;
+  payload.phone=prompt("Phone:",payload.phone);if(payload.phone===null)return;
+  payload.designation=prompt("Designation:",payload.designation);if(payload.designation===null)return;
+ }else if(reset){
+  const password=prompt("Enter a new password for "+record.full_name+". The user's current sessions will be signed out:");if(password===null)return;
+  const confirmPassword=prompt("Confirm the new password:");if(confirmPassword===null)return;
+  if(password!==confirmPassword){toast("The passwords do not match.");return;}
+  payload.newPassword=password;
+ }else{
+  if(Number(record.is_primary_owner)===1){toast("The primary platform owner account is protected.");return;}
+  if(!confirm("Permanently delete the Super Admin account for "+record.full_name+"? This cannot be undone."))return;
+  payload={userId};
+ }
+ const button=edit||reset||del;button.disabled=true;
+ try{
+  const response=await fetch("/api/super-admins"+(del?"?action=delete":""),{method:del?"DELETE":"PATCH",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
+  const data=await response.json();if(!response.ok||!data.ok)throw new Error(data.error||"The account change could not be saved.");
+  superAdminDirectory=data.records||[];superAdminDirectoryLoaded=true;
+  toast(data.message||"Super Admin account updated and verified.");originalPlatformRender();
+ }catch(error){toast(error.message||"The account change failed.");button.disabled=false;}
+});
 
 </script></body></html>
