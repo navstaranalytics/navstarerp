@@ -109,6 +109,7 @@ function billingPage(){let total=schools.reduce((a,s)=>a+(plans.find(p=>p.name==
 function usersPage(){
  const rows=superAdminDirectory;
  const canCreate=rows.length<2;
+ const directoryNotice=superAdminDirectoryLoading?'<div class="notice">Loading administrator accounts…</div>':(superAdminDirectoryError?'<div class="notice">'+esc(superAdminDirectoryError)+' <button type="button" class="btn light" id="retrySuperAdminDirectory">Retry</button></div>':"");
  return head('IDENTITY & ACCESS','Super Admin accounts','Manage the two authorised platform administrator accounts. School users are created and managed by each School Administrator.')+
  '<div class="stats">'+stat('Super Admin accounts',rows.length+' / 2','Maximum platform-wide accounts','♙')+stat('Available slots',Math.max(0,2-rows.length),'No third account can be created','✓')+'</div>'+
  panel('Create Super Admin','Only two Super Admin accounts are permitted across Navstar. When both slots are occupied, reset an existing account instead of creating another.','<form id="superAdminCreateForm" class="form-grid">'+
@@ -119,7 +120,7 @@ function usersPage(){
  '<div class="form-field"><label>Designation</label><input class="field" name="designation" value="Super Administrator" '+(!canCreate?'disabled':'')+'></div>'+
  '<div class="form-field"><label>Initial password *</label><input class="field" name="password" type="password" minlength="6" required '+(!canCreate?'disabled':'')+'></div>'+
  '<div class="form-field full"><button class="btn" type="submit" '+(!canCreate?'disabled':'')+'>'+(canCreate?'＋ Create Super Admin':'Maximum of two accounts reached')+'</button> <span id="superAdminCreateStatus" class="small muted">'+(canCreate?'The new account will appear in the directory after database verification.':'Both Super Admin slots are occupied. Use Edit / Reset credentials below.')+'</span></div></form>')+
- panel('Registered Super Admin accounts','Edit account details, reset lost credentials, or remove a secondary account. The primary owner account is protected.','<div class="table-wrap"><table><thead><tr><th>Name</th><th>Username</th><th>Email</th><th>Designation</th><th>Status</th><th>Last sign-in</th><th>Actions</th></tr></thead><tbody>'+
+ directoryNotice+panel('Registered Super Admin accounts','Edit account details, reset lost credentials, or remove a secondary account. The primary owner account is protected.','<div class="table-wrap"><table><thead><tr><th>Name</th><th>Username</th><th>Email</th><th>Designation</th><th>Status</th><th>Last sign-in</th><th>Actions</th></tr></thead><tbody>'+
  (rows.map(u=>'<tr><td><b>'+esc(u.full_name)+'</b>'+(Number(u.is_primary_owner)===1?'<div class="subline">Primary platform owner</div>':'')+'</td><td>'+esc(u.username)+'</td><td>'+esc(u.email)+'</td><td>'+esc(u.designation||'Super Administrator')+'</td><td>'+pill(u.status)+'</td><td>'+esc(u.last_login_at||'—')+'</td><td><div class="row-actions"><button class="tiny" data-superadmin-edit="'+esc(u.id)+'">Edit</button><button class="tiny" data-superadmin-reset="'+esc(u.id)+'">Reset credentials</button>'+(Number(u.is_primary_owner)===1?'<button class="tiny" disabled>Protected</button>':'<button class="tiny" data-superadmin-delete="'+esc(u.id)+'">Delete</button>')+'</div></td></tr>').join('')||'<tr><td colspan="7" class="empty">No Super Admin records found.</td></tr>')+
  '</tbody></table></div>')+
  '<div class="notice">Security rule: no more than two Super Admin profiles can exist at once. A lost password is recovered by resetting the existing account; a third account is never created. School teachers, staff, parents and learners are managed by their own School Administrator.</div>';
@@ -236,7 +237,7 @@ if(lbf){
  lbf.onsubmit=async e=>{e.preventDefault();const file=fileInput.files[0];if(!file){status.textContent='Choose an image first.';return}const fd=new FormData();fd.append('background',file);status.textContent='Uploading…';const button=lbf.querySelector('button[type="submit"]');button.disabled=true;try{const response=await fetch('/api/branding/login-background',{method:'POST',credentials:'same-origin',body:fd});const data=await response.json();if(!response.ok||!data.ok)throw new Error(data.error||'Background upload failed.');preview.src='/api/branding/login-background?v='+Date.now();status.textContent='Saved to '+data.storage+'. Login page background updated.';fileInput.value='';toast('Login background uploaded successfully.')}catch(error){status.textContent=error.message||'Upload failed.'}finally{button.disabled=false}};
 }
 const pdf=$('platformDetailsForm');if(pdf){fetch('/api/branding',{credentials:'same-origin'}).then(r=>r.json()).then(d=>{if(d.ok){const b=d.branding;for(const k of ['address','city','county','phone','website','registeredDomain','supportEmail'])if(pdf.elements.namedItem(k))pdf.elements.namedItem(k).value=b[k]||''}}).catch(()=>{});pdf.onsubmit=async e=>{e.preventDefault();const d=new FormData(pdf),status=$('platformDetailsStatus');status.textContent='Saving…';const payload=Object.fromEntries(['address','city','county','phone','website','registeredDomain','supportEmail'].map(k=>[k,d.get(k)]));try{const response=await fetch('/api/branding',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:$('brandNameInput')?.value||'Navstar Analytics',tagline:$('brandTaglineInput')?.value||'Empowering Schools with Smart Data',...payload})});const result=await response.json();if(!response.ok||!result.ok)throw new Error(result.error||'Could not save details.');status.textContent='Official contact details saved centrally.';toast('Platform contact details saved.')}catch(error){status.textContent=error.message||'Save failed.'}}}const sf=$('settingsForm');if(sf)sf.onsubmit=async e=>{e.preventDefault();let d=new FormData(sf),button=sf.querySelector('button[type="submit"]');const next={platformName:d.get('platformName'),supportEmail:d.get('supportEmail'),defaultCurrency:d.get('defaultCurrency'),timezone:d.get('timezone'),registrationOpen:d.has('registrationOpen'),aiEnabled:d.has('aiEnabled'),maintenance:d.has('maintenance')};button.disabled=true;button.textContent='Saving centrally…';try{await persistPlatformSettings(next);toast('Platform settings saved permanently in the central database.');render()}catch(error){toast(error.message||'Platform settings could not be saved.')}finally{button.disabled=false;button.textContent='Save platform settings'}}}
-async function go(p){page=p;if(p==="subscriptions"){try{await Promise.all([loadSchoolsFromDatabase(),loadPlansFromDatabase()]);await loadSchoolBillingFromDatabase()}catch(error){toast("Subscriptions could not be refreshed: "+(error.message||"database error"))}}if(p==="users"){try{await loadPlatformUsersFromDatabase()}catch(error){toast(error.message||"Could not load platform users.")}}if(p==="access"){const results=await Promise.allSettled([fetch("/api/platform-access",{credentials:"same-origin",cache:"no-store"}).then(async r=>{const raw=await r.text();let d={};try{d=raw?JSON.parse(raw):{}}catch{throw new Error("School-user access returned an empty or invalid response ("+r.status+").")};if(!r.ok||!d.ok)throw new Error(d.error||"School-user access request failed ("+r.status+").");return d}),fetch("/api/platform-controls",{credentials:"same-origin",cache:"no-store"}).then(async r=>{const raw=await r.text();let d={};try{d=raw?JSON.parse(raw):{}}catch{throw new Error("Platform controls returned an empty or invalid response ("+r.status+").")};if(!r.ok||!d.ok)throw new Error(d.error||"Maintenance settings request failed ("+r.status+").");return d})]);if(results[0].status==="fulfilled")platformAccessRows=results[0].value.users||[];else toast("School & user access: "+(results[0].reason?.message||"Could not load account statuses."));if(results[1].status==="fulfilled")maintenanceMode=results[1].value.settings?.maintenance_mode||maintenanceMode;else toast("Maintenance settings: "+(results[1].reason?.message||"Could not load maintenance settings."))}if(p==="communications"){try{await loadAnnouncementsFromDatabase()}catch(error){toast(error.message||"Could not load announcements.")}}if(p==="security"){try{await loadAuditFromDatabase()}catch(error){toast(error.message||"Could not load audit history.")}}render();if(p==="support")loadSupportTickets();window.scrollTo(0,0)}
+async function go(p){page=p;if(p==="subscriptions"){try{await Promise.all([loadSchoolsFromDatabase(),loadPlansFromDatabase()]);await loadSchoolBillingFromDatabase()}catch(error){toast("Subscriptions could not be refreshed: "+(error.message||"database error"))}}if(p==="users"){superAdminDirectoryLoaded=false;}if(p==="access"){const results=await Promise.allSettled([fetch("/api/platform-access",{credentials:"same-origin",cache:"no-store"}).then(async r=>{const raw=await r.text();let d={};try{d=raw?JSON.parse(raw):{}}catch{throw new Error("School-user access returned an empty or invalid response ("+r.status+").")};if(!r.ok||!d.ok)throw new Error(d.error||"School-user access request failed ("+r.status+").");return d}),fetch("/api/platform-controls",{credentials:"same-origin",cache:"no-store"}).then(async r=>{const raw=await r.text();let d={};try{d=raw?JSON.parse(raw):{}}catch{throw new Error("Platform controls returned an empty or invalid response ("+r.status+").")};if(!r.ok||!d.ok)throw new Error(d.error||"Maintenance settings request failed ("+r.status+").");return d})]);if(results[0].status==="fulfilled")platformAccessRows=results[0].value.users||[];else toast("School & user access: "+(results[0].reason?.message||"Could not load account statuses."));if(results[1].status==="fulfilled")maintenanceMode=results[1].value.settings?.maintenance_mode||maintenanceMode;else toast("Maintenance settings: "+(results[1].reason?.message||"Could not load maintenance settings."))}if(p==="communications"){try{await loadAnnouncementsFromDatabase()}catch(error){toast(error.message||"Could not load announcements.")}}if(p==="security"){try{await loadAuditFromDatabase()}catch(error){toast(error.message||"Could not load audit history.")}}render();if(p==="support")loadSupportTickets();window.scrollTo(0,0)}
 function openModal(title,body,submit){$('modalTitle').textContent=title;$('modalBody').innerHTML=body;$('modal').classList.add('open');$('modalForm').onsubmit=e=>{e.preventDefault();submit(new FormData(e.target));}}
 function closeModal(){$('modal').classList.remove('open');$('modalForm').onsubmit=null}
 function field(label,name,placeholder='',type='text',value=''){return '<div class="form-field"><label>'+label+'</label><input class="field" name="'+name+'" type="'+type+'" placeholder="'+placeholder+'" value="'+esc(value)+'"></div>'}
@@ -1188,7 +1189,6 @@ loadSignedInUser();
     await Promise.all([
       loadPlatformSettingsFromDatabase(),
       loadSchoolsFromDatabase(),
-      loadPlatformUsersFromDatabase(),
       loadPlansFromDatabase(),
       loadOverviewFromDatabase()
     ]);
@@ -1216,20 +1216,21 @@ loadSignedInUser();
 
 
 /* Dedicated two-account Super Admin directory. */
-let superAdminDirectory=[],superAdminDirectoryLoaded=false,superAdminDirectoryLoading=false;
+let superAdminDirectory=[],superAdminDirectoryLoaded=false,superAdminDirectoryLoading=false,superAdminDirectoryError="";
 const originalPlatformRender=render;
 const originalPlatformWirePage=wirePage;
 async function loadSuperAdminDirectory(force=false){
  if(page!=="users"||superAdminDirectoryLoading||(!force&&superAdminDirectoryLoaded))return;
- superAdminDirectoryLoading=true;
+ superAdminDirectoryLoading=true;superAdminDirectoryError="";
  try{
-  const response=await fetch("/api/super-admins",{credentials:"same-origin",cache:"no-store"});
-  const data=await response.json();
-  if(!response.ok||!data.ok)throw new Error(data.error||"Super Admin accounts could not be loaded.");
+  const response=await fetch("/api/super-admins",{credentials:"same-origin",cache:"no-store",headers:{"Accept":"application/json"}});
+  const raw=await response.text();let data={};
+  try{data=raw?JSON.parse(raw):{}}catch{throw new Error("The administrator service returned an invalid response (HTTP "+response.status+"). Refresh and retry.");}
+  if(!response.ok||!data.ok)throw new Error(data.error||"Super Admin accounts could not be loaded (HTTP "+response.status+").");
   superAdminDirectory=Array.isArray(data.records)?data.records:[];
   users=superAdminDirectory.map(u=>({id:u.id,name:u.full_name,username:u.username,email:u.email,role:"Super Admin",status:u.status==="active"?"Active":u.status,lastLogin:u.last_login_at||""}));
   superAdminDirectoryLoaded=true;
- }catch(error){toast(error.message||"Could not load Super Admin accounts.");}
+ }catch(error){superAdminDirectoryError=error.message||"Could not load Super Admin accounts.";console.error("Platform Users directory load failed:",superAdminDirectoryError);}
  finally{superAdminDirectoryLoading=false;if(page==="users")originalPlatformRender();}
 }
 wirePage=function(){originalPlatformWirePage();if(page==="users")loadSuperAdminDirectory();};
@@ -1246,6 +1247,7 @@ document.addEventListener("submit",async e=>{
  }catch(error){if(status)status.textContent=error.message||"Account creation failed.";toast(error.message||"Account creation failed.");button.disabled=false;button.textContent="＋ Create Super Admin";}
 });
 document.addEventListener("click",async e=>{
+ if(e.target.closest("#retrySuperAdminDirectory")){loadSuperAdminDirectory(true);return;}
  const edit=e.target.closest("[data-superadmin-edit]"),reset=e.target.closest("[data-superadmin-reset]"),del=e.target.closest("[data-superadmin-delete]");
  if(!edit&&!reset&&!del)return;
  const userId=(edit||reset||del).dataset.superadminEdit||(edit||reset||del).dataset.superadminReset||(edit||reset||del).dataset.superadminDelete;
