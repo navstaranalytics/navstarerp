@@ -17,7 +17,7 @@ export async function onRequestPost({request,env}){
   value={idle_timeout_minutes:minutes};
  }
  if(key==="system_guide"){
-  if(typeof value.title!=="string"||value.title.trim().length>140||typeof value.introduction!=="string"||value.introduction.length>3000||!Array.isArray(value.sections)||value.sections.length>20||value.sections.some(x=>!x||typeof x.heading!=="string"||x.heading.length>140||typeof x.body!=="string"||x.body.length>7000))return json({ok:false,error:"Guide title, introduction or section content is invalid."},400);
+  if(typeof value.title!=="string"||value.title.trim().length>140||typeof value.introduction!=="string"||value.introduction.length>3000||!Array.isArray(value.sections)||value.sections.length>20||!["A4","Letter","Legal"].includes(value.pageSize||"A4")||value.sections.some(x=>!x||typeof x.heading!=="string"||x.heading.length>140||typeof x.body!=="string"||x.body.length>7000||(x.html!==undefined&&(typeof x.html!=="string"||x.html.length>12000)))||JSON.stringify(value).length>220000)return json({ok:false,error:"Guide title, page size or section content is invalid or too large."},400);
  }
  if(key==="subscription_policy"){
   const grace=Number(value.grace_period_days);const warning=Number(value.warning_days);
