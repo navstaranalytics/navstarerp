@@ -21,12 +21,12 @@ export async function onRequestPatch({request,env}){
  const actor=await getSuperAdminSession(request,env);if(!actor)return json({ok:false,error:"Only Super Admin can change school-user access."},403);
  let body;try{body=await request.json()}catch{return json({ok:false,error:"Invalid access update."},400)}
  const userId=String(body.userId||""),schoolId=String(body.schoolId||""),status=String(body.status||"");
- if(!userId||!schoolId||!["active","suspended","locked","disabled"].includes(status))return json({ok:false,error:"Choose a valid school user and access status."},400);
+ if(!userId||!schoolId||!["active","pending","suspended","locked","disabled"].includes(status))return json({ok:false,error:"Choose a valid school user and access status."},400);
  try{
   const row=await env.DB.prepare("SELECT u.id,u.status,m.membership_status,r.role_key FROM users u JOIN school_memberships m ON m.user_id=u.id AND m.school_id=? LEFT JOIN user_role_assignments a ON a.user_id=u.id AND a.school_id=m.school_id LEFT JOIN roles r ON r.id=a.role_id WHERE u.id=?").bind(schoolId,userId).first();
   if(!row)return json({ok:false,error:"That user is not a member of the selected school."},404);
   if(row.role_key==="super_admin")return json({ok:false,error:"Platform Super Admin access cannot be changed from the school-user directory."},403);
-  const membership=status==="active"?"active":status==="disabled"?"ended":"suspended";
+  const membership=status==="active"?"active":status==="pending"?"invited":status==="disabled"?"ended":"suspended";
   await env.DB.batch([
    env.DB.prepare("UPDATE users SET status=?,updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?").bind(status,userId),
    env.DB.prepare("UPDATE school_memberships SET membership_status=? WHERE school_id=? AND user_id=?").bind(membership,schoolId,userId),
