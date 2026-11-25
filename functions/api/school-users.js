@@ -33,7 +33,7 @@ export async function onRequestPost({request,env}) {
  let body;try{body=await request.json()}catch{return json({ok:false,error:"Enter valid account details."},400)}
  if(body.createFamilyAccounts===true){
   const admission=clean(body.learnerAdmissionNumber),studentName=clean(body.learnerFullName),studentUsername=norm(body.learnerUsername),studentPassword=String(body.learnerPassword||""),parentName=clean(body.parentFullName),parentUsername=norm(body.parentUsername),parentEmail=norm(body.parentEmail),parentPhone=clean(body.parentPhone),parentPassword=String(body.parentPassword||""),relationship=clean(body.relationship)||"Parent/Guardian";
-  if(!admission||!studentName||!parentName||!/^[a-z0-9._-]{3,32}$/.test(studentUsername)||!/^[a-z0-9._-]{3,32}$/.test(parentUsername)||studentUsername===parentUsername||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(studentEmail)||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(parentEmail)||studentEmail===parentEmail||studentPassword.length<10||parentPassword.length<10)return json({ok:false,error:"Enter valid, different usernames, a learner account email, the parent's email and passwords of at least 10 characters."},400);
+  if(!admission||!studentName||!parentName||!/^[a-z0-9._-]{3,32}$/.test(studentUsername)||!/^[a-z0-9._-]{3,32}$/.test(parentUsername)||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(parentEmail)||studentPassword.length<10||parentPassword.length<10)return json({ok:false,error:"Enter valid usernames, a parent email and passwords of at least 10 characters."},400);
   try{
    const school=await env.DB.prepare("SELECT id,name,school_code,status FROM schools WHERE id=?").bind(schoolId).first();
    if(!school||school.status!=="active")return json({ok:false,error:"The school workspace is not active."},409);
