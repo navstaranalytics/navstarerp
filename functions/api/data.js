@@ -397,6 +397,15 @@ export async function onRequestGet({request,env}){
     if(cfg.scope)sql+=teacherFilter(name,a.user);
     sql+=(name==="audit"?" ORDER BY created_at DESC LIMIT 500":" ORDER BY rowid DESC LIMIT 1000");
     const rows=cfg.scope?await env.DB.prepare(sql).bind(schoolId).all():await env.DB.prepare(sql).all();
+    if(name==="attendance-sessions"){
+      const session=await env.DB.prepare("SELECT id FROM attendance_sessions WHERE id=? AND school_id=?").bind(recordId,schoolId).first();
+      if(!session)return json({ok:false,error:"Attendance register not found in this school."},404);
+      const count=Number((await env.DB.prepare("SELECT COUNT(*) AS total FROM attendance_records WHERE school_id=? AND session_id=?").bind(schoolId,recordId).first())?.total||0);
+      await env.DB.prepare("DELETE FROM attendance_records WHERE school_id=? AND session_id=?").bind(schoolId,recordId).run();
+      await env.DB.prepare("DELETE FROM attendance_sessions WHERE id=? AND school_id=?").bind(recordId,schoolId).run();
+      await audit(env.DB,a.user,schoolId,"attendance.permanently_deleted","attendance-sessions",recordId);
+      return json({ok:true,message:"Attendance register and "+count+" attendance marks permanently deleted. This cannot be undone."});
+    }
     if(name==="grades"){
       const school=await env.DB.prepare("SELECT curriculum,school_levels_json FROM schools WHERE id=?").bind(schoolId).first();
       let levels=[];try{levels=JSON.parse(school?.school_levels_json||"[]")}catch{}
@@ -673,8 +682,8 @@ export async function onRequestDelete({request,env}){
   const parts=new URL(request.url).pathname.split("/"),name=parts[parts.length-2],recordId=decodeURIComponent(parts[parts.length-1]||""),cfg=resources[name];
   if(!cfg||!recordId)return json({ok:false,error:"Unknown resource or record."},404);
   if(name==="departments")await ensureDepartments(env.DB);
-  if(!["years","terms","school-events","grading-schemes","streams","departments","grades","learning-areas","learners"].includes(name))return json({ok:false,error:"Deletion is not enabled for this resource."},405);
-  if(!allowed(a.user,permissionFor(name,true)))return json({ok:false,error:"Your role does not have permission to delete this record."},403);
+  if(!["years","terms","school-events","grading-schemes","streams","departments","grades","learning-areas","learners","attendance-sessions"].includes(name))return json({ok:false,error:"Deletion is not enabled for this resource."},405);
+  if(!allowed(a.user,name==="attendance-sessions"?"attendance.manage":permissionFor(name,true)))return json({ok:false,error:"Your role does not have permission to delete this record."},403);
   const requested=new URL(request.url).searchParams.get("schoolId")||"";
   const schoolId=cfg.scope?(a.user.is_super_admin?requested:a.user.school_id):"";
   if(cfg.scope&&!schoolId)return json({ok:false,error:"School workspace is required."},400);
@@ -683,9 +692,16 @@ export async function onRequestDelete({request,env}){
     if(name==="learners"){
       const learner=await env.DB.prepare("SELECT id,first_name,last_name,status FROM learners WHERE id=? AND school_id=?").bind(recordId,schoolId).first();
       if(!learner)return json({ok:false,error:"Learner not found in this school."},404);
-      await env.DB.prepare("UPDATE learners SET status='withdrawn' WHERE id=? AND school_id=?").bind(recordId,schoolId).run();
-      await audit(env.DB,a.user,schoolId,"learner.archived","learners",recordId);
-      return json({ok:true,message:"Learner archived as withdrawn. Enrolments, results, attendance, fee history and guardian records have been preserved."});
+      await audit(env.DB,a.user,schoolId,"learner.permanently_deleted","learners",recordId);
+      try{
+        await env.DB.prepare("DELETE FROM learners WHERE id=? AND school_id=?").bind(recordId,schoolId).run();
+        const remains=await env.DB.prepare("SELECT id FROM learners WHERE id=? AND school_id=?").bind(recordId,schoolId).first();
+        if(remains)throw new Error("Learner still exists after deletion.");
+      }catch(deleteError){
+        if(/FOREIGN KEY constraint/i.test(String(deleteError?.message||"")))return json({ok:false,error:"This learner has linked records that prevent permanent deletion. Remove or reassign those linked records first, or archive the learner to preserve history."},409);
+        throw deleteError;
+      }
+      return json({ok:true,message:"Learner permanently deleted. Linked records configured to cascade have also been removed."});
     }
     if(name==="learning-areas"){
       const area=await env.DB.prepare("SELECT id,name,stage_code,curriculum,is_mandatory FROM learning_areas WHERE id=? AND school_id=?").bind(recordId,schoolId).first();
@@ -718,6 +734,13 @@ export async function onRequestDelete({request,env}){
           else await env.DB.prepare("UPDATE learner_enrollments SET grade_level_id=?,stream_id=NULL WHERE id=? AND school_id=?").bind(targetGradeId,enrol.id,schoolId).run();
         }
       }
+      const attendanceCount=Number((await env.DB.prepare("SELECT COUNT(*) AS total FROM attendance_sessions WHERE school_id=? AND grade_level_id=?").bind(schoolId,recordId).first())?.total||0);
+      if(attendanceCount>0){
+        await env.DB.prepare("UPDATE attendance_sessions SET status='archived' WHERE school_id=? AND grade_level_id=?").bind(schoolId,recordId).run();
+        await env.DB.prepare("UPDATE grade_levels SET is_active=0 WHERE id=? AND school_id=?").bind(recordId,schoolId).run();
+        await audit(env.DB,a.user,schoolId,"record.archived","grades",recordId);
+        return json({ok:true,message:"Class archived and removed from active choices. "+attendanceCount+" attendance session(s) were archived with their attendance records preserved. You can create a replacement class with the same name."});
+      }
       const tableRows=await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table'").all();
       const tableNames=new Set((tableRows.results||[]).map(x=>x.name));
       const protectedRefs=[];
@@ -732,13 +755,6 @@ export async function onRequestDelete({request,env}){
         if(Number(count?.total||0)>0&&!(table==="learner_enrollments"&&targetGradeId))protectedRefs.push(table.replace(/_/g," ")+": "+count.total);
       }
       if(protectedRefs.length)return json({ok:false,error:"This class is still linked to non-enrolment records ("+protectedRefs.join("; ")+"). Those records must be reassigned or archived before deleting the class."},409);
-      const attendanceCount=Number((await env.DB.prepare("SELECT COUNT(*) AS total FROM attendance_sessions WHERE school_id=? AND grade_level_id=?").bind(schoolId,recordId).first())?.total||0);
-      if(attendanceCount>0){
-        await env.DB.prepare("UPDATE attendance_sessions SET status='archived' WHERE school_id=? AND grade_level_id=?").bind(schoolId,recordId).run();
-        await env.DB.prepare("UPDATE grade_levels SET is_active=0 WHERE id=? AND school_id=?").bind(recordId,schoolId).run();
-        await audit(env.DB,a.user,schoolId,"record.archived","grades",recordId);
-        return json({ok:true,message:"Class archived and removed from active choices. "+attendanceCount+" attendance session(s) were archived with their attendance records preserved. You can create a replacement class with the same name."});
-      }
       const remaining=await env.DB.prepare("SELECT COUNT(*) AS total FROM learner_enrollments WHERE school_id=? AND grade_level_id=?").bind(schoolId,recordId).first();
       if(Number(remaining?.total||0)>0){
         await env.DB.prepare("UPDATE grade_levels SET is_active=0 WHERE id=? AND school_id=?").bind(recordId,schoolId).run();
