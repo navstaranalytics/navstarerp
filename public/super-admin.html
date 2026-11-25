@@ -363,7 +363,7 @@ configureSchoolBilling=function(id){
       const base=effectiveModel==="custom"?0:effectiveRate;
       const estimated=Math.round(base*(1-discount/100)*100)/100;
       const paidModules=d.getAll("paidModules");const moduleAmounts={};paidModules.forEach(key=>{moduleAmounts[key]=Math.max(0,Number(d.get("moduleFee_"+key))||0)});const moduleTotal=Object.values(moduleAmounts).reduce((a,b)=>a+b,0);const finalEstimated=Math.round((estimated+moduleTotal)*100)/100;
-      const payload={school_id:school.id,plan_id:selected.id,billing_model_override:billingModel,rate_override_kes:rate,learner_count:0,learner_count_basis:"none",discount_percent:discount,contract_start_date:d.get("cycleStart")||null,next_due_date:d.get("nextDue")||null,preferred_payment_method:d.get("paymentMethod")==="Use plan default"?(selected.paymentMethods?.[0]||"mpesa"):d.get("paymentMethod"),payment_terms:d.get("paymentTerms"),paid_modules_json:JSON.stringify(paidModules),module_amounts_json:JSON.stringify(moduleAmounts),status:d.get("status"),estimated_amount_kes:finalEstimated};
+      const payload={school_id:school.id,plan_id:selected.id,billing_model_override:billingModel,rate_override_kes:rate,discount_percent:discount,contract_start_date:d.get("cycleStart")||null,next_due_date:d.get("nextDue")||null,preferred_payment_method:d.get("paymentMethod")==="Use plan default"?(selected.paymentMethods?.[0]||"mpesa"):d.get("paymentMethod"),payment_terms:d.get("paymentTerms"),paid_modules_json:JSON.stringify(paidModules),module_amounts_json:JSON.stringify(moduleAmounts),status:d.get("status"),estimated_amount_kes:finalEstimated};
       const button=$("saveModal");if(button){button.disabled=true;button.textContent="Saving subscription…"}
       try{
         let result;
