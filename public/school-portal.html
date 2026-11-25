@@ -403,7 +403,7 @@ $("downloadLearnerCsvTemplate").addEventListener("click",async()=>{
   if(!gradeRows.length)throw new Error("No active classes are configured. Add or activate classes first.");
   const today=new Date(Date.now()+3*60*60*1000).toISOString().slice(0,10);
   const year=yearRows.find(x=>x.id===window.navstarCurrentAcademicYearId)||yearRows.find(x=>x.start_date<=today&&x.end_date>=today)||yearRows[0];
-  const headers=["admission_number","first_name","middle_name","last_name","gender","date_of_birth","status","pathway","academic_year","curriculum","grade","stream"];
+  const headers=["first_name","middle_name","last_name","gender","date_of_birth","assessment_number","upi_number","nemis_number","status","pathway","academic_year","curriculum","grade","stream","elective_learning_areas"];
   const csvRows=[];
   for(const grade of gradeRows){
    const className=schoolGradeLabel(grade),linked=streamRows.filter(s=>s.grade_level_id===grade.id);
@@ -432,7 +432,7 @@ function parseLearnerCsvPreview(text){
 function renderLearnerCsvPreview(headers){
  const host=$("learnerCsvResults");
  if(!learnerCsvPreview.length){host.innerHTML='<div class="empty">No learner rows found in the file.</div>';return}
- const fields=headers.filter(x=>["first_name","middle_name","last_name","gender","date_of_birth","assessment_number","upi_number","nemis_number","status","pathway","academic_year","grade","stream"].includes(x));
+ const fields=headers.filter(x=>["first_name","middle_name","last_name","gender","date_of_birth","assessment_number","upi_number","nemis_number","status","pathway","academic_year","grade","stream","elective_learning_areas"].includes(x));
  host.innerHTML='<div class="panel" style="margin-top:14px"><div class="panelhead"><div><h3>Review and correct learner records</h3><p class="muted">'+learnerCsvPreview.length+' rows loaded. Edit the cells before saving. Admission numbers are issued automatically and cannot be uploaded.</p></div><button class="btn" type="button" id="cancelLearnerCsvPreview">Cancel</button></div><div class="tablewrap" style="max-height:520px;overflow:auto"><table><thead><tr><th>#</th>'+fields.map(x=>'<th>'+esc(x.replaceAll("_"," "))+(["assessment_number","upi_number","nemis_number"].includes(x)?" (optional)":"")+'</th>').join("")+'<th>Validation</th></tr></thead><tbody>'+learnerCsvPreview.map((r,i)=>'<tr data-learner-csv-record="'+i+'"><td>'+(i+1)+'</td>'+fields.map(k=>'<td><input data-learner-csv-row="'+i+'" data-learner-csv-field="'+esc(k)+'" value="'+esc(r[k]||"")+'" style="min-width:120px;max-width:180px"></td>').join("")+'<td data-learner-csv-error="'+i+'" class="muted">Ready to validate</td></tr>').join("")+'</tbody></table></div><div class="panelbody"><button class="btn primary" type="button" id="saveLearnerCsvPreview">Save and issue admission numbers</button> <span id="learnerCsvSaveNotice" class="notice" role="status"></span><div id="learnerCsvIssuedNumbers"></div></div></div>';
  $("cancelLearnerCsvPreview").addEventListener("click",()=>{learnerCsvPreview=[];host.innerHTML="";});
  $("saveLearnerCsvPreview").addEventListener("click",saveLearnerCsvPreview);
