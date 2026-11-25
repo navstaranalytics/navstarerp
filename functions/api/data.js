@@ -247,10 +247,9 @@ function isPrimaryOrJuniorClass(grade){
  return /pre-primary|primary|junior/.test(level)||/^PP[12]$/.test(code)||/^G[1-9]$/.test(code)||/^STD[1-8]$/.test(code);
 }
 async function syncCompulsoryLearningAreas(db,schoolId,enrollmentId=null){
- // In pre-primary, primary and junior school, every area enabled by the school
- // is compulsory for every learner. In senior school, only catalogue-mandatory
- // areas are auto-assigned; pathway/elective areas remain learner-specific.
- const sql="INSERT INTO learner_learning_areas(id,school_id,enrollment_id,learner_id,learning_area_id,selection_type,status) SELECT lower(hex(randomblob(16))),e.school_id,e.id,e.learner_id,la.id,'mandatory','active' FROM learner_enrollments e JOIN learners l ON l.id=e.learner_id AND l.school_id=e.school_id JOIN grade_levels g ON g.id=e.grade_level_id AND g.school_id=e.school_id AND g.is_active=1 JOIN learning_areas la ON la.school_id=e.school_id AND la.curriculum=g.curriculum AND la.stage_code=g.stage_code AND la.is_active=1 WHERE e.school_id=? AND e.status='active' AND (? IS NULL OR e.id=?) AND (lower(COALESCE(g.school_level,'')) LIKE '%primary%' OR lower(COALESCE(g.school_level,'')) LIKE '%pre-primary%' OR lower(COALESCE(g.school_level,'')) LIKE '%junior%' OR upper(g.stage_code) GLOB 'G[1-9]' OR upper(g.stage_code) GLOB 'PP[12]' OR upper(g.stage_code) GLOB 'STD[1-8]' OR la.is_mandatory=1) ON CONFLICT(enrollment_id,learning_area_id) DO UPDATE SET selection_type='mandatory',status='active'";
+ // Only catalogue-mandatory areas are assigned automatically. Optional/elective
+ // areas remain selectable by pathway and school offering at every school phase.
+ const sql="INSERT INTO learner_learning_areas(id,school_id,enrollment_id,learner_id,learning_area_id,selection_type,status) SELECT lower(hex(randomblob(16))),e.school_id,e.id,e.learner_id,la.id,'mandatory','active' FROM learner_enrollments e JOIN learners l ON l.id=e.learner_id AND l.school_id=e.school_id JOIN grade_levels g ON g.id=e.grade_level_id AND g.school_id=e.school_id AND g.is_active=1 JOIN learning_areas la ON la.school_id=e.school_id AND la.curriculum=g.curriculum AND la.stage_code=g.stage_code AND la.is_active=1 AND la.is_mandatory=1 WHERE e.school_id=? AND e.status='active' AND (? IS NULL OR e.id=?) ON CONFLICT(enrollment_id,learning_area_id) DO UPDATE SET selection_type='mandatory',status='active'";
  await db.prepare(sql).bind(schoolId,enrollmentId,enrollmentId).run();
 }
 function gradeBelongsToSelectedLevels(grade,levels){
@@ -477,7 +476,6 @@ export async function onRequestPost({request,env}){
       const placeholders=ids.map(()=>"?").join(",");
       const current=await env.DB.prepare("SELECT id,is_mandatory FROM learning_areas WHERE school_id=? AND id IN ("+placeholders+")").bind(schoolId,...ids).all();
       if((current.results||[]).length!==ids.length)return json({ok:false,error:"Some learning areas are no longer available in this school. Refresh and try again."},409);
-      if(active===0&&(current.results||[]).some(x=>Number(x.is_mandatory)===1))return json({ok:false,error:"Compulsory learning areas cannot be disabled."},403);
       await env.DB.batch(ids.map(recordId=>env.DB.prepare("UPDATE learning_areas SET is_active=? WHERE id=? AND school_id=?").bind(active,recordId,schoolId)));
       const saved=await env.DB.prepare("SELECT id,is_active FROM learning_areas WHERE school_id=? AND id IN ("+placeholders+")").bind(schoolId,...ids).all();
       if((saved.results||[]).length!==ids.length||(saved.results||[]).some(x=>Number(x.is_active)!==active))throw new Error("Learning-area offering verification failed.");
