@@ -197,5 +197,6 @@ assert.match(schoolPortal,/async function loadAssessments\(\)[\s\S]*?assessment-
 assert.match(schoolPortal,/async function loadAnalyticsSetup\(\)/,"School analytics must have an initialisation workflow.");
 assert.match(schoolPortal,/async function loadAcademicSetup\(\)/,"Learning Areas must load school curriculum setup from the API.");
 console.log("School Admin staff, attendance, timetable, finance, assessments, analytics and learning-area workspace regression checks passed.");
+assert.doesNotMatch(schoolPortal,/localStorage/,"School Admin persistent school data must not be stored in browser localStorage.");
 
 
