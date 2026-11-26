@@ -474,8 +474,14 @@ export async function onRequestGet({request,env}){
       // The learner directory only needs identity and enrolment-facing columns.
       // Avoid transferring large profile JSON blobs for every row in the table.
       let sql="SELECT id,school_id,admission_number,assessment_number,upi_number,nemis_number,first_name,middle_name,last_name,gender,date_of_birth,status,pathway FROM learners WHERE school_id=?";
+      const learnerArgs=[schoolId],rawIds=url.searchParams.get("ids");
+      if(rawIds){
+        const ids=[...new Set(rawIds.split(",").map(x=>x.trim()).filter(Boolean))];
+        if(ids.length>500)return json({ok:false,error:"A learner directory filter may contain at most 500 IDs."},400);
+        if(ids.length){sql+=" AND id IN ("+ids.map(()=>"?").join(",")+")";learnerArgs.push(...ids);}
+      }
       sql+=teacherFilter(name,a.user)+" ORDER BY rowid DESC LIMIT 1000";
-      const rows=await env.DB.prepare(sql).bind(schoolId).all();
+      const rows=await env.DB.prepare(sql).bind(...learnerArgs).all();
       return json({ok:true,records:rows.results||[]});
     }
     if(name==="staff"){
