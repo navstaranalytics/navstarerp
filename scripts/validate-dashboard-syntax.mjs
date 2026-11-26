@@ -291,3 +291,14 @@ assert.match(teacherAllocationApi,/A teacher must have at least two distinct sub
 assert.match(teacherAllocationApi,/Non-teaching staff cannot receive subject allocations/,"Non-teaching staff must be excluded from subject allocation at the API layer.");
 assert.match(teacherAllocationApi,/staff_learning_areas WHERE school_id=\? AND staff_id=\? AND curriculum=\? AND lower\(learning_area_code\)=lower\(\?\) AND status='active'/,"Teacher allocation must match the teacher's active subject code and curriculum.");
 console.log("Stage III server-side teacher eligibility and curriculum allocation checks passed.");
+
+const deploymentGuide=fs.readFileSync("CLOUDFLARE-DEPLOYMENT.md","utf8");
+const mpesaGuide=fs.readFileSync("MPESA-INTEGRATION.md","utf8");
+const mpesaWorkflow=fs.readFileSync(".github/workflows/cloudflare-setup-deploy.yml","utf8");
+assert.match(deploymentGuide,/MPESA_ENVIRONMENT/,"Deployment instructions must use the exact M-Pesa environment variable consumed by the Worker.");
+assert.doesNotMatch(deploymentGuide,/\`MPESA_ENV\`/,"Deployment instructions must not document the obsolete MPESA_ENV variable.");
+assert.match(mpesaGuide,/MPESA_ENVIRONMENT/,"Daraja setup guide must use the Worker environment variable.");
+assert.match(mpesaWorkflow,/put_secret MPESA_ENVIRONMENT/,"Manual deployment secret sync must use the exact M-Pesa environment variable.");
+assert.match(workerSource,/route === "\/api\/payments\/mpesa\/callback"/,"Worker must route Safaricom callbacks to the authenticated callback handler.");
+assert.match(workerSource,/route === "\/api\/payment-provider-status"/,"Super Admin provider status must have a live API route.");
+console.log("M-Pesa environment configuration and callback routing regression checks passed.");
