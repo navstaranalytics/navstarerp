@@ -11,7 +11,7 @@ for (const file of ["public/school-portal.html","public/super-admin.html","publi
   console.log(file+": "+scripts.length+" inline script(s) passed");
 }
 
-for (const file of ["functions/api/data.js","functions/api/school-users.js","functions/api/auth.js","functions/api/schools.js","functions/api/learner-photos.js","worker.js"]) {
+for (const file of ["functions/api/data.js","functions/api/school-users.js","functions/api/auth.js","functions/api/schools.js","functions/api/learner-photos.js","functions/api/documents.js","worker.js"]) {
   const source=fs.readFileSync(file,"utf8");
   const result=spawnSync(process.execPath,["--check","--input-type=module"],{input:source,encoding:"utf8"});
   if(result.status!==0) throw new Error(file+" syntax error:\\n"+result.stderr);
@@ -117,6 +117,20 @@ assert.match(schoolPortal,/data-delete-learner-photo/,"School learner records mu
 const photoDeleteSource=fs.readFileSync("functions/api/learner-photos.js","utf8");
 assert.match(photoDeleteSource,/export async function onRequestDeletePhoto/,"Learner passport photo removal must have a dedicated handler.");
 console.log("Learner passport photo removal route and UI regression checks passed.");
+const documentsApi=fs.readFileSync("functions/api/documents.js","utf8");
+const documentsMigration=fs.readFileSync("migrations/0023_school_document_storage.sql","utf8");
+assert.match(workerSource,/onRequestGet as schoolDocumentsGet/,"Worker must import the school document API handlers.");
+assert.match(workerSource,/route === "\/api\/documents"/,"Worker must expose the school document API route.");
+assert.match(documentsApi,/MAX_BYTES=25\*1024\*1024/,"School document uploads must enforce the 25 MB limit.");
+assert.match(documentsApi,/await env\.R2\.put\(key,bytes/,"School documents must be stored in R2.");
+assert.match(documentsApi,/sameBytes=!!stored&&storedBytes\.byteLength===bytes\.byteLength&&await hash\(storedBytes\)===await hash\(bytes\)/,"School document uploads must verify R2 read-back bytes by SHA-256.");
+assert.match(documentsApi,/school_id=\?/,"School document operations must be scoped to the authenticated school.");
+assert.match(documentsMigration,/CREATE TABLE IF NOT EXISTS school_documents/,"D1 must store school document metadata.");
+assert.match(schoolPortal,/id="documentsWorkspace"[\s\S]*?id="documentUploadForm"[\s\S]*?id="documentsTable"/,"School Admin must have a dedicated document upload and register workspace.");
+assert.match(schoolPortal,/data-download-school-document/,"School Admin must be able to download stored documents.");
+assert.match(schoolPortal,/data-delete-school-document/,"School Admin must be able to delete stored documents.");
+console.log("R2 school document upload, tenant isolation, verification and register regression checks passed.");
+
 const superAdminSource=fs.readFileSync("public/super-admin.html","utf8");
 const flatBillingStart=superAdminSource.lastIndexOf("Stage VI: enforce flat school subscription pricing");
 if(flatBillingStart<0)throw new Error("Stage VI flat school billing override is missing.");

@@ -23,6 +23,7 @@ import { onRequestPostStk as mpesaStkPost, onRequestPostCallback as mpesaCallbac
 import { onRequestGet as paymentProviderStatusGet } from "./functions/api/payment-provider-status.js";
 import { onRequestGet as schoolLogoGet, onRequestPost as schoolLogoPost } from "./functions/api/school-branding.js";
 import { onRequestGetSettings as admissionSettingsGet, onRequestPostSettings as admissionSettingsPost, onRequestPostNextAdmissionNumber as nextAdmissionNumberPost, onRequestPostPhotos as learnerPhotosPost, onRequestGetPhoto as learnerPhotoGet, onRequestDeletePhoto as learnerPhotoDelete } from "./functions/api/learner-photos.js";
+import { onRequestGet as schoolDocumentsGet, onRequestPost as schoolDocumentsPost, onRequestDelete as schoolDocumentsDelete } from "./functions/api/documents.js";
 import { onRequestGet as recoveryGet, onRequestPost as recoveryPost } from "./functions/api/recovery.js";
 import { onRequestGet as academicPeriodGet } from "./functions/api/academic-period.js";
 import { onRequestGet as schoolOutputPreferencesGet, onRequestPost as schoolOutputPreferencesPost } from "./functions/api/school-output-preferences.js";
@@ -161,6 +162,7 @@ export default {
       return learnerPhotosPost({ request, env });
     }
     if (route.startsWith("/api/learner-photos/")) { if (request.method === "GET") return learnerPhotoGet({ request, env }); if (request.method === "DELETE") return learnerPhotoDelete({ request, env }); return new Response("Method not allowed", { status: 405, headers: { Allow: "GET, DELETE" } }); }
+    if (route === "/api/documents" || route.startsWith("/api/documents/")) { if (request.method === "GET") return schoolDocumentsGet({ request, env }); if (request.method === "POST" && route === "/api/documents") return schoolDocumentsPost({ request, env }); if (request.method === "DELETE" && route.startsWith("/api/documents/")) return schoolDocumentsDelete({ request, env }); return new Response("Method not allowed", { status: 405, headers: { Allow: "GET, POST, DELETE" } }); }
     if (route === "/api/school-branding/logo") {
       if (request.method === "GET") return schoolLogoGet({ request, env });
       if (request.method === "POST") return schoolLogoPost({ request, env });
