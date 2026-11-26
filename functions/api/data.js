@@ -1101,6 +1101,14 @@ export async function onRequestPatch({request,env}){
 
   if(name==="invoices"&&["paid","part_paid"].includes(String(body.status||"")))return json({ok:false,error:"Invoice settlement status is calculated from confirmed payments."},403);
   const values=bodyFields(body,cfg);delete values.school_id;
+  // Active boarding placements may only be closed through the explicit vacate action.
+  // Moving a learner or changing their bed must use the atomic /api/boarding/transfer workflow.
+  if(name==="boarding-allocations"){
+    const fields=Object.keys(body).filter(key=>key!=="school_id");
+    if(fields.length!==2||!fields.includes("status")||!fields.includes("end_date")||String(body.status)!=="vacated")return json({ok:false,error:"Boarding placements can only be vacated here. Use the dedicated transfer workflow to move a learner or change beds."},403);
+    const endDate=String(body.end_date||"");
+    if(!/^\\d{4}-\\d{2}-\\d{2}$/.test(endDate)||!Number.isFinite(Date.parse(endDate+"T00:00:00Z"))||new Date(Date.parse(endDate+"T00:00:00Z")).toISOString().slice(0,10)!==endDate)return json({ok:false,error:"Enter a valid bed-vacating date."},400);
+  }
   if(name==="grading-schemes"&&String(values.level_key||"").startsWith("__LEVEL__")){const level=String(values.level_key).slice(9);values.level_key=null;values.stage_code="LEVEL:"+level;}else if(name==="grading-schemes"&&values.level_key==="__ALL__"){values.level_key=null;values.stage_code="ALL";}
   if(!Object.keys(values).length)return json({ok:false,error:"No editable fields were supplied."},400);
   try{
@@ -1112,6 +1120,13 @@ export async function onRequestPatch({request,env}){
     if(name==="learning-areas"&&values.department_id){const department=await env.DB.prepare("SELECT id FROM school_departments WHERE id=? AND school_id=? AND status='active'").bind(String(values.department_id),schoolId).first();if(!department)return json({ok:false,error:"Choose an active department belonging to this school."},409);}
     const current=await env.DB.prepare("SELECT * FROM "+cfg.table+" WHERE "+where).bind(...(cfg.scope?[recordId,schoolId]:[recordId])).first();
     if(!current)return json({ok:false,error:"Record not found in the selected school."},404);
+    if(name==="boarding-allocations"){
+      const endDate=String(values.end_date||"");
+      if(String(current.status||"active")!=="active"||current.end_date)return json({ok:false,error:"This boarding placement is already closed. Refresh the register before making another change."},409);
+      if(current.start_date&&endDate<current.start_date)return json({ok:false,error:"The vacating date cannot be earlier than the placement start date."},400);
+      const today=new Date().toISOString().slice(0,10);
+      if(endDate>today)return json({ok:false,error:"Future-dated bed vacancies are not supported. Choose today or an earlier date."},400);
+    }
     if(name==="boarding-houses"&&values.capacity!==undefined){
       const capacity=Number(values.capacity),occupied=await env.DB.prepare("SELECT COUNT(*) AS total FROM boarding_allocations WHERE school_id=? AND house_id=? AND status='active' AND (end_date IS NULL OR end_date='')").bind(schoolId,recordId).first();
       if(!Number.isInteger(capacity)||capacity<1||capacity>10000)return json({ok:false,error:"Dormitory capacity must be a whole number between 1 and 10,000."},400);
