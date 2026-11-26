@@ -1132,6 +1132,10 @@ export async function onRequestPatch({request,env}){
       const otherRooms=await env.DB.prepare("SELECT COALESCE(SUM(capacity),0) AS total FROM boarding_rooms WHERE school_id=? AND house_id=? AND id<>?").bind(schoolId,houseId,recordId).first();
       if(Number(otherRooms?.total||0)+capacity>Number(house.capacity||0))return json({ok:false,error:"The combined room capacity cannot exceed the dormitory capacity."},409);
     }
+    if(name==="boarding-houses"&&String(values.status||"")==="inactive"){
+      const occupied=await env.DB.prepare("SELECT COUNT(*) AS total FROM boarding_allocations WHERE school_id=? AND house_id=? AND status='active' AND (end_date IS NULL OR end_date='')").bind(schoolId,recordId).first();
+      if(Number(occupied?.total||0)>0)return json({ok:false,error:"Vacate or transfer all active learner placements before deactivating this dormitory."},409);
+    }
     if(name==="boarding-houses"&&values.supervisor_staff_id){const supervisor=await env.DB.prepare("SELECT id FROM staff_profiles WHERE id=? AND school_id=? AND employment_status='active'").bind(values.supervisor_staff_id,schoolId).first();if(!supervisor)return json({ok:false,error:"Choose an active staff supervisor from this school."},400);}
     if(name==="boarding-allocations"){
       if(values.house_id){const house=await env.DB.prepare("SELECT id FROM boarding_houses WHERE id=? AND school_id=?").bind(values.house_id,schoolId).first();if(!house)return json({ok:false,error:"Choose a dormitory belonging to this school."},400);}
