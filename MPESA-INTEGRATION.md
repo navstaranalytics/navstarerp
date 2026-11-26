@@ -13,7 +13,7 @@ In Cloudflare Dashboard → Workers & Pages → navstarerp → Settings → Vari
 | MPESA_SHORTCODE | Variable/Secret | PayBill or Till shortcode |
 | MPESA_PASSKEY | Secret | Daraja Lipa Na M-Pesa passkey |
 | MPESA_CALLBACK_TOKEN | Secret | Generate a long random token (at least 32 random bytes) |
-| MPESA_ENVIRONMENT | Variable | Defaults to `sandbox` if unset. Set to `sandbox` for testing; use `production` only after approval and successful sandbox verification. |
+| MPESA_ENVIRONMENT | Variable | Defaults to `production` if unset. Set to `sandbox` explicitly only for testing; use production credentials only after Safaricom approval. |
 | MPESA_TRANSACTION_TYPE | Variable | `CustomerPayBillOnline` for PayBill; use the Daraja-supported Till type for a Buy Goods shortcode |
 
 Never commit the consumer secret, passkey or callback token to GitHub or put them in browser code.
