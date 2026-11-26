@@ -496,6 +496,20 @@ export async function onRequestGet({request,env}){
       return json({ok:true,records:rows.results||[]});
     }
     let sql="SELECT * FROM "+cfg.table+(cfg.scope?" WHERE school_id=?":"");
+    const queryArgs=cfg.scope?[schoolId]:[];
+    // Optional server-side filters keep class registers and other focused views
+    // from downloading every record belonging to the school.
+    if(name==="attendance-records"&&url.searchParams.get("sessionId")){
+      sql+=" AND session_id=?";queryArgs.push(url.searchParams.get("sessionId"));
+    }
+    if(name==="enrollments"&&url.searchParams.get("academicYearId")&&url.searchParams.get("gradeLevelId")){
+      sql+=" AND academic_year_id=? AND grade_level_id=? AND status='active'";
+      queryArgs.push(url.searchParams.get("academicYearId"),url.searchParams.get("gradeLevelId"));
+      if(url.searchParams.has("streamId")){
+        const streamId=url.searchParams.get("streamId")||null;
+        sql+=" AND (? IS NULL OR stream_id=?)";queryArgs.push(streamId,streamId);
+      }
+    }
     if(name==="grades")sql+=" AND COALESCE(is_archived,0)=0";
     if(name==="grades"&&!a.user.is_super_admin&&!url.searchParams.has("includeInactive"))sql+=" AND is_active=1";
     if(name==="streams"&&!a.user.is_super_admin&&!url.searchParams.has("includeInactive"))sql+=" AND status='active'";
@@ -507,7 +521,7 @@ export async function onRequestGet({request,env}){
     }
     if(cfg.scope)sql+=teacherFilter(name,a.user);
     sql+=(name==="audit"?" ORDER BY created_at DESC LIMIT 500":" ORDER BY rowid DESC LIMIT 1000");
-    const rows=cfg.scope?await env.DB.prepare(sql).bind(schoolId).all():await env.DB.prepare(sql).all();
+    const rows=await env.DB.prepare(sql).bind(...queryArgs).all();
     if(name==="attendance-sessions"){
       const session=await env.DB.prepare("SELECT id FROM attendance_sessions WHERE id=? AND school_id=?").bind(recordId,schoolId).first();
       if(!session)return json({ok:false,error:"Attendance register not found in this school."},404);
