@@ -152,6 +152,7 @@ assert.match(schoolPortal,/id="boardingRoomSelect"/,"Learner allocations must ch
 assert.match(schoolPortal,/id="boardingBedNumber"[^>]*type="number"/,"Learner allocations must select a numbered bed within room capacity.");
 console.log("Boarding room registers and room-level bed capacity regression checks passed.");
 const backupApi=fs.readFileSync("functions/api/backups.js","utf8");
+const backupAdminSource=fs.readFileSync("public/super-admin.html","utf8");
 const backupWorkflow=fs.readFileSync(".github/workflows/d1-backup-to-r2.yml","utf8");
 const backupMigration=fs.readFileSync("migrations/0025_platform_backups.sql","utf8");
 assert.match(workerSource,/onRequestGet as platformBackupsGet/,"Worker must import the Super Admin backup API.");
@@ -164,8 +165,8 @@ assert.match(backupWorkflow,/wrangler r2 object get/,"Scheduled backup must read
 assert.match(backupWorkflow,/sha256sum/,"Scheduled backup must verify the uploaded backup checksum.");
 assert.match(backupWorkflow,/INSERT INTO platform_backups/,"Verified backups must be registered in D1.");
 assert.match(backupMigration,/CREATE TABLE IF NOT EXISTS platform_backups/,"D1 must retain backup verification metadata.");
-assert.match(superAdminSource,/Automated D1 backups/,"Super Admin must have a verified backup register.");
-assert.match(superAdminSource,/data-download-platform-backup/,"Super Admin must be able to download verified backup files.");
+assert.match(backupAdminSource,/Automated D1 backups/,"Super Admin must have a verified backup register.");
+assert.match(backupAdminSource,/data-download-platform-backup/,"Super Admin must be able to download verified backup files.");
 console.log("Automated D1-to-R2 backup, checksum verification and Super Admin register regression checks passed.");
 
 
