@@ -204,8 +204,11 @@ assert.match(workerSource,/route === "\/api\/backups"/,"Worker must route the ba
 assert.match(backupApi,/getSuperAdminSession/,"Backup history and downloads must require Super Admin authentication.");
 assert.match(backupApi,/env\.R2\.get\(row\.object_key\)/,"Backup downloads must stream from R2.");
 assert.match(backupWorkflow,/wrangler d1 export navstar-erp-db --remote/,"Scheduled backup must export the remote D1 database.");
-assert.match(backupWorkflow,/wrangler r2 object put/,"Scheduled backup must upload the SQL export to R2.");
-assert.match(backupWorkflow,/wrangler r2 object get/,"Scheduled backup must read the R2 object back for verification.");
+assert.match(backupWorkflow,/AWS_ACCESS_KEY_ID: \$\{\{ secrets\.CLOUDFLARE_R2_ACCESS_KEY_ID \}\}/,"Scheduled backup must use the scoped R2 S3 access key.");
+assert.match(backupWorkflow,/AWS_SECRET_ACCESS_KEY: \$\{\{ secrets\.CLOUDFLARE_R2_SECRET_ACCESS_KEY \}\}/,"Scheduled backup must use the scoped R2 S3 secret key.");
+assert.match(backupWorkflow,/aws s3 cp "\$BACKUP_FILE" "s3:\/\/navstar-erp-storage\/\$OBJECT_KEY"/,"Scheduled backup must upload the SQL export through the R2 S3-compatible API.");
+assert.match(backupWorkflow,/aws s3 cp "s3:\/\/navstar-erp-storage\/\$OBJECT_KEY" "\$VERIFY_FILE"/,"Scheduled backup must read the R2 object back through the S3-compatible API.");
+assert.doesNotMatch(backupWorkflow,/wrangler r2 object (put|get)/,"Scheduled backup must not use the incompatible Wrangler R2 REST upload/read commands.");
 assert.match(backupWorkflow,/sha256sum/,"Scheduled backup must verify the uploaded backup checksum.");
 assert.match(backupWorkflow,/INSERT INTO platform_backups/,"Verified backups must be registered in D1.");
 assert.match(backupMigration,/CREATE TABLE IF NOT EXISTS platform_backups/,"D1 must retain backup verification metadata.");
@@ -305,7 +308,8 @@ assert.match(workerSource,/route === "\/api\/payments\/mpesa\/callback"/,"Worker
 assert.match(workerSource,/route === "\/api\/payment-provider-status"/,"Super Admin provider status must have a live API route.");
 console.log("M-Pesa environment configuration and callback routing regression checks passed.");
 
-assert.match(backupWorkflow,/CLOUDFLARE_R2_API_TOKEN \|\| secrets\.CLOUDFLARE_API_TOKEN/,"Backup upload and read-back must support a dedicated R2 token while preserving a safe fallback.");
-assert.match(backupWorkflow,/name: Verify R2 backup checksum[\s\S]*?name: Register verified backup in D1/,"R2 read-back verification must complete before the D1 backup register is written.");
-assert.match(deploymentGuide,/CLOUDFLARE_R2_API_TOKEN/,"Deployment guide must explain the dedicated R2 backup token option.");
-console.log("Dedicated R2 backup credentials and verification-before-registration regression checks passed.");
+assert.match(backupWorkflow,/CLOUDFLARE_R2_ACCESS_KEY_ID/,"Backup upload must use the dedicated R2 S3 access key.");
+assert.match(backupWorkflow,/CLOUDFLARE_R2_SECRET_ACCESS_KEY/,"Backup upload must use the dedicated R2 S3 secret key.");
+assert.match(backupWorkflow,/name: Verify R2 backup checksum[\\s\\S]*?name: Register verified backup in D1/,"R2 read-back verification must complete before the D1 backup register is written.");
+assert.match(backupWorkflow,/aws s3 cp/,"Backup upload and verification must use the S3-compatible R2 API.");
+console.log("Scoped R2 S3 credentials and verification-before-registration regression checks passed.");
