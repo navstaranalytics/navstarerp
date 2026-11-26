@@ -11,7 +11,7 @@ function modulesForLevels(levels){
   const modules=new Set(["Core","Learners","Staff & HR","Academics","Examinations","Reports","Parent Portal"]);
   if(selected.some(x=>/^Grade (7|8|9)$/.test(String(x))||/^Junior School$/i.test(String(x))))["Junior School","Pathway Planning"].forEach(x=>modules.add(x));
   if(selected.some(x=>/^Grade (10|11|12)$/.test(String(x))||/^Senior School$/i.test(String(x))))["Senior School","Pathway Planning","AI Analytics"].forEach(x=>modules.add(x));
-  if(selected.some(x=>/^Form /.test(String(x))))modules.add("Secondary School");
+  if(selected.some(x=>/^Form /.test(String(x))||/^Secondary$/i.test(String(x))||/^8-4-4 Secondary$/i.test(String(x))))modules.add("Secondary School");
   if(selected.length)modules.add("Attendance");
   return [...modules];
 }
