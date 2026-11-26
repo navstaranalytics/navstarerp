@@ -77,7 +77,7 @@ function normalizeCurricula(body, fallback) {
 function validateCurricula(curricula,levels) {
  if(!curricula.length)return "Select at least one curriculum framework.";
  if(levels.some(x=>/^8-4-4/i.test(x)||/^Form [1-4]$/i.test(x))&&!curricula.includes("Kenyan 8-4-4")||levels.some(x=>/^Secondary$/i.test(x))&&(curricula.includes("Kenyan CBE")||curricula.includes("Kenyan 8-4-4"))&&!curricula.includes("Kenyan 8-4-4"))return "Select Kenyan 8-4-4 to offer Standards 1–8 or Forms 1–4.";
- if(levels.some(x=>/^(Pre-Primary|Primary|Junior School|Senior School|Grade (?:[1-9]|1[0-2])|PP[12])$/i.test(x))&&!curricula.includes("Kenyan CBE"))return "Select Kenyan CBE to offer CBE school classes.";
+ if(levels.some(x=>/^(Pre-Primary|Junior School|Senior School|Grade (?:[7-9]|1[0-2])|PP[12])$/i.test(x))&&!curricula.includes("Kenyan CBE")||levels.some(x=>/^Primary$/i.test(x))&&!curricula.includes("Kenyan CBE")&&!curricula.includes("Kenyan 8-4-4"))return "Select Kenyan CBE to offer CBE school classes.";
  return null;
 }
 export async function syncSchoolCurricula(db,schoolId,curricula,levels) {
@@ -88,7 +88,7 @@ export async function syncSchoolCurricula(db,schoolId,curricula,levels) {
    // existing school classes or learning areas. Keep all records untouched.
    continue;
   }
-  const scoped=curriculum==="Kenyan 8-4-4"?levels.filter(x=>/^8-4-4/i.test(x)||/^Form [1-4]$/i.test(x)||/^Secondary$/i.test(x)||(curricula.includes("Kenyan CBE")&&/^Primary$/i.test(x))).map(x=>/^Primary$/i.test(x)?"8-4-4 Primary":x):levels.filter(x=>/^(Pre-Primary|Primary|Junior School|Senior School)$/i.test(x)||/^(Grade (?:[1-9]|1[0-2])|PP[12])$/i.test(x));
+  const scoped=curriculum==="Kenyan 8-4-4"?levels.filter(x=>/^8-4-4/i.test(x)||/^Form [1-4]$/i.test(x)||/^Secondary$/i.test(x)||/^Primary$/i.test(x)).map(x=>/^Primary$/i.test(x)?"8-4-4 Primary":x):levels.filter(x=>/^(Pre-Primary|Primary|Junior School|Senior School)$/i.test(x)||/^(Grade (?:[1-9]|1[0-2])|PP[12])$/i.test(x));
   await syncSchoolGradeLevels(db,schoolId,curriculum,scoped);
   await syncSchoolLearningAreas(db,schoolId,curriculum,scoped);
  }
