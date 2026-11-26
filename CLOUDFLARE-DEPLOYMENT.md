@@ -77,6 +77,6 @@ The repository includes a scheduled GitHub Actions workflow at `.github/workflow
 - Exports the remote `navstar-erp-db` schema and data using Wrangler D1 export.
 - Uploads the SQL export to the `navstar-erp-storage` R2 bucket under `backups/d1/`.
 - Downloads the uploaded object again and verifies its byte count and SHA-256 checksum before recording a verified backup row in D1.
-- Requires the existing `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` GitHub Actions secrets. The API token must permit remote D1 export/execute and R2 object read/write.
+- Requires `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` GitHub Actions secrets. `CLOUDFLARE_API_TOKEN` must permit remote D1 export/execute. If that token does not have R2 object permissions, add a separate `CLOUDFLARE_R2_API_TOKEN` secret with R2 object read/write access to `navstar-erp-storage`; the backup workflow uses it only for R2 upload and read-back verification, while the D1 token remains dedicated to D1 export and backup registration. If the separate secret is absent, the workflow falls back to `CLOUDFLARE_API_TOKEN`.
 
 Super Admins can review verified backup metadata and download SQL archives from **Backup & Recovery → Automated D1 backups**. The in-app page does not perform a one-click restore. Restore must be performed by an authorized operator during a controlled maintenance window after verifying the archive and target database. No automatic retention deletion is configured; configure an R2 lifecycle policy only after agreeing the required retention period.
