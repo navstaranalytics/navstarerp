@@ -11,7 +11,7 @@ for (const file of ["public/school-portal.html","public/super-admin.html","publi
   console.log(file+": "+scripts.length+" inline script(s) passed");
 }
 
-for (const file of ["functions/api/data.js","functions/api/school-users.js","functions/api/auth.js","functions/api/schools.js"]) {
+for (const file of ["functions/api/data.js","functions/api/school-users.js","functions/api/auth.js","functions/api/schools.js","functions/api/learner-photos.js","worker.js"]) {
   const source=fs.readFileSync(file,"utf8");
   const result=spawnSync(process.execPath,["--check","--input-type=module"],{input:source,encoding:"utf8"});
   if(result.status!==0) throw new Error(file+" syntax error:\\n"+result.stderr);
@@ -84,3 +84,11 @@ assert.match(learnerPhotosApi, /["']\/passport\/["']\+crypto\.randomUUID\(\)/, "
 assert.match(learnerPhotosApi,/const storedBytes=new Uint8Array\(await stored\.arrayBuffer\(\)\)/,"Learner passport uploads must read back the uploaded R2 object.");
 assert.match(learnerPhotosApi,/Old learner passport cleanup failed/,"Previous R2 passport objects should be cleaned up only after the new database pointer is saved.");
 console.log("Learner passport R2 replacement integrity regression checks passed.");
+
+const workerSource=fs.readFileSync("worker.js","utf8");
+assert.match(workerSource,/request\.method === "DELETE"\) return learnerPhotoDelete/,"Worker must expose the learner passport photo DELETE route.");
+assert.match(workerSource,/onRequestDeletePhoto as learnerPhotoDelete/,"Worker must import the learner passport photo deletion handler.");
+assert.match(schoolPortal,/data-delete-learner-photo/,"School learner records must expose the remove-photo action.");
+const photoDeleteSource=fs.readFileSync("functions/api/learner-photos.js","utf8");
+assert.match(photoDeleteSource,/export async function onRequestDeletePhoto/,"Learner passport photo removal must have a dedicated handler.");
+console.log("Learner passport photo removal route and UI regression checks passed.");
