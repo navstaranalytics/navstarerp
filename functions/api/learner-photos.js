@@ -133,3 +133,20 @@ export async function onRequestGetPhoto({request,env}){
   return new Response(bytes,{headers:{"Content-Type":row.content_type,"Content-Length":String(bytes.byteLength),"Cache-Control":"private, no-store","X-Content-Type-Options":"nosniff","Content-Security-Policy":"default-src 'none'; sandbox"}});
  }catch(e){console.error("Learner passport retrieval",e);return new Response("Could not load passport photo.",{status:500})}
 }
+
+export async function onRequestDeletePhoto({request,env}){
+ const a=await actorFor(request,env,true);if(a.error)return a.error;
+ const learnerId=decodeURIComponent(new URL(request.url).pathname.split("/").pop()||"");
+ if(!learnerId)return json({ok:false,error:"Learner reference is required."},400);
+ try{
+  await ensure(env.DB);
+  const row=await env.DB.prepare("SELECT storage_provider,object_key FROM learner_photos WHERE learner_id=? AND school_id=?").bind(learnerId,a.schoolId).first();
+  if(!row)return json({ok:false,error:"This learner does not have a passport photo to remove."},404);
+  await env.DB.prepare("DELETE FROM learner_photos WHERE learner_id=? AND school_id=?").bind(learnerId,a.schoolId).run();
+  let cleanupPending=false;
+  if(row.storage_provider==="r2"&&row.object_key&&env.R2){
+   try{await env.R2.delete(row.object_key)}catch(error){cleanupPending=true;console.error("Learner passport R2 cleanup failed",String(error?.message||error))}
+  }
+  return json({ok:true,message:"Learner passport photo removed.",cleanupPending});
+ }catch(error){console.error("Learner passport photo removal failed",String(error?.message||error));return json({ok:false,error:"Could not remove this learner's passport photo."},500)}
+}
