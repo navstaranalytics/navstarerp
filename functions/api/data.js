@@ -391,7 +391,7 @@ export async function onRequestGet({request,env}){
   // Backfill every curriculum already enabled by Super Admin for existing schools.
   // This repairs older dual-curriculum tenants whose initial setup seeded only one
   // framework; synchronization is additive and preserves school-specific choices.
-  if(name==="grades"&&!a.user.is_super_admin&&a.user.school_id){
+  if(name==="grades"&&!a.user.is_super_admin&&a.user.school_id&&a.user.permissions?.includes("academics.manage")){
     try{
       const schoolConfig=await env.DB.prepare("SELECT curricula_json,school_levels_json,curriculum FROM schools WHERE id=?").bind(a.user.school_id).first();
       let curricula=[];try{curricula=JSON.parse(schoolConfig?.curricula_json||"[]")}catch{}
