@@ -9,11 +9,13 @@ export async function onRequestPost({request,env}){
  let body;try{body=await request.json()}catch{return json({ok:false,error:"Invalid boarding transfer request."},400)}
  const schoolId=user.is_super_admin?String(body.school_id||""):user.school_id,allocationId=String(body.allocation_id||""),houseId=String(body.house_id||""),room=String(body.room_number||"").trim(),bed=String(body.bed_number||"").trim(),start=String(body.start_date||"");
  if(!schoolId||!allocationId||!houseId||!room||!bed||!/^\d{4}-\d{2}-\d{2}$/.test(start))return json({ok:false,error:"Select the existing placement, destination dormitory, room, bed and a valid transfer date."},400);
+ const parsedDate=Date.parse(start+"T00:00:00Z");if(!Number.isFinite(parsedDate)||new Date(parsedDate).toISOString().slice(0,10)!==start)return json({ok:false,error:"Enter a valid transfer date."},400);
  const today=new Date().toISOString().slice(0,10);if(start>today)return json({ok:false,error:"Future-dated transfers are not supported yet. Choose today or an earlier effective date."},400);
  if(!user.is_super_admin&&body.school_id&&body.school_id!==schoolId)return json({ok:false,error:"You cannot transfer a learner in another school."},403);
  try{
-  const current=await env.DB.prepare("SELECT id,learner_id,house_id FROM boarding_allocations WHERE id=? AND school_id=? AND status='active' AND (end_date IS NULL OR end_date='')").bind(allocationId,schoolId).first();
+  const current=await env.DB.prepare("SELECT id,learner_id,house_id,start_date FROM boarding_allocations WHERE id=? AND school_id=? AND status='active' AND (end_date IS NULL OR end_date='')").bind(allocationId,schoolId).first();
   if(!current)return json({ok:false,error:"The learner's current active boarding placement was not found."},404);
+  if(current.start_date&&start<current.start_date)return json({ok:false,error:"The transfer date cannot be earlier than the current boarding placement."},400);
   const target=await env.DB.prepare("SELECT id,capacity,status FROM boarding_houses WHERE id=? AND school_id=?").bind(houseId,schoolId).first();
   if(!target||String(target.status||"active")!=="active")return json({ok:false,error:"Choose an active destination dormitory belonging to this school."},400);
   const existingPlacement=await env.DB.prepare("SELECT id FROM boarding_allocations WHERE school_id=? AND learner_id=? AND id<>? AND status='active' AND (end_date IS NULL OR end_date='') LIMIT 1").bind(schoolId,current.learner_id,current.id).first();
