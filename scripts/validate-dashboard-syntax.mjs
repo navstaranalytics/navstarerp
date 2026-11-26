@@ -257,4 +257,11 @@ assert.match(schoolPortal,/async function loadAcademicSetup\(\)/,"Learning Areas
 console.log("School Admin staff, attendance, timetable, finance, assessments, analytics and learning-area workspace regression checks passed.");
 assert.doesNotMatch(schoolPortal,/localStorage/,"School Admin persistent school data must not be stored in browser localStorage.");
 
-
+assert.match(schoolPortal,/Teaching staff must have at least two learning areas or subjects selected in their staff profile/,"Teacher allocation must explain the minimum two-subject teaching profile requirement.");
+assert.match(schoolPortal,/subjects\.length<2/,"Teacher allocation must block teachers whose approved subject combination has fewer than two active learning areas.");
+assert.match(schoolPortal,/async function loadTeacherWorkloads\(\)/,"Teacher workloads must have a dedicated data loader.");
+assert.match(schoolPortal,/async function loadClassTeachers\(\)/,"Class/Grade teacher assignments must have a dedicated data loader.");
+assert.match(schoolPortal,/CBE uses Grade Teacher; 8-4-4 uses Class Teacher/,"Teacher allocation must preserve curriculum-specific Grade Teacher and Class Teacher terminology.");
+assert.match(schoolPortal,/filter\(schoolGradeEnabledForSchool\)/,"Teacher workload and class-teacher lists must respect each school's enabled curriculum and grade scope.");
+assert.match(schoolPortal,/staff-learning-areas/,"Teacher allocations must be checked against each teacher's approved subject combination.");
+console.log("Teacher subject eligibility, workload and curriculum-specific class/grade teacher regression checks passed.");
