@@ -211,6 +211,10 @@ assert.match(backupWorkflow,/INSERT INTO platform_backups/,"Verified backups mus
 assert.match(backupMigration,/CREATE TABLE IF NOT EXISTS platform_backups/,"D1 must retain backup verification metadata.");
 assert.match(backupAdminSource,/Automated D1 backups/,"Super Admin must have a verified backup register.");
 assert.match(backupAdminSource,/data-download-platform-backup/,"Super Admin must be able to download verified backup files.");
+assert.ok(brandingApi.includes('writeReadDelete:"failed",cleanup:"failed"'),"R2 health must fail when temporary-object cleanup fails.");
+assert.ok(backupAdminSource.includes("R2 read/write/delete verified"),"Super Admin health must distinguish a successful R2 operation test from a configured binding.");
+assert.ok(backupAdminSource.includes("Checking D1 and R2 upload, read-back and cleanup"),"Super Admin settings must actively refresh live storage health.");
+assert.ok(backupAdminSource.includes("private R2 for uploaded files"),"Super Admin storage guidance must describe the deployed D1 and R2 architecture accurately.");
 console.log("Automated D1-to-R2 backup, checksum verification and Super Admin register regression checks passed.");
 const healthApi=fs.readFileSync("functions/api/health.js","utf8");
 const deployWorkflow=fs.readFileSync(".github/workflows/cloudflare-setup-deploy.yml","utf8");

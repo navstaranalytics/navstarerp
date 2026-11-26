@@ -51,7 +51,7 @@ export async function onRequestGetStorageStatus({request,env}){
    }catch(error){
     r2Check={configured:true,writeReadDelete:"failed",error:String(error?.message||error).slice(0,240)};
    }finally{
-    try{await env.R2.delete(key)}catch(error){r2Check.cleanup="failed"}
+    try{await env.R2.delete(key)}catch(error){r2Check={...r2Check,writeReadDelete:"failed",cleanup:"failed",cleanupError:String(error?.message||error).slice(0,240)}}
    }
   }
   return json({ok:true,storage:{database:"D1",databaseCheck:"passed",fileStorage:env.R2?"R2":"D1",r2Available:!!env.R2,r2Check,logoStoredIn:row?.storage_provider||"not uploaded",mode:env.R2?"D1 + R2 (automatic)":"D1 only",message:env.R2?(r2Check.writeReadDelete==="passed"?"D1 and R2 are connected; a temporary R2 upload, read-back and delete test passed.":"R2 is bound but its live write/read/delete test needs attention."):"R2 is not bound; file uploads are using the D1 fallback."}});
