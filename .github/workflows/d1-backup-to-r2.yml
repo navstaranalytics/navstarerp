@@ -101,6 +101,21 @@ jobs:
           test "$ACTUAL_SHA256" = "$EXPECTED_SHA256"
           echo "R2 backup read-back, byte count and SHA-256 verification passed."
 
+      - name: Restore backup into an isolated local D1 database (non-production rehearsal)
+        env:
+          VERIFY_FILE: ${{ runner.temp }}/navstar-backup-verify.sql
+        run: |
+          set -euo pipefail
+          RESTORE_STATE="$RUNNER_TEMP/navstar-d1-restore-rehearsal"
+          mkdir -p "$RESTORE_STATE"
+          # This uses Wrangler's local D1 emulator and a fresh temporary state
+          # directory. It never writes to the remote production database.
+          wrangler d1 execute navstar-erp-db --local --persist-to "$RESTORE_STATE" --file "$VERIFY_FILE"
+          INTEGRITY_OUTPUT="$(wrangler d1 execute navstar-erp-db --local --persist-to "$RESTORE_STATE" --command "PRAGMA integrity_check;")"
+          printf '%s\\n' "$INTEGRITY_OUTPUT"
+          echo "$INTEGRITY_OUTPUT" | grep -Eiq '(^|[[:space:]|])ok([[:space:]|]|$)' || { echo "::error::The restored backup did not pass SQLite integrity_check."; exit 1; }
+          echo "Isolated local D1 restore rehearsal and SQLite integrity_check passed."
+
       - name: Register verified backup in D1
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
