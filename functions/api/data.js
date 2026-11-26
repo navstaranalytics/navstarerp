@@ -311,6 +311,7 @@ async function ensureLearnerIdentifierColumns(db){
  if(!columns.has("upi_number"))await db.prepare("ALTER TABLE learners ADD COLUMN upi_number TEXT").run();
 }
 function normalizePathway(value){return String(value||"").toLowerCase().replace(/&/g,"and").replace(/[^a-z0-9]+/g," ").trim();}
+function learningAreaPathways(value){let raw=value;if(typeof raw==="string"&&raw.trim().startsWith("[")){try{raw=JSON.parse(raw)}catch{}}const values=Array.isArray(raw)?raw:(raw?[raw]:[]);return [...new Set(values.map(normalizePathway).filter(Boolean))];}
 async function validateLearningAreaClassAndPathway(db,name,schoolId,values,current={}){
  if(!["assessments","teacher-allocations","timetable","competency-assessments"].includes(name))return null;
  const gradeId=values.grade_level_id??current.grade_level_id,areaId=values.learning_area_id??current.learning_area_id;
@@ -321,12 +322,12 @@ async function validateLearningAreaClassAndPathway(db,name,schoolId,values,curre
  ]);
  if(!grade||!area)return "Select an active class and an enabled learning area belonging to this school.";
  if(area.curriculum!==grade.curriculum||area.stage_code!==grade.stage_code)return "This learning area is not assigned to the selected class.";
- const areaPath=normalizePathway(area.pathway),selectedPath=normalizePathway(values.pathway??current.pathway),allPathways=!areaPath||areaPath==="all"||areaPath==="all pathways";
+ const areaPaths=learningAreaPathways(area.pathway),selectedPath=normalizePathway(values.pathway??current.pathway),allPathways=!areaPaths.length||areaPaths.includes("all")||areaPaths.includes("all pathways"),pathMatches=areaPaths.includes(selectedPath);
  const curriculum=String(grade.curriculum||"").toLowerCase(),cbe=curriculum.includes("cbe")||curriculum.includes("cbc")||curriculum.includes("competency"),senior=/senior|secondary/i.test(String(grade.school_level||""))||/^G1[0-2]$/.test(String(grade.stage_code||"")),usesPathways=senior&&cbe;
  if(!usesPathways&&selectedPath)return "Pathways apply only to CBE Senior School classes.";
  if(!allPathways&&!usesPathways)return "This pathway learning area is only available in CBE Senior School.";
  if(!allPathways&&name!=="teacher-allocations"&&name!=="assessments")return "Choose a pathway-specific learning area through its Senior School pathway workflow.";
- if(!allPathways&&(!selectedPath||selectedPath!==areaPath))return "The selected learning area belongs to the "+area.pathway+" pathway. Select the matching pathway first.";
+ if(!allPathways&&(!selectedPath||!pathMatches))return "The selected learning area is not assigned to the selected pathway. Choose one of its configured pathways first.";
  if(["teacher-allocations","timetable"].includes(name)){
   const staffId=values.staff_id??current.staff_id;if(name==="timetable"&&!staffId)return null;
   const streamId=values.stream_id??current.stream_id;if(streamId){const stream=await db.prepare("SELECT grade_level_id FROM streams WHERE id=? AND school_id=? AND status='active'").bind(streamId,schoolId).first();if(!stream||stream.grade_level_id!==gradeId)return "The selected stream does not belong to the selected class."}
@@ -575,11 +576,11 @@ export async function onRequestPost({request,env}){
   if(pathParts.slice(-2).join("/") === "learning-areas/bulk-create"){
     if(!allowed(a.user,permissionFor("learning-areas",true)))return json({ok:false,error:"Your role does not have permission to manage learning areas."},403);
     let body;try{body=await request.json()}catch{return json({ok:false,error:"Invalid learning-area details."},400)}
-    const schoolId=a.user.is_super_admin?String(body.school_id||""):a.user.school_id,gradeIds=[...new Set((Array.isArray(body.grade_ids)?body.grade_ids:[]).map(x=>String(x||"").trim()).filter(Boolean))],curriculum=clean(body.curriculum),name=clean(body.name),code=String(body.code||"").trim().toUpperCase(),pathway=clean(body.pathway)||null,isMandatory=Number(body.is_mandatory)===1?1:0;
+    const schoolId=a.user.is_super_admin?String(body.school_id||""):a.user.school_id,gradeIds=[...new Set((Array.isArray(body.grade_ids)?body.grade_ids:[]).map(x=>String(x||"").trim()).filter(Boolean))],curriculum=clean(body.curriculum),name=clean(body.name),code=String(body.code||"").trim().toUpperCase(),pathways=[...new Set((Array.isArray(body.pathways)?body.pathways:(body.pathway?[body.pathway]:[])).map(clean).filter(Boolean))],pathway=pathways.length?JSON.stringify(pathways):null,isMandatory=Number(body.is_mandatory)===1?1:0;
     if(!schoolId||(!a.user.is_super_admin&&body.school_id&&body.school_id!==schoolId))return json({ok:false,error:"School workspace is required."},403);
     if(!curriculum||!name||!code||!gradeIds.length||gradeIds.length>30)return json({ok:false,error:"Choose a curriculum and level, enter a subject name and code, and select its active classes."},400);
     if(pathway&&!/cbe|cbc|competency/i.test(curriculum))return json({ok:false,error:"Pathways are available only for CBE Senior School."},400);
-    if(pathway&&!["STEM","Social Sciences","Arts & Sports Science"].includes(pathway))return json({ok:false,error:"Choose a valid CBE Senior School pathway."},400);
+    if(pathways.some(p=>!["STEM","Social Sciences","Arts & Sports Science"].includes(p)))return json({ok:false,error:"Choose valid CBE Senior School pathways."},400);
     try{
       const placeholders=gradeIds.map(()=>"?").join(",");
       const grades=await env.DB.prepare("SELECT id,stage_code,school_level FROM grade_levels WHERE school_id=? AND curriculum=? AND is_active=1 AND id IN ("+placeholders+")").bind(schoolId,curriculum,...gradeIds).all();
@@ -588,8 +589,8 @@ export async function onRequestPost({request,env}){
       const phase=g=>{const code=String(g.stage_code||"").toUpperCase();if(/cbe|cbc|competency/i.test(curriculum)){if(/^PP[12]$/.test(code))return "Pre-Primary";if(/^G[1-6]$/.test(code))return "Primary";if(/^G[7-9]$/.test(code))return "Junior School";if(/^G1[0-2]$/.test(code))return "Senior School"}if(/8-4-4|844/i.test(curriculum)){if(/^STD[1-8]$/.test(code))return "Primary";if(/^(FORM|F)[1-4]$/.test(code))return "Secondary"}return String(g.school_level||"Other").toLowerCase()};
       if(new Set((grades.results||[]).map(phase)).size!==1)return json({ok:false,error:"All selected classes must belong to the same curriculum school level."},400);
       const senior=(grades.results||[]).every(g=>/senior|secondary/i.test(String(g.school_level||""))||/^G1[0-2]$/.test(String(g.stage_code||"")));
-      if(pathway&&!senior)return json({ok:false,error:"Choose a pathway only when adding a learning area to CBE Senior School."},400);
-      const duplicates=await env.DB.prepare("SELECT stage_code FROM learning_areas WHERE school_id=? AND curriculum=? AND upper(COALESCE(NULLIF(code,''),catalogue_code,''))=? AND COALESCE(pathway,'')=COALESCE(?,'') AND stage_code IN ("+placeholders+")").bind(schoolId,curriculum,code,pathway,...(grades.results||[]).map(g=>g.stage_code)).all();
+      if(pathways.length&&(!senior||!/cbe|cbc|competency/i.test(curriculum)))return json({ok:false,error:"Pathways are available only for CBE Senior School."},400);
+      const duplicates=await env.DB.prepare("SELECT stage_code FROM learning_areas WHERE school_id=? AND curriculum=? AND upper(COALESCE(NULLIF(code,''),catalogue_code,''))=? AND stage_code IN ("+placeholders+")").bind(schoolId,curriculum,code,...(grades.results||[]).map(g=>g.stage_code)).all();
       if((duplicates.results||[]).length)return json({ok:false,error:"This subject code already exists in one or more classes in the selected level. Refresh the catalogue and choose a different code."},409);
       const records=(grades.results||[]).map(g=>({id:id(),school_id:schoolId,curriculum,stage_code:g.stage_code,name,code,catalogue_code:code,pathway,is_active:1,is_mandatory:isMandatory,subject_type:clean(body.subject_type)||"learning_area",source_template:"school_custom",school_customized:1,department_id:clean(body.department_id)||null}));
       await env.DB.batch(records.map(x=>env.DB.prepare("INSERT INTO learning_areas(id,school_id,curriculum,stage_code,name,code,catalogue_code,pathway,is_active,is_mandatory,subject_type,source_template,school_customized,department_id) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)").bind(x.id,x.school_id,x.curriculum,x.stage_code,x.name,x.code,x.catalogue_code,x.pathway,x.is_active,x.is_mandatory,x.subject_type,x.source_template,x.school_customized,x.department_id)));
@@ -870,6 +871,7 @@ export async function onRequestPost({request,env}){
       await syncCompulsoryLearningAreas(env.DB,schoolId,recordId);
     }
     if(name==="learning-areas"){
+      if(!a.user.is_super_admin)await env.DB.prepare("UPDATE learning_areas SET school_customized=1,source_template='school_custom' WHERE id=? AND school_id=?").bind(recordId,schoolId).run();
       const area=await env.DB.prepare("SELECT is_active FROM learning_areas WHERE id=? AND school_id=?").bind(recordId,schoolId).first();
       if(Number(area?.is_active)===1)await syncCompulsoryLearningAreas(env.DB,schoolId);
     }
@@ -1029,8 +1031,9 @@ export async function onRequestPatch({request,env}){
   }
   if(name==="learning-areas"&&!a.user.is_super_admin){
     let submitted;try{submitted=await request.clone().json()}catch{submitted={}}
-    const allowedFields=new Set(["name","code","is_active","subject_type","is_mandatory","department_id"]);
+    const allowedFields=new Set(["name","code","is_active","subject_type","is_mandatory","department_id","pathway"]);
     if(!Object.keys(submitted).length||Object.keys(submitted).some(k=>!allowedFields.has(k)))return json({ok:false,error:"Only learning-area details and school offering settings can be changed here."},403);
+    if(submitted.pathway!==undefined){const paths=learningAreaPathways(submitted.pathway);if(paths.some(p=>!["stem","social sciences","arts and sports science"].includes(p)))return json({ok:false,error:"Choose valid CBE Senior School pathways."},400);const area=await env.DB.prepare("SELECT curriculum,stage_code FROM learning_areas WHERE id=? AND school_id=?").bind(recordId,a.user.school_id).first();if(paths.length&&(!/cbe|cbc|competency/i.test(String(area?.curriculum||""))||!/^G1[0-2]$/.test(String(area?.stage_code||""))))return json({ok:false,error:"Pathways can only be assigned to CBE Senior School learning areas."},400);submitted.pathway=paths.length?JSON.stringify(paths):null;}
     if(submitted.department_id){
       const schoolId=a.user.is_super_admin?(new URL(request.url).searchParams.get("schoolId")||""):a.user.school_id;
       const area=await env.DB.prepare("SELECT curriculum,stage_code FROM learning_areas WHERE id=? AND school_id=?").bind(recordId,schoolId).first();
