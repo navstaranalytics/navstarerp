@@ -1,0 +1,86 @@
+name: Navstar D1 Backup to R2
+
+on:
+  schedule:
+    - cron: "0 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: navstar-d1-backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out Navstar
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Verify Cloudflare credentials
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -eu
+          test -n "$CLOUDFLARE_API_TOKEN" || { echo "::error::CLOUDFLARE_API_TOKEN is required."; exit 1; }
+          test -n "$CLOUDFLARE_ACCOUNT_ID" || { echo "::error::CLOUDFLARE_ACCOUNT_ID is required."; exit 1; }
+
+      - name: Install Wrangler
+        run: npm install --global wrangler@4
+
+      - name: Export remote D1 database
+        id: export
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          BACKUP_ID="$(date -u +%Y%m%dT%H%M%SZ)-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          BACKUP_FILE="$RUNNER_TEMP/navstar-erp-db-$BACKUP_ID.sql"
+          wrangler d1 export navstar-erp-db --remote --output "$BACKUP_FILE" --skip-confirmation
+          test -s "$BACKUP_FILE"
+          BYTE_COUNT="$(wc -c < "$BACKUP_FILE" | tr -d ' ')"
+          SHA256="$(sha256sum "$BACKUP_FILE" | awk '{print $1}')"
+          echo "backup_id=$BACKUP_ID" >> "$GITHUB_OUTPUT"
+          echo "backup_file=$BACKUP_FILE" >> "$GITHUB_OUTPUT"
+          echo "byte_count=$BYTE_COUNT" >> "$GITHUB_OUTPUT"
+          echo "sha256=$SHA256" >> "$GITHUB_OUTPUT"
+
+      - name: Upload D1 export to private R2 storage
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          BACKUP_ID: ${{ steps.export.outputs.backup_id }}
+          BACKUP_FILE: ${{ steps.export.outputs.backup_file }}
+        run: |
+          set -euo pipefail
+          OBJECT_KEY="backups/d1/navstar-erp-db-$BACKUP_ID.sql"
+          wrangler r2 object put "navstar-erp-storage/$OBJECT_KEY" --remote --file "$BACKUP_FILE" --content-type "application/sql" --cache-control "private, no-store" --force
+          echo "object_key=$OBJECT_KEY" >> "$GITHUB_ENV"
+
+      - name: Verify R2 backup and register it in D1
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          BACKUP_ID: ${{ steps.export.outputs.backup_id }}
+          BACKUP_FILE: ${{ steps.export.outputs.backup_file }}
+          EXPECTED_BYTES: ${{ steps.export.outputs.byte_count }}
+          EXPECTED_SHA256: ${{ steps.export.outputs.sha256 }}
+        run: |
+          set -euo pipefail
+          VERIFY_FILE="$RUNNER_TEMP/navstar-backup-verify.sql"
+          wrangler r2 object get "navstar-erp-storage/$object_key" --remote --file "$VERIFY_FILE"
+          ACTUAL_BYTES="$(wc -c < "$VERIFY_FILE" | tr -d ' ')"
+          ACTUAL_SHA256="$(sha256sum "$VERIFY_FILE" | awk '{print $1}')"
+          test "$ACTUAL_BYTES" = "$EXPECTED_BYTES"
+          test "$ACTUAL_SHA256" = "$EXPECTED_SHA256"
+          wrangler d1 execute navstar-erp-db --remote --command "INSERT INTO platform_backups(id,backup_type,object_key,byte_count,sha256,status,source) VALUES('$BACKUP_ID','full','$object_key',$EXPECTED_BYTES,'$EXPECTED_SHA256','verified','github-actions')"
+          wrangler d1 execute navstar-erp-db --remote --command "SELECT id,status,byte_count,sha256,created_at FROM platform_backups WHERE id='$BACKUP_ID' AND status='verified'"

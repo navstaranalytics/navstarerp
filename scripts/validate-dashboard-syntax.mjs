@@ -11,7 +11,7 @@ for (const file of ["public/school-portal.html","public/super-admin.html","publi
   console.log(file+": "+scripts.length+" inline script(s) passed");
 }
 
-for (const file of ["functions/api/data.js","functions/api/school-users.js","functions/api/auth.js","functions/api/schools.js","functions/api/learner-photos.js","functions/api/documents.js","functions/api/boarding-transfer.js","worker.js"]) {
+for (const file of ["functions/api/data.js","functions/api/school-users.js","functions/api/auth.js","functions/api/schools.js","functions/api/learner-photos.js","functions/api/documents.js","functions/api/boarding-transfer.js","functions/api/backups.js","worker.js"]) {
   const source=fs.readFileSync(file,"utf8");
   const result=spawnSync(process.execPath,["--check","--input-type=module"],{input:source,encoding:"utf8"});
   if(result.status!==0) throw new Error(file+" syntax error:\\n"+result.stderr);
@@ -151,6 +151,24 @@ assert.match(schoolPortal,/id="boardingRoomForm"[\s\S]*?id="boardingRoomsTable"/
 assert.match(schoolPortal,/id="boardingRoomSelect"/,"Learner allocations must choose a configured room.");
 assert.match(schoolPortal,/id="boardingBedNumber"[^>]*type="number"/,"Learner allocations must select a numbered bed within room capacity.");
 console.log("Boarding room registers and room-level bed capacity regression checks passed.");
+const backupApi=fs.readFileSync("functions/api/backups.js","utf8");
+const backupAdminSource=fs.readFileSync("public/super-admin.html","utf8");
+const backupWorkflow=fs.readFileSync(".github/workflows/d1-backup-to-r2.yml","utf8");
+const backupMigration=fs.readFileSync("migrations/0025_platform_backups.sql","utf8");
+assert.match(workerSource,/onRequestGet as platformBackupsGet/,"Worker must import the Super Admin backup API.");
+assert.match(workerSource,/route === "\/api\/backups"/,"Worker must route the backup register and download API.");
+assert.match(backupApi,/getSuperAdminSession/,"Backup history and downloads must require Super Admin authentication.");
+assert.match(backupApi,/env\.R2\.get\(row\.object_key\)/,"Backup downloads must stream from R2.");
+assert.match(backupWorkflow,/wrangler d1 export navstar-erp-db --remote/,"Scheduled backup must export the remote D1 database.");
+assert.match(backupWorkflow,/wrangler r2 object put/,"Scheduled backup must upload the SQL export to R2.");
+assert.match(backupWorkflow,/wrangler r2 object get/,"Scheduled backup must read the R2 object back for verification.");
+assert.match(backupWorkflow,/sha256sum/,"Scheduled backup must verify the uploaded backup checksum.");
+assert.match(backupWorkflow,/INSERT INTO platform_backups/,"Verified backups must be registered in D1.");
+assert.match(backupMigration,/CREATE TABLE IF NOT EXISTS platform_backups/,"D1 must retain backup verification metadata.");
+assert.match(backupAdminSource,/Automated D1 backups/,"Super Admin must have a verified backup register.");
+assert.match(backupAdminSource,/data-download-platform-backup/,"Super Admin must be able to download verified backup files.");
+console.log("Automated D1-to-R2 backup, checksum verification and Super Admin register regression checks passed.");
+
 
 
 

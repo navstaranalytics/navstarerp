@@ -1235,6 +1235,36 @@ pages.subscriptions=function(){
  return head("REVENUE & ACCESS","Subscription plans & pricing","Configure fixed school subscriptions, assign paid capabilities and set annual or term billing. No per-learner or storage charges.","<button class=\"btn\" data-action=\"add-plan\">＋ Create pricing plan</button>")+'<div class="grid2">'+(planCards||'<div class="empty">No subscription plans are configured yet.</div>')+'</div>'+panel("School billing contracts","Assign each school a plan, term/year rate, due date and separately priced optional modules.",'<div class="table-wrap"><table><thead><tr><th>School</th><th>Plan</th><th>Billing period</th><th>Paid capabilities</th><th>Estimated invoice</th><th>Next due</th><th>Status</th><th>Action</th></tr></thead><tbody>'+(contracts||'<tr><td colspan="8" class="empty">No school contracts registered.</td></tr>')+'</tbody></table></div>')+'<div class="notice">Plan and subscription records are loaded from and saved to central D1. Existing historical learner-count and storage columns are retained for compatibility only; they do not affect pricing or school access.</div>';
 };
 
+
+/* Stage X: show verified automated D1 exports without replacing legacy recovery archives. */
+const legacyBackupPage=pages.backup;
+pages.backup=function(){
+ return legacyBackupPage()+
+ panel("Automated D1 backups","Daily full D1 SQL exports are uploaded to R2, downloaded again and checked against their SHA-256 before being registered.",'<div class="panel-pad"><div style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap"><span class="muted small">Scheduled daily at 02:00 UTC · latest 100 verified exports</span><button class="btn light" type="button" id="refreshPlatformBackups">Refresh backups</button></div><div id="platformBackupStatus" class="notice">Loading verified backups…</div><div id="platformBackupList" class="table-wrap"><div class="empty">Loading backup history…</div></div></div>');
+};
+async function refreshPlatformBackups(){
+ const host=$("platformBackupList"),status=$("platformBackupStatus");if(!host)return;
+ host.innerHTML='<div class="empty">Loading verified backups…</div>';
+ try{
+  const d=await schoolApi("/api/backups"),rows=d.records||[];
+  status.textContent=rows.length?rows.length+" verified D1 backup(s) are recorded in central D1.":"No automated D1 backup has been recorded yet. Run the D1 Backup to R2 workflow or wait for its daily schedule.";
+  host.innerHTML=rows.length?'<table><thead><tr><th>Created</th><th>Type</th><th>Size</th><th>SHA-256</th><th>Source</th><th>Action</th></tr></thead><tbody>'+rows.map(x=>'<tr><td>'+esc(x.created_at)+'</td><td>'+esc(x.backup_type)+'</td><td>'+Number(x.byte_count||0).toLocaleString()+' bytes</td><td><code>'+esc(String(x.sha256||"").slice(0,16))+'…</code></td><td>'+esc(x.source)+'</td><td><button class="btn" type="button" data-download-platform-backup="'+esc(x.id)+'">Download SQL backup</button></td></tr>').join("")+'</tbody></table>':'<div class="empty">No verified backups yet.</div>';
+ }catch(error){status.textContent=error.message;host.innerHTML='<div class="empty">Backup history could not be loaded.</div>'}
+}
+const renderWithPlatformBackups=render;
+render=function(){renderWithPlatformBackups();if(page==="backup")refreshPlatformBackups()};
+$("view").addEventListener("click",async e=>{
+ const button=e.target.closest("[data-download-platform-backup]");if(!button)return;
+ const id=button.dataset.downloadPlatformBackup,token=sessionStorage.getItem("navstar_session_token");button.disabled=true;button.textContent="Preparing…";
+ try{
+  const response=await fetch("/api/backups/"+encodeURIComponent(id),{credentials:"same-origin",headers:token?{"X-Navstar-Session":token}:{}});
+  if(!response.ok){let data={};try{data=await response.json()}catch{}throw new Error(data.error||"The backup could not be downloaded.");}
+  const blob=await response.blob(),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download="navstar-d1-backup-"+id+".sql";a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+ }catch(error){const status=$("platformBackupStatus");if(status)status.textContent=error.message}
+ finally{button.disabled=false;button.textContent="Download SQL backup"}
+});
+document.addEventListener("click",e=>{if(e.target.closest("#refreshPlatformBackups"))refreshPlatformBackups()});
+
 loadSignedInUser();
 
 (async()=>{
