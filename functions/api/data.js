@@ -1,5 +1,5 @@
 import { getAuthenticatedSession } from "./auth.js";
-import { syncSchoolLearningAreas } from "./schools.js";
+import { syncSchoolLearningAreas, syncSchoolCurricula } from "./schools.js";
 
 const json=(data,status=200)=>Response.json(data,{status,headers:{"Cache-Control":"no-store"}});
 const id=()=>crypto.randomUUID();
@@ -388,6 +388,18 @@ export async function onRequestGet({request,env}){
   if(!cfg)return json({ok:false,error:"Unknown data resource."},404);
   if(name==="departments")await ensureDepartments(env.DB);
   if(name==="learners")await ensureLearnerIdentifierColumns(env.DB);
+  // Backfill every curriculum already enabled by Super Admin for existing schools.
+  // This repairs older dual-curriculum tenants whose initial setup seeded only one
+  // framework; synchronization is additive and preserves school-specific choices.
+  if(name==="grades"&&!a.user.is_super_admin&&a.user.school_id){
+    try{
+      const schoolConfig=await env.DB.prepare("SELECT curricula_json,school_levels_json,curriculum FROM schools WHERE id=?").bind(a.user.school_id).first();
+      let curricula=[];try{curricula=JSON.parse(schoolConfig?.curricula_json||"[]")}catch{}
+      if(!Array.isArray(curricula)||!curricula.length)curricula=schoolConfig?.curriculum?[schoolConfig.curriculum]:[];
+      let levels=[];try{levels=JSON.parse(schoolConfig?.school_levels_json||"[]")}catch{}
+      if(curricula.length&&levels.length)await syncSchoolCurricula(env.DB,a.user.school_id,curricula,levels);
+    }catch(error){console.error("NAVSTAR dual-curriculum reconciliation",String(error?.message||error))}
+  }
   const needed=permissionFor(name,false);if(!allowed(a.user,needed))return json({ok:false,error:"Your role does not have permission to view this resource."},403);
   if(name==="grade-boundaries")await ensureGradeBoundaryScope(env.DB);
   if(name==="platform-users"){
