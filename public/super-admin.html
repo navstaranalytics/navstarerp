@@ -903,7 +903,6 @@ $("view").addEventListener("click",async e=>{
 
 /* Super Admin account menu and secure account management. */
 let signedInUser=null;
-async 
 /* Stage VI: enforce flat school subscription pricing and D1-only plan management. */
 mapDatabasePlan=function(row){
  let capabilities=[],methods=[],stages=[];
@@ -967,7 +966,7 @@ pages.subscriptions=function(){
  const contracts=schools.map(s=>{const p=plans.find(x=>x.name===s.plan)||{},b=schoolBilling(s),e=estimatedSchoolCharge(s);return '<tr><td><b>'+esc(s.name)+'</b><div class="subline">'+esc(s.county||"")+'</div></td><td>'+esc(s.plan||"—")+'</td><td>'+esc(billingModel({billingModel:b.billingModel||p.billingModel}).label)+'</td><td>'+esc((b.paidModules||[]).join(", ")||"None")+'</td><td>'+money(e.total)+' / '+esc(e.unit)+'</td><td>'+esc(b.nextDue||s.expiry||"Not set")+'</td><td>'+pill(b.status||s.status||"trial")+'</td><td><button class="tiny" data-action="school-billing" data-id="'+esc(s.id)+'">Configure</button></td></tr>'}).join("");
  return head("REVENUE & ACCESS","Subscription plans & pricing","Configure fixed school subscriptions, assign paid capabilities and set annual or term billing. No per-learner or storage charges.","<button class=\"btn\" data-action=\"add-plan\">＋ Create pricing plan</button>")+'<div class="grid2">'+(planCards||'<div class="empty">No subscription plans are configured yet.</div>')+'</div>'+panel("School billing contracts","Assign each school a plan, term/year rate, due date and separately priced optional modules.",'<div class="table-wrap"><table><thead><tr><th>School</th><th>Plan</th><th>Billing period</th><th>Paid capabilities</th><th>Estimated invoice</th><th>Next due</th><th>Status</th><th>Action</th></tr></thead><tbody>'+(contracts||'<tr><td colspan="8" class="empty">No school contracts registered.</td></tr>')+'</tbody></table></div>')+'<div class="notice">Plan and subscription records are loaded from and saved to central D1. Existing historical learner-count and storage columns are retained for compatibility only; they do not affect pricing or school access.</div>';
 };
-function loadSignedInUser(){
+async function loadSignedInUser(){
   const response=await fetch('/api/auth/me',{credentials:'same-origin'});
   if(!response.ok){location.replace('/login');return}
   const data=await response.json();signedInUser=data.user;window.navstarStartIdleLogout(signedInUser.sessionIdleTimeoutMinutes);
