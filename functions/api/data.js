@@ -495,9 +495,9 @@ export async function onRequestGet({request,env}){
       return json({ok:true,message:"Attendance register and "+count+" attendance marks permanently deleted. This cannot be undone."});
     }
     if(name==="grades"){
-      const school=await env.DB.prepare("SELECT curriculum,school_levels_json FROM schools WHERE id=?").bind(schoolId).first();
-      let levels=[];try{levels=JSON.parse(school?.school_levels_json||"[]")}catch{}
-      const allSchoolGrades=rows.results||[];const visibleGrades=a.user.is_super_admin||url.searchParams.has("includeInactive")?allSchoolGrades:allSchoolGrades.filter(g=>gradeBelongsToSelectedLevels(g,levels));return json({ok:true,records:visibleGrades,school:{curriculum:school?.curriculum||"Kenyan CBE",levels}});
+      const school=await env.DB.prepare("SELECT curriculum,curricula_json,school_levels_json FROM schools WHERE id=?").bind(schoolId).first();
+      let levels=[],curricula=[];try{levels=JSON.parse(school?.school_levels_json||"[]")}catch{}try{curricula=JSON.parse(school?.curricula_json||"[]")}catch{}if(!Array.isArray(curricula)||!curricula.length)curricula=school?.curriculum?[school.curriculum]:[];
+      const allSchoolGrades=rows.results||[];const visibleGrades=a.user.is_super_admin||url.searchParams.has("includeInactive")?allSchoolGrades:allSchoolGrades.filter(g=>gradeBelongsToSelectedLevels(g,levels));return json({ok:true,records:visibleGrades,school:{curriculum:school?.curriculum||"Kenyan CBE",curricula,levels}});
     }
     if(name==="learning-areas"&&!a.user.is_super_admin){
       return json({ok:true,records:rows.results||[]});
