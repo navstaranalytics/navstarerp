@@ -45,6 +45,9 @@ console.log("Curriculum visibility regression tests passed (CBE, 8-4-4 and dual-
 
 const schoolPortal=fs.readFileSync("public/school-portal.html","utf8");
 assert.match(schoolPortal,/boarding-houses","boarding-allocations/,"Boarding navigation resources must be available.");
+assert.match(schoolPortal,/<section id="boardingWorkspace"/,"Boarding tabs must render the dedicated dormitory and allocation workspace.");
+assert.match(schoolPortal,/data-edit-boarding-house/,"Dormitories must support editing saved house records.");
+assert.match(schoolPortal,/data-vacate-boarding/,"Boarding allocations must support vacating or transferring a bed.");
 assert.match(schoolPortal,/boarding-houses","boarding-allocations"\]\.includes\(v\)/,"Boarding pages must render the shared records workspace.");
 const authSource=fs.readFileSync("functions/api/auth.js","utf8");
 assert.match(authSource,/modules,boardingType/,"Authenticated school sessions must expose configured modules and boarding mode.");
@@ -55,6 +58,9 @@ console.log("Stage III boarding configuration and workspace regression checks pa
 const dataApi=fs.readFileSync("functions/api/data.js","utf8");
 assert.equal((dataApi.match(/enforceBoardingFeature\(a\.user,name\)/g)||[]).length,4,"Boarding reads, creates, updates and deletes must all enforce the school feature gate.");
 assert.match(dataApi,/Boarding is not enabled for this school/,"Day schools must receive a clear API-level boarding feature denial.");
+assert.match(dataApi,/reached its configured bed capacity/,"Boarding allocation API must enforce house capacity server-side.");
+assert.match(dataApi,/already has an active boarding allocation/,"Boarding allocation API must prevent multiple active placements for one learner.");
+assert.match(dataApi,/That room and bed are already occupied/,"Boarding allocation API must prevent duplicate active bed assignments.");
 console.log("Boarding API feature-gate regression checks passed.");
 
 const authApi=fs.readFileSync("functions/api/auth.js","utf8");
