@@ -714,12 +714,6 @@ export async function onRequestPost({request,env}){
   if(name==="boarding-rooms"){
     const house=await env.DB.prepare("SELECT id,capacity,status FROM boarding_houses WHERE id=? AND school_id=?").bind(values.house_id,schoolId).first(),capacity=Number(values.capacity),roomNumber=String(values.room_number||"").trim();
     if(!house||String(house.status||"active")!=="active")return json({ok:false,error:"Choose an active dormitory belonging to this school."},400);
-    const room=await env.DB.prepare("SELECT id,room_number,capacity,status FROM boarding_rooms WHERE school_id=? AND house_id=? AND room_number=?").bind(schoolId,house.id,String(values.room_number||"").trim()).first();
-    const bedNumber=Number(values.bed_number);
-    if(!room||String(room.status||"active")!=="active")return json({ok:false,error:"Choose an active room configured under this dormitory."},400);
-    if(!Number.isInteger(bedNumber)||bedNumber<1||bedNumber>Number(room.capacity||0))return json({ok:false,error:"Bed number must be between 1 and the room's configured capacity."},400);
-    const roomOccupied=await env.DB.prepare("SELECT COUNT(*) AS total FROM boarding_allocations WHERE school_id=? AND house_id=? AND room_number=? AND status='active' AND (end_date IS NULL OR end_date='')").bind(schoolId,house.id,room.room_number).first();
-    if(Number(roomOccupied?.total||0)>=Number(room.capacity||0))return json({ok:false,error:"This room has reached its configured bed capacity."},409);
 
     if(!roomNumber||!Number.isInteger(capacity)||capacity<1||capacity>1000)return json({ok:false,error:"Enter a room number and a positive whole-number bed capacity."},400);
     const totals=await env.DB.prepare("SELECT COALESCE(SUM(capacity),0) AS total FROM boarding_rooms WHERE school_id=? AND house_id=?").bind(schoolId,house.id).first();
@@ -728,6 +722,12 @@ export async function onRequestPost({request,env}){
   if(name==="boarding-allocations"){
     const house=await env.DB.prepare("SELECT id,capacity,status FROM boarding_houses WHERE id=? AND school_id=?").bind(values.house_id,schoolId).first();
     if(!house||String(house.status||"active")!=="active")return json({ok:false,error:"Choose an active dormitory belonging to this school."},400);
+    const room=await env.DB.prepare("SELECT id,room_number,capacity,status FROM boarding_rooms WHERE school_id=? AND house_id=? AND room_number=?").bind(schoolId,house.id,String(values.room_number||"").trim()).first();
+    const bedNumber=Number(values.bed_number);
+    if(!room||String(room.status||"active")!=="active")return json({ok:false,error:"Choose an active room configured under this dormitory."},400);
+    if(!Number.isInteger(bedNumber)||bedNumber<1||bedNumber>Number(room.capacity||0))return json({ok:false,error:"Bed number must be between 1 and the room's configured capacity."},400);
+    const roomOccupied=await env.DB.prepare("SELECT COUNT(*) AS total FROM boarding_allocations WHERE school_id=? AND house_id=? AND room_number=? AND status='active' AND (end_date IS NULL OR end_date='')").bind(schoolId,house.id,room.room_number).first();
+    if(Number(roomOccupied?.total||0)>=Number(room.capacity||0))return json({ok:false,error:"This room has reached its configured bed capacity."},409);
     const learner=await env.DB.prepare("SELECT id FROM learners WHERE id=? AND school_id=?").bind(values.learner_id,schoolId).first();
     if(!learner)return json({ok:false,error:"Choose a learner registered in this school."},400);
     const occupied=await env.DB.prepare("SELECT COUNT(*) AS total FROM boarding_allocations WHERE school_id=? AND house_id=? AND status='active' AND (end_date IS NULL OR end_date='')").bind(schoolId,house.id).first();
