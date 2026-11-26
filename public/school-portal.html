@@ -421,7 +421,7 @@ async function api(url,opt={}){
    else d.records=d.records.filter(x=>schoolCurriculumEnabled(x.curriculum));
   }
   if(method!=="GET"){navstarDataRevision++;navstarReadCache.clear()}
-  else if(cacheable&&revision===navstarDataRevision)navstarReadCache.set(cacheKey,{value:cloneApiData(d),expires:Date.now()+5000});
+  else if(cacheable&&revision===navstarDataRevision){if(navstarReadCache.size>=80){const oldest=navstarReadCache.keys().next().value;if(oldest)navstarReadCache.delete(oldest)}navstarReadCache.set(cacheKey,{value:cloneApiData(d),expires:Date.now()+5000});}
   return d;
  };
  if(!cacheable)return perform();
