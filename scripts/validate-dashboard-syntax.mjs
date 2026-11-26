@@ -299,6 +299,8 @@ assert.match(deploymentGuide,/MPESA_ENVIRONMENT/,"Deployment instructions must u
 assert.doesNotMatch(deploymentGuide,/\`MPESA_ENV\`/,"Deployment instructions must not document the obsolete MPESA_ENV variable.");
 assert.match(mpesaGuide,/MPESA_ENVIRONMENT/,"Daraja setup guide must use the Worker environment variable.");
 assert.match(mpesaWorkflow,/put_secret MPESA_ENVIRONMENT/,"Manual deployment secret sync must use the exact M-Pesa environment variable.");
+assert.match(mpesaApi,/MPESA_ENVIRONMENT==="sandbox"\?"https:\/\/sandbox\.safaricom\.co\.ke":"https:\/\/api\.safaricom\.co\.ke"/,"M-Pesa must use live Safaricom production by default and sandbox only when explicitly selected.");
+assert.match(mpesaGuide,/MPESA_ENVIRONMENT=production/,"M-Pesa deployment guide must require the production environment.");
 assert.match(workerSource,/route === "\/api\/payments\/mpesa\/callback"/,"Worker must route Safaricom callbacks to the authenticated callback handler.");
 assert.match(workerSource,/route === "\/api\/payment-provider-status"/,"Super Admin provider status must have a live API route.");
 console.log("M-Pesa environment configuration and callback routing regression checks passed.");
