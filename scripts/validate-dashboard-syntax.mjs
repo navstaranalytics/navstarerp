@@ -77,6 +77,8 @@ console.log("Stage III boarding configuration and workspace regression checks pa
 const dataApi=fs.readFileSync("functions/api/data.js","utf8");
 assert.equal((dataApi.match(/enforceBoardingFeature\(a\.user,name\)/g)||[]).length,4,"Boarding reads, creates, updates and deletes must all enforce the school feature gate.");
 assert.match(dataApi,/Boarding is not enabled for this school/,"Day schools must receive a clear API-level boarding feature denial.");
+assert.match(dataApi,/Boarding placements can only be vacated here/,"Direct allocation edits must not bypass the dedicated transfer workflow.");
+assert.match(dataApi,/vacating date cannot be earlier than the placement start date/,"A boarding placement cannot be vacated before it starts.");
 assert.match(dataApi,/reached its configured bed capacity/,"Boarding allocation API must enforce house capacity server-side.");
 assert.match(dataApi,/already has an active boarding allocation/,"Boarding allocation API must prevent multiple active placements for one learner.");
 assert.match(dataApi,/That room and bed are already occupied/,"Boarding allocation API must prevent duplicate active bed assignments.");
