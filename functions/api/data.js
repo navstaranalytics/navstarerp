@@ -3,6 +3,18 @@ import { syncSchoolLearningAreas, syncSchoolCurricula } from "./schools.js";
 
 const json=(data,status=200)=>Response.json(data,{status,headers:{"Cache-Control":"no-store"}});
 const id=()=>crypto.randomUUID();
+// Coalesce tenant catalogue reconciliation and avoid repeating its read/write
+// batches on every dashboard request. A short TTL still picks up Super Admin
+// catalogue changes promptly; cache keys include the exact school curriculum.
+const catalogueSyncCache=new Map();
+async function cachedCatalogueSync(key,work){
+ const now=Date.now(),hit=catalogueSyncCache.get(key);
+ if(hit&&hit.expires>now)return hit.promise;
+ const promise=Promise.resolve().then(work).catch(error=>{catalogueSyncCache.delete(key);throw error;});
+ catalogueSyncCache.set(key,{promise,expires:now+30000});
+ if(catalogueSyncCache.size>300){const first=catalogueSyncCache.keys().next().value;if(first)catalogueSyncCache.delete(first)}
+ return promise;
+}
 const clean=v=>typeof v==="string"?v.trim():v;
 const resources={
   plans:{table:"subscription_plans",scope:false,fields:["plan_code","name","description","billing_model","rate_kes","max_learners","storage_gb","ai_credits","onboarding_fee_kes","grace_period_days","learner_count_basis","capabilities_json","school_levels_json","payment_methods_json","is_active"],required:["plan_code","name","billing_model"]},
@@ -394,7 +406,10 @@ export async function onRequestGet({request,env}){
       let curricula=[];try{curricula=JSON.parse(schoolConfig?.curricula_json||"[]")}catch{}
       if(!Array.isArray(curricula)||!curricula.length)curricula=schoolConfig?.curriculum?[schoolConfig.curriculum]:[];
       let levels=[];try{levels=JSON.parse(schoolConfig?.school_levels_json||"[]")}catch{}
-      if(curricula.length&&levels.length)await syncSchoolCurricula(env.DB,a.user.school_id,curricula,levels);
+      if(curricula.length&&levels.length){
+        const key="curricula|"+a.user.school_id+"|"+JSON.stringify([...curricula].sort())+"|"+JSON.stringify([...levels].sort());
+        await cachedCatalogueSync(key,()=>syncSchoolCurricula(env.DB,a.user.school_id,curricula,levels));
+      }
     }catch(error){console.error("NAVSTAR dual-curriculum reconciliation",String(error?.message||error))}
   }
   const needed=permissionFor(name,false);if(!allowed(a.user,needed))return json({ok:false,error:"Your role does not have permission to view this resource."},403);
@@ -446,7 +461,10 @@ export async function onRequestGet({request,env}){
         if(!byCurriculum.has(curriculum))byCurriculum.set(curriculum,new Set());
         if(level)byCurriculum.get(curriculum).add(level);
       }
-      for(const [curriculum,levels] of byCurriculum)await syncSchoolLearningAreas(env.DB,schoolId,curriculum,[...levels]);
+      for(const [curriculum,levels] of byCurriculum){
+        const ordered=[...levels].sort(),key="learning-areas|"+schoolId+"|"+curriculum+"|"+JSON.stringify(ordered);
+        await cachedCatalogueSync(key,()=>syncSchoolLearningAreas(env.DB,schoolId,curriculum,ordered));
+      }
     }
     if(name==="settings"){
       const rows=await env.DB.prepare("SELECT setting_key,setting_value,updated_at FROM platform_settings ORDER BY setting_key").all();
