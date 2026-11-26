@@ -321,4 +321,5 @@ assert.match(backupWorkflow,/CLOUDFLARE_R2_ACCESS_KEY_ID/,"Backup upload must us
 assert.match(backupWorkflow,/CLOUDFLARE_R2_SECRET_ACCESS_KEY/,"Backup upload must use the dedicated R2 S3 secret key.");
 assert.match(backupWorkflow,/name: Verify R2 backup checksum[\s\S]*?name: Register verified backup in D1/,"R2 read-back verification must complete before the D1 backup register is written.");
 assert.match(backupWorkflow,/aws s3 cp/,"Backup upload and verification must use the S3-compatible R2 API.");
+assert.match(backupWorkflow,/Restore backup into an isolated local D1 database[\\s\\S]*?--local --persist-to[\\s\\S]*?PRAGMA integrity_check/,"Every R2 backup must pass a non-production local D1 restore rehearsal and SQLite integrity check before registration.");
 console.log("Scoped R2 S3 credentials and verification-before-registration regression checks passed.");
