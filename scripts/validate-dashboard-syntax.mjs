@@ -139,6 +139,19 @@ assert.match(boardingTransferApi,/selected destination room and bed are already 
 assert.match(schoolPortal,/id="boardingTransferForm"[\s\S]*?id="boardingTransferHouse"/,"School Admin must provide a direct boarding transfer form.");
 assert.match(schoolPortal,/data-transfer-boarding/,"Active boarding placements must expose a transfer action.");
 console.log("Boarding transfer capacity, occupancy, atomic write and UI regression checks passed.");
+const boardingDataApi=fs.readFileSync("functions/api/data.js","utf8");
+const boardingRoomsMigration=fs.readFileSync("migrations/0024_boarding_rooms_and_beds.sql","utf8");
+assert.match(boardingDataApi,/"boarding-rooms":\{table:"boarding_rooms"/,"Boarding room records must be school-scoped D1 resources.");
+assert.match(boardingDataApi,/total capacity of this dormitory's rooms cannot exceed the house capacity/,"Room capacities must not exceed the dormitory capacity.");
+assert.match(boardingDataApi,/Bed number must be between 1 and the room's configured capacity/,"New allocations must respect the configured room bed count.");
+assert.match(boardingDataApi,/This room has reached its configured bed capacity/,"Room occupancy must be enforced server-side.");
+assert.match(boardingTransferApi,/destination room's configured capacity/,"Transfers must respect destination room capacity.");
+assert.match(boardingRoomsMigration,/CREATE TABLE IF NOT EXISTS boarding_rooms/,"D1 must persist room capacity records.");
+assert.match(schoolPortal,/id="boardingRoomForm"[\s\S]*?id="boardingRoomsTable"/,"School Admin must have a room register and capacity editor.");
+assert.match(schoolPortal,/id="boardingRoomSelect"/,"Learner allocations must choose a configured room.");
+assert.match(schoolPortal,/id="boardingBedNumber"[^>]*type="number"/,"Learner allocations must select a numbered bed within room capacity.");
+console.log("Boarding room registers and room-level bed capacity regression checks passed.");
+
 
 
 const superAdminSource=fs.readFileSync("public/super-admin.html","utf8");
