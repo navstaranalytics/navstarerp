@@ -284,3 +284,10 @@ assert.match(mpesaApi,/Math\.abs\(paidAmount-Number\(payment\.amount\)\)<0\.01/,
 assert.match(familyPortalUi,/Published reports/,"Parent and learner portal must display published reports.");
 assert.match(familyPortalUi,/Class timetable/,"Parent and learner portal must display the learner timetable.");
 console.log("Stage IV family portal, guardian tenant isolation and M-Pesa payment verification regression checks passed.");
+
+const teacherAllocationApi=fs.readFileSync("functions/api/data.js","utf8");
+assert.match(teacherAllocationApi,/if\(Number\(comboCount\?\.total\|\|0\)<2\)/,"Server must reject teacher allocations until at least two active subjects are configured.");
+assert.match(teacherAllocationApi,/A teacher must have at least two distinct subjects in their teaching combination/,"Teacher profile API must enforce two distinct subjects, not rely only on browser validation.");
+assert.match(teacherAllocationApi,/Non-teaching staff cannot receive subject allocations/,"Non-teaching staff must be excluded from subject allocation at the API layer.");
+assert.match(teacherAllocationApi,/staff_learning_areas WHERE school_id=\? AND staff_id=\? AND curriculum=\? AND lower\(learning_area_code\)=lower\(\?\) AND status='active'/,"Teacher allocation must match the teacher's active subject code and curriculum.");
+console.log("Stage III server-side teacher eligibility and curriculum allocation checks passed.");
