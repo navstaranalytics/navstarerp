@@ -166,7 +166,7 @@ export async function syncSchoolLearningAreas(db,schoolId,curriculum,levels){
   const found=byKey.get(x.stage+"|"+x.code)||byKey.get(nameKey);
   if(found){
    matched.add(found.id);
-   statements.push(db.prepare("UPDATE learning_areas SET catalogue_code=COALESCE(catalogue_code,?),name=CASE WHEN school_customized=1 THEN name ELSE ? END,code=CASE WHEN school_customized=1 THEN code ELSE ? END,pathway=?,subject_type=?,is_mandatory=?,source_template=?,is_active=CASE WHEN ?=1 THEN 1 ELSE is_active END WHERE id=? AND school_id=?").bind(x.code,x.name,x.code,x.pathway,x.type,x.mandatory,template,x.mandatory,found.id,schoolId));
+   statements.push(db.prepare("UPDATE learning_areas SET catalogue_code=COALESCE(catalogue_code,?),name=CASE WHEN school_customized=1 THEN name ELSE ? END,code=CASE WHEN school_customized=1 THEN code ELSE ? END,pathway=CASE WHEN school_customized=1 THEN pathway ELSE ? END,subject_type=CASE WHEN school_customized=1 THEN subject_type ELSE ? END,is_mandatory=CASE WHEN school_customized=1 THEN is_mandatory ELSE ? END,source_template=CASE WHEN school_customized=1 THEN source_template ELSE ? END,is_active=CASE WHEN ?=1 THEN 1 ELSE is_active END WHERE id=? AND school_id=?").bind(x.code,x.name,x.code,x.pathway,x.type,x.mandatory,template,x.mandatory,found.id,schoolId));
   }else{
    statements.push(db.prepare("INSERT INTO learning_areas(id,school_id,curriculum,code,catalogue_code,name,stage_code,pathway,is_active,subject_type,is_mandatory,source_template,school_customized) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,0)").bind(makeId(),schoolId,curriculum,x.code,x.code,x.name,x.stage,x.pathway,x.mandatory,x.type,x.mandatory,template));
   }
