@@ -78,3 +78,9 @@ assert.match(portalApi,/JOIN attendance_sessions ats ON ats\.id=ar\.session_id/,
 assert.match(portalApi,/ats\.academic_year_id IS \?/,"Family attendance summaries must be scoped to the active enrolment academic year.");
 assert.match(portalApi,/attendance_status='excused'/,"Family attendance summaries must count excused sessions separately.");
 console.log("Family attendance academic-year scoping regression checks passed.");
+
+const learnerPhotosApi=fs.readFileSync("functions/api/learner-photos.js","utf8");
+assert.match(learnerPhotosApi,/passport\/\+crypto\.randomUUID\(\)/,"Learner passport replacements must use versioned R2 keys to protect the previous file until verification.");
+assert.match(learnerPhotosApi,/const storedBytes=new Uint8Array\(await stored\.arrayBuffer\(\)\)/,"Learner passport uploads must read back the uploaded R2 object.");
+assert.match(learnerPhotosApi,/Old learner passport cleanup failed/,"Previous R2 passport objects should be cleaned up only after the new database pointer is saved.");
+console.log("Learner passport R2 replacement integrity regression checks passed.");
