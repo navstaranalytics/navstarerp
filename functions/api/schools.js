@@ -208,15 +208,25 @@ async function requireAdmin(request,env){
 export async function onRequestGet({request,env}){
   const auth=await requireAdmin(request,env);if(auth.error)return auth.error;
   try{
-    const rows=await env.DB.prepare(`SELECT s.*,ss.settings_json,
-      (SELECT u.id FROM school_memberships m JOIN users u ON u.id=m.user_id JOIN user_role_assignments a ON a.user_id=u.id AND a.school_id=s.id JOIN roles r ON r.id=a.role_id AND r.role_key='school_admin' WHERE m.school_id=s.id AND m.membership_status IN ('active','invited') ORDER BY m.created_at LIMIT 1) AS admin_user_id,
-      (SELECT u.full_name FROM school_memberships m JOIN users u ON u.id=m.user_id JOIN user_role_assignments a ON a.user_id=u.id AND a.school_id=s.id JOIN roles r ON r.id=a.role_id AND r.role_key='school_admin' WHERE m.school_id=s.id AND m.membership_status IN ('active','invited') ORDER BY m.created_at LIMIT 1) AS admin_full_name,
-      (SELECT u.username FROM school_memberships m JOIN users u ON u.id=m.user_id JOIN user_role_assignments a ON a.user_id=u.id AND a.school_id=s.id JOIN roles r ON r.id=a.role_id AND r.role_key='school_admin' WHERE m.school_id=s.id AND m.membership_status IN ('active','invited') ORDER BY m.created_at LIMIT 1) AS admin_username,
-      (SELECT u.email FROM school_memberships m JOIN users u ON u.id=m.user_id JOIN user_role_assignments a ON a.user_id=u.id AND a.school_id=s.id JOIN roles r ON r.id=a.role_id AND r.role_key='school_admin' WHERE m.school_id=s.id AND m.membership_status IN ('active','invited') ORDER BY m.created_at LIMIT 1) AS admin_email,
-      (SELECT u.phone FROM school_memberships m JOIN users u ON u.id=m.user_id JOIN user_role_assignments a ON a.user_id=u.id AND a.school_id=s.id JOIN roles r ON r.id=a.role_id AND r.role_key='school_admin' WHERE m.school_id=s.id AND m.membership_status IN ('active','invited') ORDER BY m.created_at LIMIT 1) AS admin_phone,
-      (SELECT u.status FROM school_memberships m JOIN users u ON u.id=m.user_id JOIN user_role_assignments a ON a.user_id=u.id AND a.school_id=s.id JOIN roles r ON r.id=a.role_id AND r.role_key='school_admin' WHERE m.school_id=s.id AND m.membership_status IN ('active','invited') ORDER BY m.created_at LIMIT 1) AS admin_status,
-      (SELECT COUNT(DISTINCT u.id) FROM school_memberships m JOIN users u ON u.id=m.user_id JOIN user_role_assignments a ON a.user_id=u.id AND a.school_id=s.id JOIN roles r ON r.id=a.role_id AND r.role_key='school_admin' WHERE m.school_id=s.id AND m.membership_status IN ('active','invited') AND u.status='active') AS admin_count
-      FROM schools s LEFT JOIN school_settings ss ON ss.school_id=s.id ORDER BY s.created_at DESC`).all();
+    const rows=await env.DB.prepare(`WITH ranked_admins AS (
+      SELECT m.school_id,u.id AS admin_user_id,u.full_name AS admin_full_name,
+        u.username AS admin_username,u.email AS admin_email,u.phone AS admin_phone,
+        u.status AS admin_status,
+        COUNT(CASE WHEN u.status='active' THEN 1 END) OVER (PARTITION BY m.school_id) AS admin_count,
+        ROW_NUMBER() OVER (PARTITION BY m.school_id ORDER BY m.created_at ASC,u.id ASC) AS admin_rank
+      FROM school_memberships m
+      JOIN users u ON u.id=m.user_id
+      JOIN user_role_assignments a ON a.user_id=u.id AND a.school_id=m.school_id
+      JOIN roles r ON r.id=a.role_id AND r.role_key='school_admin'
+      WHERE m.membership_status IN ('active','invited')
+    )
+    SELECT s.*,ss.settings_json,
+      ra.admin_user_id,ra.admin_full_name,ra.admin_username,ra.admin_email,
+      ra.admin_phone,ra.admin_status,COALESCE(ra.admin_count,0) AS admin_count
+    FROM schools s
+    LEFT JOIN school_settings ss ON ss.school_id=s.id
+    LEFT JOIN ranked_admins ra ON ra.school_id=s.id AND ra.admin_rank=1
+    ORDER BY s.created_at DESC`).all();
     // Listing schools must be read-only. Provisioning/synchronization belongs in
     // explicit create/update writes, never in a GET that can block directory loading.
     return json({ok:true,schools:(rows.results||[]).map(mapSchool)});
