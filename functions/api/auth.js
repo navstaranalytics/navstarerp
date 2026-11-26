@@ -177,9 +177,22 @@ export async function getAuthenticatedSession(request, env) {
     permissions=[...new Set(permissions)];
   }
   let scope={};try{scope=JSON.parse(row.scope_json||'{}')}catch{}
+  // School feature metadata is stored with the tenant settings. Include it in
+  // the authenticated session so navigation and feature gates use the same
+  // Super Admin configuration as the school record.
+  let schoolMeta={};
+  if(row.school_id){
+    try{
+      const setting=await env.DB.prepare("SELECT settings_json FROM school_settings WHERE school_id=?").bind(row.school_id).first();
+      const settings=JSON.parse(setting?.settings_json||"{}");
+      schoolMeta=settings.navstar_school_meta&&typeof settings.navstar_school_meta==="object"?settings.navstar_school_meta:{};
+    }catch(error){console.error("School feature metadata lookup failed",String(error?.message||error))}
+  }
+  const modules=Array.isArray(schoolMeta.modules)?schoolMeta.modules:[];
+  const boardingType=["day","boarding","both"].includes(String(schoolMeta.boardingType||"day"))?String(schoolMeta.boardingType||"day"):"day";
   const primaryRoleKey=roleKeysRaw[0]||row.role_key,primaryRoleName=roleNames[0]||row.role_name,primaryRoleId=(roleRows.results||[])[0]?.id||row.role_id;
   const normalizedRoleKey=primaryRoleKey==='parent_guardian'?'parent':primaryRoleKey==='student_learner'?'student':primaryRoleKey;
-  return {...row,role_id:primaryRoleId,role_name:primaryRoleName,role_key:normalizedRoleKey,role_keys:roleKeys,role_names:roleNames,permissions,scope,is_super_admin:roleKeysRaw.includes('super_admin'),access_mode:accessMode,access_notice:accessNotice,subscription_status:subscriptionStatus,session_idle_timeout_minutes:sessionPolicy.idle_timeout_minutes};
+  return {...row,role_id:primaryRoleId,role_name:primaryRoleName,role_key:normalizedRoleKey,role_keys:roleKeys,role_names:roleNames,permissions,scope,modules,boardingType,is_super_admin:roleKeysRaw.includes('super_admin'),access_mode:accessMode,access_notice:accessNotice,subscription_status:subscriptionStatus,session_idle_timeout_minutes:sessionPolicy.idle_timeout_minutes};
 }
 async function issueSession(env, request, userId, remember = false) {
   const token = randomHex(32);
