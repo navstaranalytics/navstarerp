@@ -43,7 +43,7 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           set -euo pipefail
-          BACKUP_ID="$(date -u +%Y%m%dT%H%M%SZ)"
+          BACKUP_ID="$(date -u +%Y%m%dT%H%M%SZ)-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           BACKUP_FILE="$RUNNER_TEMP/navstar-erp-db-$BACKUP_ID.sql"
           wrangler d1 export navstar-erp-db --remote --output "$BACKUP_FILE" --skip-confirmation
           test -s "$BACKUP_FILE"
