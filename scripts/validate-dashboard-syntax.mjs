@@ -201,7 +201,6 @@ assert.match(schoolPortal,/id="boardingBedNumber"[^>]*type="number"/,"Learner al
 console.log("Boarding room registers and room-level bed capacity regression checks passed.");
 const backupApi=fs.readFileSync("functions/api/backups.js","utf8");
 const backupAdminSource=fs.readFileSync("public/super-admin.html","utf8");
-const backupApi=fs.readFileSync("functions/api/backups.js","utf8");
 assert.match(backupApi,/crypto\.subtle\.digest\("SHA-256",backupBytes\)/,"Backup downloads must re-verify the stored object SHA-256, not only its size.");
 assert.match(backupApi,/actualSha256\.toLowerCase\(\)!==String\(row\.sha256\|\|""\)\.toLowerCase\(\)/,"Backup download must reject a same-size object whose content digest differs from the registered backup.");
 console.log("R2 backup download integrity regression checks passed.");
