@@ -96,6 +96,13 @@ export async function onRequestPostPhotos({request,env}){
    const bytes=new Uint8Array(await file.arrayBuffer());const valid=(file.type==="image/jpeg"&&bytes[0]===0xff&&bytes[1]===0xd8)||(file.type==="image/png"&&bytes[0]===0x89&&bytes[1]===0x50&&bytes[2]===0x4e&&bytes[3]===0x47)||(file.type==="image/webp"&&String.fromCharCode(...bytes.slice(8,12))==="WEBP");if(!valid){outcomes.push({file:file.name,status:"skipped",reason:"The file content does not match its image type."});continue}const objectKey="schools/"+a.schoolId+"/learners/"+learner.id+"/passport";
    if(env.R2){
     await env.R2.put(objectKey,bytes,{httpMetadata:{contentType:file.type,cacheControl:"private, no-store"}});
+    const stored=await env.R2.get(objectKey);
+    if(!stored)throw new Error("R2 passport photo could not be read back after upload.");
+    const storedBytes=new Uint8Array(await stored.arrayBuffer());
+    if(storedBytes.length!==bytes.length||storedBytes.some((value,index)=>value!==bytes[index])){
+     try{await env.R2.delete(objectKey)}catch{}
+     throw new Error("R2 passport photo verification failed; the learner photo record was not updated.");
+    }
     await env.DB.prepare("INSERT INTO learner_photos(learner_id,school_id,content_type,image_data,storage_provider,object_key,original_filename,uploaded_by,updated_at) VALUES(?,?,?,NULL,'r2',?,?,?,strftime('%Y-%m-%dT%H:%M:%fZ','now')) ON CONFLICT(learner_id) DO UPDATE SET content_type=excluded.content_type,image_data=NULL,storage_provider='r2',object_key=excluded.object_key,original_filename=excluded.original_filename,uploaded_by=excluded.uploaded_by,updated_at=excluded.updated_at").bind(learner.id,a.schoolId,file.type,objectKey,file.name,a.actor.id).run();
    }else{
     await env.DB.prepare("INSERT INTO learner_photos(learner_id,school_id,content_type,image_data,storage_provider,object_key,original_filename,uploaded_by,updated_at) VALUES(?,?,?,?,'d1',NULL,?,?,strftime('%Y-%m-%dT%H:%M:%fZ','now')) ON CONFLICT(learner_id) DO UPDATE SET content_type=excluded.content_type,image_data=excluded.image_data,storage_provider='d1',object_key=NULL,original_filename=excluded.original_filename,uploaded_by=excluded.uploaded_by,updated_at=excluded.updated_at").bind(learner.id,a.schoolId,file.type,bytes,file.name,a.actor.id).run();
