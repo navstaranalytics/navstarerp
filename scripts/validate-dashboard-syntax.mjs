@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import { spawnSync } from "node:child_process";
-for (const file of ["public/school-portal.html","public/super-admin.html"]) {
+for (const file of ["public/school-portal.html","public/super-admin.html","public/parent-portal.html"]) {
   const html=fs.readFileSync(file,"utf8");
   const scripts=[...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi)].map(x=>x[1]).filter(x=>x.trim());
   if(!scripts.length) throw new Error("No inline JavaScript found in "+file);
@@ -56,3 +56,8 @@ const dataApi=fs.readFileSync("functions/api/data.js","utf8");
 assert.equal((dataApi.match(/enforceBoardingFeature\(a\.user,name\)/g)||[]).length,4,"Boarding reads, creates, updates and deletes must all enforce the school feature gate.");
 assert.match(dataApi,/Boarding is not enabled for this school/,"Day schools must receive a clear API-level boarding feature denial.");
 console.log("Boarding API feature-gate regression checks passed.");
+
+const authApi=fs.readFileSync("functions/api/auth.js","utf8");
+assert.match(authApi,/\['parent','student'\]\.includes\(user\.role_key\).*parent-portal/,"Parent and learner accounts must be routed to their dedicated portal.");
+assert.match(authApi,/modules:user\.modules\|\|\[\],boardingType:user\.boardingType\|\|"day"/,"School feature configuration must be exposed to authenticated clients.");
+console.log("Parent and learner portal routing regression checks passed.");
