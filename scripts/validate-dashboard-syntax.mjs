@@ -73,6 +73,13 @@ assert.match(authSource,/modules,boardingType/,"Authenticated school sessions mu
 const schoolsSource=fs.readFileSync("functions/api/schools.js","utf8");
 assert.match(schoolsSource,/meta\.modules=meta\.modules\.filter\(x=>String\(x\)\.toLowerCase\(\)!=="boarding"\)/,"Day schools must not retain an enabled Boarding module.");
 console.log("Stage III boarding configuration and workspace regression checks passed.");
+const boardingIntegrity=fs.readFileSync("migrations/0026_boarding_allocation_integrity.sql","utf8");
+assert.ok(boardingIntegrity.includes("CREATE TRIGGER IF NOT EXISTS boarding_allocations_validate_insert"),"D1 must validate new active boarding placements.");
+assert.ok(boardingIntegrity.includes("CREATE TRIGGER IF NOT EXISTS boarding_allocations_validate_update"),"D1 must validate active boarding placement updates.");
+assert.ok(boardingIntegrity.includes("Learner already has an active boarding allocation"),"D1 must prevent a learner from occupying multiple active beds.");
+assert.ok(boardingIntegrity.includes("Room and bed are already occupied"),"D1 must prevent two learners occupying the same bed.");
+assert.ok(boardingIntegrity.includes("Dormitory capacity reached"),"D1 must enforce dormitory capacity under concurrent writes.");
+console.log("Stage III D1 boarding placement integrity checks passed.");
 const backupWorkflowHandoff=fs.readFileSync(".github/workflows/d1-backup-to-r2.yml","utf8");
 assert.ok(backupWorkflowHandoff.includes("id: upload"),"The R2 upload step must expose its object key as a step output.");
 assert.ok(backupWorkflowHandoff.includes('echo "object_key=$OBJECT_KEY" >> "$GITHUB_OUTPUT"'),"The upload step must publish the object key.");
