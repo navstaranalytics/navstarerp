@@ -696,7 +696,7 @@ export async function onRequestPost({request,env}){
   if(!allowed(a.user,permissionFor(name,true)))return json({ok:false,error:"Your role does not have permission to change this resource."},403);
   if(name==="grades"&&!a.user.is_super_admin)return json({ok:false,error:"Classes are configured by Navstar Super Admin. School Admins may create streams only."},403);
   if(name==="classes")return json({ok:false,error:"Class groups are no longer created. Classes are centrally configured; manage streams under each class instead."},405);
-  if(name==="learning-areas"&&!a.user.is_super_admin){/* School Admins may manage school-owned Primary and Pre-Primary areas only; server validates the selected phase below. */}
+  if(name==="learning-areas"&&!a.user.is_super_admin){/* School Admins may manage school-owned learning areas in every configured curriculum phase. */}
   if(name==="grade-boundaries")await ensureGradeBoundaryScope(env.DB);
   if(cfg.readOnly)return json({ok:false,error:"This resource is read-only."},405);
   let body;try{body=await request.json()}catch{return json({ok:false,error:"Invalid record data."},400)}
@@ -1091,12 +1091,7 @@ export async function onRequestPatch({request,env}){
     const calendarError=await validateAcademicCalendarDates(env.DB,name,schoolId,{...current,...values},recordId);if(calendarError)return json({ok:false,error:calendarError},400);
     if(name.startsWith("competency-")||name==="rubric-criteria"){const competencyError=await validateCompetencyRecord(env.DB,name,schoolId,{...current,...values},a.user);if(competencyError)return json({ok:false,error:competencyError},400)}
     if(name==="learning-areas"&&!a.user.is_super_admin){
-      const areaGrade=await env.DB.prepare("SELECT school_level,stage_code FROM grade_levels WHERE school_id=? AND curriculum=? AND stage_code=? AND is_active=1").bind(schoolId,current.curriculum,current.stage_code).first();
-      const areaLevel=String(areaGrade?.school_level||"").toLowerCase(),areaStage=String(current.stage_code||"").toUpperCase(),isPrimaryArea=!!areaGrade&&(/pre-primary|primary/.test(areaLevel)&&!/junior/.test(areaLevel)||/^PP[12]$/.test(areaStage)||/^G[1-6]$/.test(areaStage)||/^STD[1-8]$/.test(areaStage));
-      if(values.is_active!==undefined&&Number(values.is_active)===0){
-        const grade=await env.DB.prepare("SELECT school_level,stage_code FROM grade_levels WHERE school_id=? AND curriculum=? AND stage_code=? AND is_active=1 LIMIT 1").bind(schoolId,current.curriculum,current.stage_code).first();
-        if(Number(current.is_mandatory)===1)return json({ok:false,error:"Change this learning area to Elective / optional first, then you can switch off the school's offering."},403);
-      }
+      if(values.is_active!==undefined&&Number(values.is_active)===0&&Number(current.is_mandatory)===1)return json({ok:false,error:"Change this learning area to Elective / optional first, then you can switch off the school's offering."},403);
       values.school_customized=1;values.source_template="school_custom";
       if(values.name!==undefined||values.code!==undefined){
         const nextName=String(values.name??current.name??"").trim(),nextCode=String(values.code??current.code??"").trim().toUpperCase();
