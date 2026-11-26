@@ -309,7 +309,7 @@ export async function onRequestPostLogin({ request, env }) {
     const issued=await issueSession(env,request,user.id,body.remember===true);
     await env.DB.prepare("UPDATE users SET last_login_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?").bind(user.id).run();
     await audit(env,user.id,"auth.login","success",{role:user.role_key,schoolId:user.school_id||null});
-    const redirect=user.role_key==='super_admin'?'/super-admin':'/school-portal';
+    const redirect=user.role_key==='super_admin'?'/super-admin':(['parent','student'].includes(user.role_key)?'/parent-portal':'/school-portal');
     return json({ok:true,message:"Signed in successfully.",redirect,sessionToken:issued.token,user:{fullName:user.full_name,username,role:user.role_name,roleKey:user.role_key,schoolId:user.school_id||null,schoolName:user.school_name||null}});
   }catch(error){console.error("Navstar login failure:",String(error?.message||error));return json({ok:false,error:"Sign-in is temporarily unavailable. Please try again."},503)}
 }
