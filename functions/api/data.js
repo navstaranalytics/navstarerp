@@ -716,6 +716,8 @@ export async function onRequestPost({request,env}){
     if(!house||String(house.status||"active")!=="active")return json({ok:false,error:"Choose an active dormitory belonging to this school."},400);
 
     if(!roomNumber||!Number.isInteger(capacity)||capacity<1||capacity>1000)return json({ok:false,error:"Enter a room number and a positive whole-number bed capacity."},400);
+    const duplicateRoom=await env.DB.prepare("SELECT id FROM boarding_rooms WHERE school_id=? AND house_id=? AND lower(trim(room_number))=lower(trim(?)) LIMIT 1").bind(schoolId,house.id,roomNumber).first();if(duplicateRoom)return json({ok:false,error:"That room number already exists in this dormitory."},409);
+    const existingBeds=await env.DB.prepare("SELECT COUNT(*) AS total FROM boarding_allocations WHERE school_id=? AND house_id=? AND lower(trim(room_number))=lower(trim(?)) AND status='active' AND (end_date IS NULL OR end_date='')").bind(schoolId,house.id,roomNumber).first();if(capacity<Number(existingBeds?.total||0))return json({ok:false,error:"Room capacity cannot be lower than its existing active placements."},409);
     const totals=await env.DB.prepare("SELECT COALESCE(SUM(capacity),0) AS total FROM boarding_rooms WHERE school_id=? AND house_id=?").bind(schoolId,house.id).first();
     if(Number(totals?.total||0)+capacity>Number(house.capacity||0))return json({ok:false,error:"The total capacity of this dormitory's rooms cannot exceed the house capacity."},409);
   }
@@ -1120,6 +1122,7 @@ export async function onRequestPatch({request,env}){
       if(!house||String(house.status||"active")!=="active")return json({ok:false,error:"Choose an active dormitory belonging to this school."},400);
       const capacity=Number(values.capacity??current.capacity),roomNumber=String(values.room_number??current.room_number).trim();
       if(!roomNumber||!Number.isInteger(capacity)||capacity<1||capacity>1000)return json({ok:false,error:"Enter a room number and a positive whole-number bed capacity."},400);
+      const duplicateRoom=await env.DB.prepare("SELECT id FROM boarding_rooms WHERE school_id=? AND house_id=? AND lower(trim(room_number))=lower(trim(?)) AND id<>? LIMIT 1").bind(schoolId,houseId,roomNumber,recordId).first();if(duplicateRoom)return json({ok:false,error:"That room number already exists in the destination dormitory."},409);
       const occupied=await env.DB.prepare("SELECT COUNT(*) AS total FROM boarding_allocations WHERE school_id=? AND house_id=? AND room_number=? AND status='active' AND (end_date IS NULL OR end_date='')").bind(schoolId,current.house_id,current.room_number).first();
       if(capacity<Number(occupied?.total||0))return json({ok:false,error:"Room capacity cannot be lower than its currently occupied beds."},409);
       if(Number(occupied?.total||0)>0&&(houseId!==current.house_id||roomNumber!==current.room_number))return json({ok:false,error:"A room with active learner placements cannot be moved or renamed. Vacate its beds first."},409);
