@@ -18,6 +18,14 @@ export async function onRequestPost({request,env}){
   if(current.start_date&&start<current.start_date)return json({ok:false,error:"The transfer date cannot be earlier than the current boarding placement."},400);
   const target=await env.DB.prepare("SELECT id,capacity,status FROM boarding_houses WHERE id=? AND school_id=?").bind(houseId,schoolId).first();
   if(!target||String(target.status||"active")!=="active")return json({ok:false,error:"Choose an active destination dormitory belonging to this school."},400);
+  const roomRow=await env.DB.prepare("SELECT id,room_number,capacity,status FROM boarding_rooms WHERE school_id=? AND house_id=? AND room_number=?").bind(schoolId,target.id,room).first();
+  const bedNumber=Number(bed);
+  if(!roomRow||String(roomRow.status||"active")!=="active")return json({ok:false,error:"Choose an active room configured under the destination dormitory."},400);
+  if(!Number.isInteger(bedNumber)||bedNumber<1||bedNumber>Number(roomRow.capacity||0))return json({ok:false,error:"Bed number must be between 1 and the destination room's configured capacity."},400);
+  const roomOccupied=await env.DB.prepare("SELECT COUNT(*) AS total FROM boarding_allocations WHERE school_id=? AND house_id=? AND room_number=? AND status='active' AND (end_date IS NULL OR end_date='')").bind(schoolId,target.id,roomRow.room_number).first();
+  const roomAfterTransfer=Number(roomOccupied?.total||0)-(current.house_id===target.id&&String(room)===String(current.room_number)?1:0);
+  if(roomAfterTransfer>=Number(roomRow.capacity||0))return json({ok:false,error:"The destination room has reached its configured bed capacity."},409);
+
   const existingPlacement=await env.DB.prepare("SELECT id FROM boarding_allocations WHERE school_id=? AND learner_id=? AND id<>? AND status='active' AND (end_date IS NULL OR end_date='') LIMIT 1").bind(schoolId,current.learner_id,current.id).first();
   if(existingPlacement)return json({ok:false,error:"This learner already has another active boarding placement."},409);
   const occupied=await env.DB.prepare("SELECT COUNT(*) AS total FROM boarding_allocations WHERE school_id=? AND house_id=? AND status='active' AND (end_date IS NULL OR end_date='')").bind(schoolId,target.id).first();
