@@ -13,22 +13,31 @@ export async function onRequestPost({request,env}){
  const today=new Date().toISOString().slice(0,10);if(start>today)return json({ok:false,error:"Future-dated transfers are not supported yet. Choose today or an earlier effective date."},400);
  if(!user.is_super_admin&&body.school_id&&body.school_id!==schoolId)return json({ok:false,error:"You cannot transfer a learner in another school."},403);
  try{
-  const current=await env.DB.prepare("SELECT id,learner_id,house_id,start_date FROM boarding_allocations WHERE id=? AND school_id=? AND status='active' AND (end_date IS NULL OR end_date='')").bind(allocationId,schoolId).first();
+  const current=await env.DB.prepare("SELECT id,learner_id,house_id,room_number,start_date FROM boarding_allocations WHERE id=? AND school_id=? AND status='active' AND (end_date IS NULL OR end_date='')").bind(allocationId,schoolId).first();
   if(!current)return json({ok:false,error:"The learner's current active boarding placement was not found."},404);
   if(current.start_date&&start<current.start_date)return json({ok:false,error:"The transfer date cannot be earlier than the current boarding placement."},400);
   const target=await env.DB.prepare("SELECT id,capacity,status FROM boarding_houses WHERE id=? AND school_id=?").bind(houseId,schoolId).first();
   if(!target||String(target.status||"active")!=="active")return json({ok:false,error:"Choose an active destination dormitory belonging to this school."},400);
+  const roomRow=await env.DB.prepare("SELECT id,room_number,capacity,status FROM boarding_rooms WHERE school_id=? AND house_id=? AND room_number=?").bind(schoolId,target.id,room).first();
+  const bedNumber=Number(bed);
+  const normalizedBed=String(bedNumber);
+  if(!roomRow||String(roomRow.status||"active")!=="active")return json({ok:false,error:"Choose an active room configured under the destination dormitory."},400);
+  if(!Number.isInteger(bedNumber)||bedNumber<1||bedNumber>Number(roomRow.capacity||0))return json({ok:false,error:"Bed number must be between 1 and the destination room's configured capacity."},400);
+  const roomOccupied=await env.DB.prepare("SELECT COUNT(*) AS total FROM boarding_allocations WHERE school_id=? AND house_id=? AND room_number=? AND status='active' AND (end_date IS NULL OR end_date='')").bind(schoolId,target.id,roomRow.room_number).first();
+  const roomAfterTransfer=Number(roomOccupied?.total||0)-(current.house_id===target.id&&String(room)===String(current.room_number)?1:0);
+  if(roomAfterTransfer>=Number(roomRow.capacity||0))return json({ok:false,error:"The destination room has reached its configured bed capacity."},409);
+
   const existingPlacement=await env.DB.prepare("SELECT id FROM boarding_allocations WHERE school_id=? AND learner_id=? AND id<>? AND status='active' AND (end_date IS NULL OR end_date='') LIMIT 1").bind(schoolId,current.learner_id,current.id).first();
   if(existingPlacement)return json({ok:false,error:"This learner already has another active boarding placement."},409);
   const occupied=await env.DB.prepare("SELECT COUNT(*) AS total FROM boarding_allocations WHERE school_id=? AND house_id=? AND status='active' AND (end_date IS NULL OR end_date='')").bind(schoolId,target.id).first();
   const afterTransfer=Number(occupied?.total||0)-(current.house_id===target.id?1:0);
   if(afterTransfer>=Number(target.capacity||0))return json({ok:false,error:"The destination dormitory has reached its configured bed capacity."},409);
-  const bedOccupied=await env.DB.prepare("SELECT id FROM boarding_allocations WHERE school_id=? AND house_id=? AND id<>? AND lower(trim(COALESCE(room_number,'')))=lower(trim(?)) AND lower(trim(COALESCE(bed_number,'')))=lower(trim(?)) AND status='active' AND (end_date IS NULL OR end_date='') LIMIT 1").bind(schoolId,target.id,current.id,room,bed).first();
+  const bedOccupied=await env.DB.prepare("SELECT id FROM boarding_allocations WHERE school_id=? AND house_id=? AND id<>? AND lower(trim(COALESCE(room_number,'')))=lower(trim(?)) AND lower(trim(COALESCE(bed_number,'')))=lower(trim(?)) AND status='active' AND (end_date IS NULL OR end_date='') LIMIT 1").bind(schoolId,target.id,current.id,room,normalizedBed).first();
   if(bedOccupied)return json({ok:false,error:"The selected destination room and bed are already occupied."},409);
   const newId=crypto.randomUUID(),endDate=start;
   await env.DB.batch([
    env.DB.prepare("UPDATE boarding_allocations SET status='transferred',end_date=? WHERE id=? AND school_id=? AND status='active' AND (end_date IS NULL OR end_date='')").bind(endDate,current.id,schoolId),
-   env.DB.prepare("INSERT INTO boarding_allocations(id,school_id,house_id,learner_id,room_number,bed_number,start_date,status) SELECT ?,?,?,?,?,?,?,'active' WHERE EXISTS (SELECT 1 FROM boarding_allocations WHERE id=? AND school_id=? AND status='transferred' AND end_date=?)").bind(newId,schoolId,target.id,current.learner_id,room,bed,start,current.id,schoolId,endDate)
+   env.DB.prepare("INSERT INTO boarding_allocations(id,school_id,house_id,learner_id,room_number,bed_number,start_date,status) SELECT ?,?,?,?,?,?,?,'active' WHERE EXISTS (SELECT 1 FROM boarding_allocations WHERE id=? AND school_id=? AND status='transferred' AND end_date=?)").bind(newId,schoolId,target.id,current.learner_id,room,normalizedBed,start,current.id,schoolId,endDate)
   ]);
   const [oldRow,newRow]=await Promise.all([
    env.DB.prepare("SELECT id,status,end_date FROM boarding_allocations WHERE id=? AND school_id=?").bind(current.id,schoolId).first(),
