@@ -523,15 +523,33 @@ $("boardingHouseForm").addEventListener("submit",async e=>{
  e.preventDefault();const f=e.currentTarget,id=f.elements.id.value,button=$("saveBoardingHouse"),body=Object.fromEntries(new FormData(f).entries());delete body.id;body.school_id=schoolId;body.capacity=Number(body.capacity);body.supervisor_staff_id=body.supervisor_staff_id||null;
  if(!Number.isInteger(body.capacity)||body.capacity<1){boardingNotice("Enter a positive whole-number bed capacity.",true);return}
  const used=boardingCache.allocations.filter(a=>a.house_id===id&&String(a.status||"active")==="active"&&!a.end_date).length;if(id&&body.capacity<used){boardingNotice("Capacity cannot be lower than the "+used+" currently occupied beds.",true);return}
+ const roomCapacity=boardingCache.rooms.filter(r=>r.house_id===id).reduce((n,r)=>n+Number(r.capacity||0),0);if(id&&body.capacity<roomCapacity){boardingNotice("Capacity cannot be lower than the combined room capacity of "+roomCapacity+" beds.",true);return}
  if(!confirm("Confirm "+(id?"updating":"creating")+" this dormitory?"))return;button.disabled=true;button.textContent="Saving…";
  try{const d=await api(id?"/api/data/boarding-houses/"+encodeURIComponent(id)+"?schoolId="+encodeURIComponent(schoolId):"/api/data/boarding-houses",{method:id?"PATCH":"POST",body:JSON.stringify(body)});if(!d?.ok||!d.record?.id)throw new Error(d?.error||"The dormitory save was not confirmed.");clearBoardingHouseForm();boardingNotice("Dormitory saved successfully.");await loadBoardingWorkspace()}catch(error){boardingNotice(error.message,true)}finally{button.disabled=false;button.textContent="Save dormitory"}
 });
 $("cancelBoardingHouseEdit").addEventListener("click",clearBoardingHouseForm);
+
+function clearBoardingRoomForm(){const f=$("boardingRoomForm");f.reset();f.elements.id.value="";$("saveBoardingRoom").textContent="Save room"}
+$("boardingRoomForm").addEventListener("submit",async e=>{
+ e.preventDefault();const f=e.currentTarget,id=f.elements.id.value,button=$("saveBoardingRoom"),body=Object.fromEntries(new FormData(f).entries());delete body.id;body.school_id=schoolId;body.capacity=Number(body.capacity);
+ if(!Number.isInteger(body.capacity)||body.capacity<1||body.capacity>1000){boardingNotice("Room capacity must be a whole number between 1 and 1,000.",true);return}
+ const house=boardingCache.houses.find(x=>x.id===body.house_id);if(!house||String(house.status||"active")!=="active"){boardingNotice("Choose an active dormitory for this room.",true);return}
+ if(!confirm("Confirm "+(id?"updating":"creating")+" this room and its bed capacity?"))return;
+ button.disabled=true;button.textContent="Saving…";
+ try{const d=await api(id?"/api/data/boarding-rooms/"+encodeURIComponent(id)+"?schoolId="+encodeURIComponent(schoolId):"/api/data/boarding-rooms",{method:id?"PATCH":"POST",body:JSON.stringify(body)});if(!d?.ok||!d.record?.id)throw new Error(d?.error||"The room save was not confirmed.");clearBoardingRoomForm();boardingNotice("Room and bed capacity saved successfully.");await loadBoardingWorkspace()}catch(error){boardingNotice(error.message,true)}finally{button.disabled=false;button.textContent="Save room"}
+});
+$("clearBoardingRoom").addEventListener("click",clearBoardingRoomForm);
+$("boardingRoomsTable").addEventListener("click",e=>{const b=e.target.closest("[data-edit-boarding-room]");if(!b)return;const r=boardingCache.rooms.find(x=>x.id===b.dataset.editBoardingRoom);if(!r)return;const f=$("boardingRoomForm");for(const key of ["id","house_id","room_number","capacity","status"])f.elements[key].value=r[key]??"";$("saveBoardingRoom").textContent="Update room";f.scrollIntoView({behavior:"smooth",block:"nearest"})});
+$("boardingHouseSelect").addEventListener("change",()=>{populateBoardingRoomOptions("boardingRoomSelect",$("boardingHouseSelect").value);setBoardingBedLimit("boardingBedNumber",$("boardingHouseSelect").value,"")});
+$("boardingRoomSelect").addEventListener("change",()=>setBoardingBedLimit("boardingBedNumber",$("boardingHouseSelect").value,$("boardingRoomSelect").value));
+$("boardingTransferHouse").addEventListener("change",()=>{populateBoardingRoomOptions("boardingTransferRoom",$("boardingTransferHouse").value);setBoardingBedLimit("boardingTransferBedNumber",$("boardingTransferHouse").value,"")});
+$("boardingTransferRoom").addEventListener("change",()=>setBoardingBedLimit("boardingTransferBedNumber",$("boardingTransferHouse").value,$("boardingTransferRoom").value));
+
 $("boardingHousesTable").addEventListener("click",e=>{const b=e.target.closest("[data-edit-boarding-house]");if(!b)return;const h=boardingCache.houses.find(x=>x.id===b.dataset.editBoardingHouse);if(!h)return;const f=$("boardingHouseForm");for(const key of ["id","name","house_type","capacity","supervisor_staff_id","status"])f.elements[key].value=h[key]??"";$("saveBoardingHouse").textContent="Update dormitory";f.scrollIntoView({behavior:"smooth",block:"nearest"})});
 $("boardingAllocationForm").addEventListener("submit",async e=>{
  e.preventDefault();const f=e.currentTarget,body=Object.fromEntries(new FormData(f).entries());body.school_id=schoolId;body.status="active";
  const house=boardingCache.houses.find(x=>x.id===body.house_id);if(!house||String(house.status||"active")!=="active"){boardingNotice("Choose an active dormitory.",true);return}
- const active=boardingCache.allocations.filter(a=>a.house_id===house.id&&String(a.status||"active")==="active"&&!a.end_date);if(active.length>=Number(house.capacity)){boardingNotice("This dormitory has reached its configured bed capacity.",true);return}
+ const room=boardingCache.rooms.find(r=>r.house_id===house.id&&r.room_number===body.room_number&&String(r.status||"active")==="active");const bedNumber=Number(body.bed_number);if(!room||!Number.isInteger(bedNumber)||bedNumber<1||bedNumber>Number(room.capacity||0)){boardingNotice("Choose a configured room and a bed number within its capacity.",true);return}const roomOccupied=boardingCache.allocations.filter(a=>a.house_id===house.id&&a.room_number===room.room_number&&String(a.status||"active")==="active"&&!a.end_date).length;if(roomOccupied>=Number(room.capacity)){boardingNotice("This room has reached its configured bed capacity.",true);return}const active=boardingCache.allocations.filter(a=>a.house_id===house.id&&String(a.status||"active")==="active"&&!a.end_date);if(active.length>=Number(house.capacity)){boardingNotice("This dormitory has reached its configured bed capacity.",true);return}
  if(active.some(a=>a.learner_id===body.learner_id)){boardingNotice("This learner already has an active boarding allocation. Vacate or transfer the existing placement first.",true);return}
  const bedKey=a=>String(a.room_number||"").trim().toLowerCase()+"|"+String(a.bed_number||"").trim().toLowerCase();if(active.some(a=>bedKey(a)===bedKey(body))){boardingNotice("That room and bed are already occupied. Choose another bed.",true);return}
  if(!confirm("Confirm allocating this learner to "+house.name+", room "+body.room_number+", bed "+body.bed_number+"?"))return;
@@ -544,7 +562,7 @@ $("boardingAllocationsTable").addEventListener("click",async e=>{
   const row=boardingCache.allocations.find(x=>x.id===transfer.dataset.transferBoarding),form=$("boardingTransferForm");if(!row||!form)return;
   const learner=boardingCache.learners.find(x=>x.id===row.learner_id);
   form.elements.allocation_id.value=row.id;form.elements.learner_name.value=learner?[learner.first_name,learner.middle_name,learner.last_name].filter(Boolean).join(" "):"Learner";
-  form.elements.house_id.value=row.house_id;form.elements.room_number.value=row.room_number||"";form.elements.bed_number.value=row.bed_number||"";form.elements.start_date.value=new Date().toISOString().slice(0,10);form.classList.remove("hidden");form.scrollIntoView({behavior:"smooth",block:"center"});return;
+  form.elements.house_id.value=row.house_id;populateBoardingRoomOptions("boardingTransferRoom",row.house_id,row.room_number||"");form.elements.bed_number.value=row.bed_number||"";setBoardingBedLimit("boardingTransferBedNumber",row.house_id,row.room_number||"",row.bed_number||"");form.elements.start_date.value=new Date().toISOString().slice(0,10);form.classList.remove("hidden");form.scrollIntoView({behavior:"smooth",block:"center"});return;
  }
  const b=e.target.closest("[data-vacate-boarding]");if(!b)return;const a=boardingCache.allocations.find(x=>x.id===b.dataset.vacateBoarding);if(!a)return;
  const date=new Date().toISOString().slice(0,10);if(!confirm("Confirm vacating this learner's current bed? The learner's school enrolment and academic records will not be changed."))return;b.disabled=true;b.textContent="Saving…";
