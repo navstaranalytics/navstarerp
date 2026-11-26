@@ -591,7 +591,7 @@ export async function onRequestPost({request,env}){
     const schoolId=a.user.is_super_admin?String(body.school_id||""):a.user.school_id,gradeIds=[...new Set((Array.isArray(body.grade_ids)?body.grade_ids:[]).map(x=>String(x||"").trim()).filter(Boolean))],curriculum=clean(body.curriculum),name=clean(body.name),code=String(body.code||"").trim().toUpperCase(),pathways=[...new Set((Array.isArray(body.pathways)?body.pathways:(body.pathway?[body.pathway]:[])).map(clean).filter(Boolean))],pathway=pathways.length?JSON.stringify(pathways):null,isMandatory=Number(body.is_mandatory)===1?1:0;
     if(!schoolId||(!a.user.is_super_admin&&body.school_id&&body.school_id!==schoolId))return json({ok:false,error:"School workspace is required."},403);
     if(!curriculum||!name||!code||!gradeIds.length||gradeIds.length>30)return json({ok:false,error:"Choose a curriculum and level, enter a subject name and code, and select its active classes."},400);
-    if(pathway&&!/cbe|cbc|competency/i.test(curriculum))return json({ok:false,error:"Pathways are available only for CBE Senior School."},400);
+    if(pathways.length&&!/cbe|cbc|competency/i.test(curriculum))return json({ok:false,error:"Pathways are available only for CBE Senior School."},400);
     if(pathways.some(p=>!["STEM","Social Sciences","Arts & Sports Science"].includes(p)))return json({ok:false,error:"Choose valid CBE Senior School pathways."},400);
     try{
       const placeholders=gradeIds.map(()=>"?").join(",");
