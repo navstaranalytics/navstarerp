@@ -1092,11 +1092,11 @@ export async function onRequestPatch({request,env}){
     if(name==="learning-areas"&&!a.user.is_super_admin){
       const areaGrade=await env.DB.prepare("SELECT school_level,stage_code FROM grade_levels WHERE school_id=? AND curriculum=? AND stage_code=? AND is_active=1").bind(schoolId,current.curriculum,current.stage_code).first();
       const areaLevel=String(areaGrade?.school_level||"").toLowerCase(),areaStage=String(current.stage_code||"").toUpperCase(),isPrimaryArea=!!areaGrade&&(/pre-primary|primary/.test(areaLevel)&&!/junior/.test(areaLevel)||/^PP[12]$/.test(areaStage)||/^G[1-6]$/.test(areaStage)||/^STD[1-8]$/.test(areaStage));
-      if(!isPrimaryArea)return json({ok:false,error:"School Admins may edit only Primary and Pre-Primary learning areas."},403);
       if(values.is_active!==undefined&&Number(values.is_active)===0){
         const grade=await env.DB.prepare("SELECT school_level,stage_code FROM grade_levels WHERE school_id=? AND curriculum=? AND stage_code=? AND is_active=1 LIMIT 1").bind(schoolId,current.curriculum,current.stage_code).first();
-        if(Number(current.is_mandatory)===1||isPrimaryOrJuniorClass(grade))return json({ok:false,error:"This learning area is compulsory for every learner at this school level and cannot be disabled. Only Senior School optional areas may be switched off."},403);
+        if(Number(current.is_mandatory)===1)return json({ok:false,error:"Change this learning area to Elective / optional first, then you can switch off the school's offering."},403);
       }
+      values.school_customized=1;values.source_template="school_custom";
       if(values.name!==undefined||values.code!==undefined){
         const nextName=String(values.name??current.name??"").trim(),nextCode=String(values.code??current.code??"").trim().toUpperCase();
         if(!nextName||nextName.length>160||!nextCode||nextCode.length>24||!/^[A-Z0-9_-]+$/.test(nextCode))return json({ok:false,error:"Enter a valid learning-area name and code (letters, numbers, hyphens or underscores)."},400);
