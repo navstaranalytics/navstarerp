@@ -41,6 +41,25 @@ assert.equal(gradeBelongsToSelectedLevels(grade("Kenyan CBE","G4","Primary"),["8
 assert.equal(gradeBelongsToSelectedLevels(grade("Kenyan 8-4-4","STD4","Primary"),["Senior School"],dual),false);
 assert.equal(gradeBelongsToSelectedLevels(grade("Kenyan CBE","G10","Senior School"),["Grade 10"],cbe),true);
 assert.equal(gradeBelongsToSelectedLevels(grade("Kenyan 8-4-4","FORM4","Secondary"),["Grade 10"],legacy),false);
+for (const code of ["PP1","PP2",...Array.from({length:12},(_,i)=>"G"+(i+1))]) {
+  const level=code==="PP1"||code==="PP2"?"Pre-Primary":/^G[1-6]$/.test(code)?"Primary":/^G[7-9]$/.test(code)?"Junior School":"Senior School";
+  assert.equal(gradeBelongsToSelectedLevels(grade("Kenyan CBE",code,level),["Pre-Primary","Primary","Junior School","Senior School"],cbe),true,"CBE grade "+code+" must remain visible to a CBE school");
+  assert.equal(gradeBelongsToSelectedLevels(grade("Kenyan CBE",code,level),["Pre-Primary","Primary","Junior School","Senior School"],legacy),false,"CBE grade "+code+" must not leak into an 8-4-4-only school");
+}
+for (const code of [...Array.from({length:8},(_,i)=>"STD"+(i+1)),...Array.from({length:4},(_,i)=>"FORM"+(i+1))]) {
+  const level=code.startsWith("STD")?"Primary":"Secondary";
+  assert.equal(gradeBelongsToSelectedLevels(grade("Kenyan 8-4-4",code,level),["8-4-4 Primary","8-4-4 Secondary"],legacy),true,"8-4-4 class "+code+" must remain available when enabled by Super Admin");
+  assert.equal(gradeBelongsToSelectedLevels(grade("Kenyan 8-4-4",code,level),["Pre-Primary","Primary","Junior School","Senior School"],cbe),false,"8-4-4 class "+code+" must not leak into a CBE-only school");
+}
+for (const code of ["PP1","PP2",...Array.from({length:12},(_,i)=>"G"+(i+1))]) {
+  const level=code==="PP1"||code==="PP2"?"Pre-Primary":/^G[1-6]$/.test(code)?"Primary":/^G[7-9]$/.test(code)?"Junior School":"Senior School";
+  assert.equal(gradeBelongsToSelectedLevels(grade("Kenyan CBE",code,level),["Pre-Primary","Primary","Junior School","Senior School"],dual),true,"Dual-curriculum schools must retain CBE class "+code);
+}
+for (const code of [...Array.from({length:8},(_,i)=>"STD"+(i+1)),...Array.from({length:4},(_,i)=>"FORM"+(i+1))]) {
+  const level=code.startsWith("STD")?"Primary":"Secondary";
+  assert.equal(gradeBelongsToSelectedLevels(grade("Kenyan 8-4-4",code,level),["8-4-4 Primary","8-4-4 Secondary"],dual),true,"Dual-curriculum schools must retain 8-4-4 class "+code);
+}
+
 console.log("Curriculum visibility regression tests passed (CBE, 8-4-4 and dual-curriculum schools).");
 
 const schoolPortal=fs.readFileSync("public/school-portal.html","utf8");
