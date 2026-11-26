@@ -998,7 +998,7 @@ async function loadAttendanceRegister(sessionId){
   ]);
   const enrolled=enrollments.records||[];
   const learnerIds=enrolled.map(x=>x.learner_id);
-  const learners=learnerIds.length?await api("/api/data/learners?"+params+"&summary=1"): {records:[]};
+  const learners=learnerIds.length?await api("/api/data/learners?"+params+"&summary=1&ids="+encodeURIComponent(learnerIds.join(","))): {records:[]};
   const learnersById=new Map((learners.records||[]).map(x=>[x.id,x]));
   const existing=new Map((records.records||[]).map(x=>[x.learner_id,x]));
   const rows=enrolled.map(x=>({enrollment:x,learner:learnersById.get(x.learner_id)})).filter(x=>x.learner);
