@@ -74,13 +74,14 @@ const schoolsSource=fs.readFileSync("functions/api/schools.js","utf8");
 assert.match(schoolsSource,/meta\.modules=meta\.modules\.filter\(x=>String\(x\)\.toLowerCase\(\)!=="boarding"\)/,"Day schools must not retain an enabled Boarding module.");
 console.log("Stage III boarding configuration and workspace regression checks passed.");
 const backupWorkflow=fs.readFileSync(".github/workflows/d1-backup-to-r2.yml","utf8");
-assert.match(backupWorkflow,/id: upload[\\s\\S]*object_key=\\$OBJECT_KEY/,"The R2 upload step must expose its object key as a step output.");
-assert.match(backupWorkflow,/OBJECT_KEY: \\$\\{\\{ steps\\.upload\\.outputs\\.object_key \\}\\}/,"Backup verification must receive the uploaded object key explicitly.");
-assert.match(backupWorkflow,/navstar-erp-storage\\/\\$OBJECT_KEY/,"R2 read-back and registration must use the same object key.");
-assert.doesNotMatch(backupWorkflow,/\\$object_key/,"Backup workflow must not use an undefined lower-case object_key variable.");
+assert.ok(backupWorkflow.includes("id: upload"),"The R2 upload step must expose its object key as a step output.");
+assert.ok(backupWorkflow.includes('echo "object_key=$OBJECT_KEY" >> "$GITHUB_OUTPUT"'),"The upload step must publish the object key.");
+assert.ok(backupWorkflow.includes("OBJECT_KEY: ${{ steps.upload.outputs.object_key }}"),"Backup verification must receive the uploaded object key explicitly.");
+assert.ok(backupWorkflow.includes("navstar-erp-storage/$OBJECT_KEY"),"R2 read-back and registration must use the same object key.");
+assert.equal(backupWorkflow.includes("$object_key"),false,"Backup workflow must not use an undefined lower-case object_key variable.");
 const recoveryRunbook=fs.readFileSync("docs/disaster-recovery.md","utf8");
-assert.match(recoveryRunbook,/R2 Object Read & Write/,"Recovery documentation must state the required R2 token permission.");
-assert.match(recoveryRunbook,/restore drill/,"Recovery documentation must require a non-production restore drill.");
+assert.ok(recoveryRunbook.includes("R2 Object Read & Write"),"Recovery documentation must state the required R2 token permission.");
+assert.ok(recoveryRunbook.includes("restore drill"),"Recovery documentation must require a non-production restore drill.");
 console.log("Stage V backup workflow and disaster-recovery documentation checks passed.");
 
 
