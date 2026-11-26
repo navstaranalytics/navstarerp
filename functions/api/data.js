@@ -704,6 +704,24 @@ export async function onRequestPost({request,env}){
   if(cfg.scope&&!a.user.is_super_admin&&values.school_id&&values.school_id!==a.user.school_id)return json({ok:false,error:"You cannot create records for another school."},403);
   if(cfg.scope&&!await env.DB.prepare("SELECT 1 FROM schools WHERE id=?"+(a.user.is_super_admin?"":" AND status='active'")).bind(schoolId).first())return json({ok:false,error:"School not found or inactive."},404);
   if(cfg.scope)values.school_id=schoolId;
+  if(name==="boarding-houses"){
+    const capacity=Number(values.capacity);
+    if(!Number.isInteger(capacity)||capacity<1||capacity>10000)return json({ok:false,error:"Dormitory capacity must be a whole number between 1 and 10,000."},400);
+    if(!String(values.name||"").trim())return json({ok:false,error:"Dormitory name is required."},400);
+    if(values.supervisor_staff_id){const supervisor=await env.DB.prepare("SELECT id FROM staff_profiles WHERE id=? AND school_id=? AND employment_status='active'").bind(values.supervisor_staff_id,schoolId).first();if(!supervisor)return json({ok:false,error:"Choose an active staff supervisor from this school."},400);}
+  }
+  if(name==="boarding-allocations"){
+    const house=await env.DB.prepare("SELECT id,capacity,status FROM boarding_houses WHERE id=? AND school_id=?").bind(values.house_id,schoolId).first();
+    if(!house||String(house.status||"active")!=="active")return json({ok:false,error:"Choose an active dormitory belonging to this school."},400);
+    const learner=await env.DB.prepare("SELECT id FROM learners WHERE id=? AND school_id=?").bind(values.learner_id,schoolId).first();
+    if(!learner)return json({ok:false,error:"Choose a learner registered in this school."},400);
+    const occupied=await env.DB.prepare("SELECT COUNT(*) AS total FROM boarding_allocations WHERE school_id=? AND house_id=? AND status='active' AND (end_date IS NULL OR end_date='')").bind(schoolId,house.id).first();
+    if(Number(occupied?.total||0)>=Number(house.capacity||0))return json({ok:false,error:"This dormitory has reached its configured bed capacity."},409);
+    const learnerPlacement=await env.DB.prepare("SELECT id FROM boarding_allocations WHERE school_id=? AND learner_id=? AND status='active' AND (end_date IS NULL OR end_date='') LIMIT 1").bind(schoolId,learner.id).first();
+    if(learnerPlacement)return json({ok:false,error:"This learner already has an active boarding allocation. Vacate the current placement before creating another."},409);
+    const occupiedBed=await env.DB.prepare("SELECT id FROM boarding_allocations WHERE school_id=? AND house_id=? AND lower(trim(COALESCE(room_number,'')))=lower(trim(?)) AND lower(trim(COALESCE(bed_number,'')))=lower(trim(?)) AND status='active' AND (end_date IS NULL OR end_date='') LIMIT 1").bind(schoolId,house.id,String(values.room_number||""),String(values.bed_number||"")).first();
+    if(occupiedBed)return json({ok:false,error:"That room and bed are already occupied."},409);
+  }
   if(name==="departments"){
     const eligible=await env.DB.prepare("SELECT school_level,stage_code FROM grade_levels WHERE school_id=? AND is_active=1").bind(schoolId).all();
     if(!(eligible.results||[]).some(g=>isDepartmentApplicableLevel(g.school_level,g.stage_code)))return json({ok:false,error:"Departments are available only when this school offers CBE Junior/Senior School or 8-4-4 Secondary."},403);
@@ -1075,6 +1093,17 @@ export async function onRequestPatch({request,env}){
     if(name==="learning-areas"&&values.department_id){const department=await env.DB.prepare("SELECT id FROM school_departments WHERE id=? AND school_id=? AND status='active'").bind(String(values.department_id),schoolId).first();if(!department)return json({ok:false,error:"Choose an active department belonging to this school."},409);}
     const current=await env.DB.prepare("SELECT * FROM "+cfg.table+" WHERE "+where).bind(...(cfg.scope?[recordId,schoolId]:[recordId])).first();
     if(!current)return json({ok:false,error:"Record not found in the selected school."},404);
+    if(name==="boarding-houses"&&values.capacity!==undefined){
+      const capacity=Number(values.capacity),occupied=await env.DB.prepare("SELECT COUNT(*) AS total FROM boarding_allocations WHERE school_id=? AND house_id=? AND status='active' AND (end_date IS NULL OR end_date='')").bind(schoolId,recordId).first();
+      if(!Number.isInteger(capacity)||capacity<1||capacity>10000)return json({ok:false,error:"Dormitory capacity must be a whole number between 1 and 10,000."},400);
+      if(capacity<Number(occupied?.total||0))return json({ok:false,error:"Capacity cannot be lower than the number of currently occupied beds."},409);
+    }
+    if(name==="boarding-houses"&&values.supervisor_staff_id){const supervisor=await env.DB.prepare("SELECT id FROM staff_profiles WHERE id=? AND school_id=? AND employment_status='active'").bind(values.supervisor_staff_id,schoolId).first();if(!supervisor)return json({ok:false,error:"Choose an active staff supervisor from this school."},400);}
+    if(name==="boarding-allocations"){
+      if(values.house_id){const house=await env.DB.prepare("SELECT id FROM boarding_houses WHERE id=? AND school_id=?").bind(values.house_id,schoolId).first();if(!house)return json({ok:false,error:"Choose a dormitory belonging to this school."},400);}
+      if(values.learner_id){const learner=await env.DB.prepare("SELECT id FROM learners WHERE id=? AND school_id=?").bind(values.learner_id,schoolId).first();if(!learner)return json({ok:false,error:"Choose a learner registered in this school."},400);}
+      if(values.status!==undefined&&!["active","vacated","transferred","inactive"].includes(String(values.status)))return json({ok:false,error:"Choose a valid boarding allocation status."},400);
+    }
     if(name==="learning-areas"&&(values.name!==undefined||values.code!==undefined))values.school_customized=1;
     if(name==="learners"){
       for(const field of ["assessment_number","upi_number"]){
