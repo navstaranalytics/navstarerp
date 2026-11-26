@@ -123,7 +123,7 @@ assert.match(workerSource,/onRequestGet as schoolDocumentsGet/,"Worker must impo
 assert.match(workerSource,/route === "\/api\/documents"/,"Worker must expose the school document API route.");
 assert.match(documentsApi,/MAX_BYTES=25\*1024\*1024/,"School document uploads must enforce the 25 MB limit.");
 assert.match(documentsApi,/await env\.R2\.put\(key,bytes/,"School documents must be stored in R2.");
-assert.match(documentsApi,/Number\(stored\.size\)!==bytes\.byteLength/,"School document uploads must verify R2 read-back size.");
+assert.match(documentsApi,/sameBytes=!!stored&&storedBytes\.byteLength===bytes\.byteLength&&await hash\(storedBytes\)===await hash\(bytes\)/,"School document uploads must verify R2 read-back bytes by SHA-256.");
 assert.match(documentsApi,/school_id=\?/,"School document operations must be scoped to the authenticated school.");
 assert.match(documentsMigration,/CREATE TABLE IF NOT EXISTS school_documents/,"D1 must store school document metadata.");
 assert.match(schoolPortal,/id="documentsWorkspace"[\s\S]*?id="documentUploadForm"[\s\S]*?id="documentsTable"/,"School Admin must have a dedicated document upload and register workspace.");
