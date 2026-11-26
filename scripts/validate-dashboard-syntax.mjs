@@ -117,3 +117,14 @@ assert.match(schoolPortal,/data-delete-learner-photo/,"School learner records mu
 const photoDeleteSource=fs.readFileSync("functions/api/learner-photos.js","utf8");
 assert.match(photoDeleteSource,/export async function onRequestDeletePhoto/,"Learner passport photo removal must have a dedicated handler.");
 console.log("Learner passport photo removal route and UI regression checks passed.");
+const superAdminSource=fs.readFileSync("public/super-admin.html","utf8");
+const flatBillingStart=superAdminSource.lastIndexOf("Stage VI: enforce flat school subscription pricing");
+if(flatBillingStart<0)throw new Error("Stage VI flat school billing override is missing.");
+const flatBilling=superAdminSource.slice(flatBillingStart);
+assert.match(flatBilling,/max_learners:null,storage_gb:null/,"New and updated subscription plans must not impose learner or storage limits.");
+assert.match(flatBilling,/pages\.subscriptions=function\(\)/,"The live subscriptions page must use the D1-backed fixed-fee workspace.");
+assert.match(flatBilling,/No per-learner or storage charges/,"Subscription UI must clearly state fixed school pricing.");
+assert.doesNotMatch(flatBilling,/Maximum learners|Included storage \(GB\)|Learner count for billing/,"The effective plan and school billing forms must not expose learner or storage pricing.");
+assert.match(flatBilling,/billing_model:\["flat_school_year","flat_school_term"\]/,"Only annual and term billing models may be saved.");
+console.log("Flat annual/term school billing and no learner/storage pricing regression checks passed.");
+
