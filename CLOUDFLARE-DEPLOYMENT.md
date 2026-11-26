@@ -39,9 +39,15 @@ After a successful deployment, open:
 
 A successful health response is `{"ok":true,"service":"NAVSTAR ERP API","database":"connected"}`.
 
-## Important
+## Production acceptance status
 
-The school directory and dashboards remain interface prototypes until their data operations are connected to authenticated, tenant-scoped server APIs. Do not enter real student or confidential school data until authentication, authorization, audit logging, backups, and tenant isolation are implemented and tested.
+- The School Admin workspace uses authenticated, school-scoped D1 APIs; persistent school data is not stored in browser localStorage.
+- Learner passport photos, branding assets and the School Documents & Files register use R2, with D1 metadata and upload verification.
+- Curriculum visibility preserves Super Admin-enabled CBE and 8-4-4 configurations.
+- Automated D1 backup export is implemented, but the first live test could not upload to R2 because the GitHub Cloudflare API token still needs bucket-scoped R2 read/write permissions.
+- A controlled restore drill, authenticated live R2 health check and full school-role/tenant end-to-end acceptance are still outstanding.
+
+Do not mark the platform launch-ready until the R2 backup has been verified, a restore drill has succeeded, and school-admin, teacher, learner and parent workflows have passed end-to-end tests.
 
 ## Scheduled automation
 
