@@ -470,6 +470,14 @@ export async function onRequestGet({request,env}){
       const rows=await env.DB.prepare("SELECT setting_key,setting_value,updated_at FROM platform_settings ORDER BY setting_key").all();
       return json({ok:true,records:rows.results||[]});
     }
+    if(name==="learners"&&url.searchParams.get("summary")==="1"){
+      // The learner directory only needs identity and enrolment-facing columns.
+      // Avoid transferring large profile JSON blobs for every row in the table.
+      let sql="SELECT id,school_id,admission_number,assessment_number,upi_number,nemis_number,first_name,middle_name,last_name,gender,date_of_birth,status,pathway FROM learners WHERE school_id=?";
+      sql+=teacherFilter(name,a.user)+" ORDER BY rowid DESC LIMIT 1000";
+      const rows=await env.DB.prepare(sql).bind(schoolId).all();
+      return json({ok:true,records:rows.results||[]});
+    }
     if(name==="staff"){
       const roleKeys=a.user.role_keys||[a.user.role_key];
       if(roleKeys.includes("school_admin")||roleKeys.includes("school_administrator")||a.user.permissions.includes("school.users.manage")){
