@@ -83,6 +83,18 @@ const recoveryRunbook=fs.readFileSync("docs/disaster-recovery.md","utf8");
 assert.ok(recoveryRunbook.includes("R2 Object Read & Write"),"Recovery documentation must state the required R2 token permission.");
 assert.ok(recoveryRunbook.includes("restore drill"),"Recovery documentation must require a non-production restore drill.");
 console.log("Stage V backup workflow and disaster-recovery documentation checks passed.");
+const reportPublishApi=fs.readFileSync("functions/api/report-card-publish.js","utf8");
+assert.match(reportPublishApi,/academics\\.manage/,"Only authorised academic administrators may publish report cards.");
+assert.match(reportPublishApi,/status IN \\(\'draft\',\'approved\'\\)/,"Publication must only transition draft or approved reports.");
+assert.match(reportPublishApi,/at least one assessed learning area/,"Empty report cards must not be published.");
+assert.match(reportPublishApi,/report_card\\.published/,"Report-card publication must be audited.");
+const reportGenerator=fs.readFileSync("functions/api/report-card-generate.js","utf8");
+assert.match(reportGenerator,/Published reports are protected from draft regeneration/,"Draft generation must not silently overwrite published reports.");
+const reportPortal=fs.readFileSync("public/school-portal.html","utf8");
+assert.match(reportPortal,/data-publish-report/,"School administrators must have a publish action for draft report cards.");
+assert.match(reportPortal,/\\/api\\/report-cards\\/publish/,"The publish action must call the dedicated publication API.");
+assert.match(fs.readFileSync("worker.js","utf8"),/reportCardPublishPost/,"The worker must route report-card publication requests.");
+console.log("Stage IV report-card publication and published-record protection checks passed.");
 
 
 const dataApi=fs.readFileSync("functions/api/data.js","utf8");
