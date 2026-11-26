@@ -527,7 +527,8 @@ export async function onRequestGet({request,env}){
     }
     if(cfg.scope)sql+=teacherFilter(name,a.user);
     sql+=(name==="audit"?" ORDER BY created_at DESC LIMIT 500":" ORDER BY rowid DESC LIMIT 1000");
-    const rows=await env.DB.prepare(sql).bind(...queryArgs).all();
+    const statement=env.DB.prepare(sql);
+    const rows=cfg.scope?await statement.bind(...queryArgs).all():await statement.all();
     if(name==="attendance-sessions"){
       const session=await env.DB.prepare("SELECT id FROM attendance_sessions WHERE id=? AND school_id=?").bind(recordId,schoolId).first();
       if(!session)return json({ok:false,error:"Attendance register not found in this school."},404);
