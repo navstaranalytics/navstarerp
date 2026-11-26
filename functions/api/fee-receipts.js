@@ -25,7 +25,7 @@ export async function onRequestPost({request,env}){
  const receivedAt=String(b.received_at||new Date().toISOString().slice(0,10)).slice(0,30);
  const reference=String(b.reference||"").trim().slice(0,100)||null;
  if(!schoolId||!accountId)return json({ok:false,error:"Select a learner fee account."},400);
- if(!Number.isFinite(amount)||amount<=0||!Number.isFinite(Math.round(amount*100)/100))return json({ok:false,error:"Receipt amount must be greater than zero."},400);
+ if(!Number.isFinite(amount)||amount<=0||!Number.isFinite(Math.round(amount*100)/100)||Math.round(amount*100)/100<=0)return json({ok:false,error:"Receipt amount must be at least KES 0.01."},400);
  if(!["Cash","Bank transfer","Mobile money","Cheque","Card","Other"].includes(method))return json({ok:false,error:"Select a valid payment method."},400);
  if(!/^\d{4}-\d{2}-\d{2}$/.test(receivedAt)||!Number.isFinite(Date.parse(receivedAt+"T00:00:00Z"))||new Date(Date.parse(receivedAt+"T00:00:00Z")).toISOString().slice(0,10)!==receivedAt)return json({ok:false,error:"Enter a valid receipt date."},400);
  if(receivedAt>new Date().toISOString().slice(0,10))return json({ok:false,error:"A fee receipt cannot be dated in the future."},400);
