@@ -11,7 +11,7 @@ for (const file of ["public/school-portal.html","public/super-admin.html","publi
   console.log(file+": "+scripts.length+" inline script(s) passed");
 }
 
-for (const file of ["functions/api/data.js","functions/api/school-users.js","functions/api/auth.js","functions/api/schools.js","functions/api/learner-photos.js","functions/api/documents.js","worker.js"]) {
+for (const file of ["functions/api/data.js","functions/api/school-users.js","functions/api/auth.js","functions/api/schools.js","functions/api/learner-photos.js","functions/api/documents.js","functions/api/boarding-transfer.js","worker.js"]) {
   const source=fs.readFileSync(file,"utf8");
   const result=spawnSync(process.execPath,["--check","--input-type=module"],{input:source,encoding:"utf8"});
   if(result.status!==0) throw new Error(file+" syntax error:\\n"+result.stderr);
@@ -130,6 +130,16 @@ assert.match(schoolPortal,/id="documentsWorkspace"[\s\S]*?id="documentUploadForm
 assert.match(schoolPortal,/data-download-school-document/,"School Admin must be able to download stored documents.");
 assert.match(schoolPortal,/data-delete-school-document/,"School Admin must be able to delete stored documents.");
 console.log("R2 school document upload, tenant isolation, verification and register regression checks passed.");
+const boardingTransferApi=fs.readFileSync("functions/api/boarding-transfer.js","utf8");
+assert.match(workerSource,/onRequestPost as boardingTransferPost/,"Worker must import the boarding transfer API.");
+assert.match(workerSource,/route === "\/api\/boarding\/transfer"/,"Worker must route boarding transfer requests.");
+assert.match(boardingTransferApi,/env\.DB\.batch\(\[/,"Boarding transfer must close and create placements in one D1 batch.");
+assert.match(boardingTransferApi,/destination dormitory has reached its configured bed capacity/,"Boarding transfer must enforce destination capacity server-side.");
+assert.match(boardingTransferApi,/selected destination room and bed are already occupied/,"Boarding transfer must reject occupied destination beds.");
+assert.match(schoolPortal,/id="boardingTransferForm"[\s\S]*?id="boardingTransferHouse"/,"School Admin must provide a direct boarding transfer form.");
+assert.match(schoolPortal,/data-transfer-boarding/,"Active boarding placements must expose a transfer action.");
+console.log("Boarding transfer capacity, occupancy, atomic write and UI regression checks passed.");
+
 
 const superAdminSource=fs.readFileSync("public/super-admin.html","utf8");
 const flatBillingStart=superAdminSource.lastIndexOf("Stage VI: enforce flat school subscription pricing");
