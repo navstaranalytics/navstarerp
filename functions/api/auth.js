@@ -144,14 +144,20 @@ export async function getAuthenticatedSession(request, env) {
     await env.DB.prepare("UPDATE auth_sessions SET revoked_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE token_hash=? AND revoked_at IS NULL").bind(tokenHash).run();
     return null;
   }
-  await env.DB.prepare("UPDATE auth_sessions SET last_seen_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE token_hash=? AND revoked_at IS NULL AND (last_seen_at IS NULL OR last_seen_at<strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 minute'))").bind(tokenHash).run();
-  const roleRows=await env.DB.prepare("SELECT r.id,r.role_key,r.role_name FROM user_role_assignments a JOIN roles r ON r.id=a.role_id WHERE a.user_id=? AND a.school_id IS ? ORDER BY CASE r.role_key WHEN 'school_admin' THEN 0 WHEN 'principal' THEN 1 WHEN 'school_owner' THEN 2 WHEN 'deputy_principal' THEN 3 WHEN 'director_of_studies' THEN 4 WHEN 'deputy_director_of_studies' THEN 5 WHEN 'senior_teacher' THEN 6 WHEN 'head_of_department' THEN 7 WHEN 'teacher' THEN 8 WHEN 'class_teacher' THEN 9 WHEN 'parent_guardian' THEN 20 WHEN 'student_learner' THEN 21 ELSE 10 END").bind(row.id,row.school_id??null).all();
+  const [,,roleRows]=await Promise.all([
+    env.DB.prepare("UPDATE auth_sessions SET last_seen_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE token_hash=? AND revoked_at IS NULL AND (last_seen_at IS NULL OR last_seen_at<strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 minute'))").bind(tokenHash).run(),
+    Promise.resolve(null),
+    env.DB.prepare("SELECT r.id,r.role_key,r.role_name FROM user_role_assignments a JOIN roles r ON r.id=a.role_id WHERE a.user_id=? AND a.school_id IS ? ORDER BY CASE r.role_key WHEN 'school_admin' THEN 0 WHEN 'principal' THEN 1 WHEN 'school_owner' THEN 2 WHEN 'deputy_principal' THEN 3 WHEN 'director_of_studies' THEN 4 WHEN 'deputy_director_of_studies' THEN 5 WHEN 'senior_teacher' THEN 6 WHEN 'head_of_department' THEN 7 WHEN 'teacher' THEN 8 WHEN 'class_teacher' THEN 9 WHEN 'parent_guardian' THEN 20 WHEN 'student_learner' THEN 21 ELSE 10 END").bind(row.id,row.school_id??null).all()
+  ]);
   const roleKeysRaw=(roleRows.results||[]).map(x=>x.role_key);
   let accessMode="full",accessNotice="",subscriptionStatus=null;
   if(row.school_id){
     try{
-      const sub=await env.DB.prepare("SELECT ss.status,ss.next_due_date,p.grace_period_days FROM school_subscriptions ss LEFT JOIN subscription_plans p ON p.id=ss.plan_id WHERE ss.school_id=? ORDER BY ss.updated_at DESC LIMIT 1").bind(row.school_id).first();
-      let policy={};const setting=await env.DB.prepare("SELECT setting_value FROM platform_settings WHERE setting_key='subscription_policy'").first();try{policy=JSON.parse(setting?.setting_value||"{}")}catch{}
+      const [sub,setting]=await Promise.all([
+        env.DB.prepare("SELECT ss.status,ss.next_due_date,p.grace_period_days FROM school_subscriptions ss LEFT JOIN subscription_plans p ON p.id=ss.plan_id WHERE ss.school_id=? ORDER BY ss.updated_at DESC LIMIT 1").bind(row.school_id).first(),
+        env.DB.prepare("SELECT setting_value FROM platform_settings WHERE setting_key='subscription_policy'").first()
+      ]);
+      let policy={};try{policy=JSON.parse(setting?.setting_value||"{}")}catch{}
       subscriptionStatus=sub?.status||null;
       if(row.school_status==="suspended"||sub?.status==="suspended"){
         accessMode=policy.suspended_access||"billing_only";accessNotice="This school workspace is suspended under its subscription policy.";
