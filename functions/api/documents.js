@@ -1,6 +1,13 @@
 import {getAuthenticatedSession} from "./auth.js";
 const json=(data,status=200)=>Response.json(data,{status,headers:{"Cache-Control":"no-store"}});
 const MAX_BYTES=25*1024*1024;
+const TYPE_EXTENSIONS={
+ "application/pdf":["pdf"],"image/jpeg":["jpg","jpeg"],"image/png":["png"],"image/webp":["webp"],
+ "application/msword":["doc"],"application/vnd.openxmlformats-officedocument.wordprocessingml.document":["docx"],
+ "application/vnd.ms-excel":["xls"],"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":["xlsx"],
+ "application/vnd.ms-powerpoint":["ppt"],"application/vnd.openxmlformats-officedocument.presentationml.presentation":["pptx"],
+ "text/csv":["csv"],"text/plain":["txt"]
+};
 const ALLOWED_TYPES=new Set([
  "application/pdf","image/jpeg","image/png","image/webp",
  "application/msword","application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -8,7 +15,7 @@ const ALLOWED_TYPES=new Set([
  "application/vnd.ms-powerpoint","application/vnd.openxmlformats-officedocument.presentationml.presentation",
  "text/csv","text/plain"
 ]);
-const safeName=value=>String(value||"document").replace(/[\\/\\r\\n\\0]/g,"_").replace(/[^\\p{L}\\p{N}._() -]/gu,"_").slice(0,180)||"document";
+const safeName=value=>String(value||"document").replaceAll("\\","_").replaceAll("/","_").replace(/[\r\n\0]/g,"_").replace(/[^\p{L}\p{N}._() -]/gu,"_").slice(0,180)||"document";
 async function context(request,env){
  const user=await getAuthenticatedSession(request,env);
  if(!user)return {response:json({ok:false,error:"An active sign-in is required."},401)};
@@ -49,7 +56,8 @@ export async function onRequestPost({request,env}){
  const file=form.get("file"),title=String(form.get("title")||"").trim(),category=String(form.get("category")||"General").trim().slice(0,80)||"General";
  if(!(file instanceof File)||!file.size)return json({ok:false,error:"Choose a file to upload."},400);
  if(file.size>MAX_BYTES)return json({ok:false,error:"Each document must be 25 MB or smaller."},413);
- if(!ALLOWED_TYPES.has(file.type))return json({ok:false,error:"Unsupported file type. Upload PDF, image, Word, Excel, PowerPoint, CSV or text files."},415);
+ const extension=String(file.name||"").split(".").pop().toLowerCase();
+ if(!ALLOWED_TYPES.has(file.type)||!(TYPE_EXTENSIONS[file.type]||[]).includes(extension))return json({ok:false,error:"Unsupported or mismatched file type. Upload PDF, image, Word, Excel, PowerPoint, CSV or text files."},415);
  const original=safeName(file.name),displayTitle=(title||original).slice(0,160);
  const id=crypto.randomUUID(),key="schools/"+c.schoolId+"/documents/"+id+"/"+original;
  try{
