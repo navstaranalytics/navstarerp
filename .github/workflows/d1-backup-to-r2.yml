@@ -33,8 +33,11 @@ jobs:
           test -n "$CLOUDFLARE_API_TOKEN" || { echo "::error::CLOUDFLARE_API_TOKEN is required."; exit 1; }
           test -n "$CLOUDFLARE_ACCOUNT_ID" || { echo "::error::CLOUDFLARE_ACCOUNT_ID is required."; exit 1; }
 
-      - name: Install Wrangler
-        run: npm install --global wrangler@4
+      - name: Install Wrangler and verify AWS CLI
+        run: |
+          set -eu
+          npm install --global wrangler@4
+          aws --version
 
       - name: Export remote D1 database
         id: export
@@ -54,22 +57,31 @@ jobs:
           echo "byte_count=$BYTE_COUNT" >> "$GITHUB_OUTPUT"
           echo "sha256=$SHA256" >> "$GITHUB_OUTPUT"
 
-      - name: Upload D1 export to private R2 storage
+      - name: Upload D1 export to private R2 storage (S3-compatible API)
         id: upload
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_R2_API_TOKEN || secrets.CLOUDFLARE_API_TOKEN }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          AWS_EC2_METADATA_DISABLED: "true"
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           BACKUP_ID: ${{ steps.export.outputs.backup_id }}
           BACKUP_FILE: ${{ steps.export.outputs.backup_file }}
         run: |
           set -euo pipefail
+          test -n "$AWS_ACCESS_KEY_ID" || { echo "::error::CLOUDFLARE_R2_ACCESS_KEY_ID is required."; exit 1; }
+          test -n "$AWS_SECRET_ACCESS_KEY" || { echo "::error::CLOUDFLARE_R2_SECRET_ACCESS_KEY is required."; exit 1; }
           OBJECT_KEY="backups/d1/navstar-erp-db-$BACKUP_ID.sql"
-          wrangler r2 object put "navstar-erp-storage/$OBJECT_KEY" --remote --file "$BACKUP_FILE" --content-type "application/sql" --cache-control "private, no-store" --force
+          R2_ENDPOINT="https://$CLOUDFLARE_ACCOUNT_ID.r2.cloudflarestorage.com"
+          aws s3 cp "$BACKUP_FILE" "s3://navstar-erp-storage/$OBJECT_KEY" --endpoint-url "$R2_ENDPOINT" --region auto --content-type "application/sql" --cache-control "private, no-store"
           echo "object_key=$OBJECT_KEY" >> "$GITHUB_OUTPUT"
 
-      - name: Verify R2 backup checksum
+      - name: Verify R2 backup checksum (S3-compatible API)
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_R2_API_TOKEN || secrets.CLOUDFLARE_API_TOKEN }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          AWS_EC2_METADATA_DISABLED: "true"
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           BACKUP_FILE: ${{ steps.export.outputs.backup_file }}
           EXPECTED_BYTES: ${{ steps.export.outputs.byte_count }}
@@ -77,9 +89,12 @@ jobs:
           OBJECT_KEY: ${{ steps.upload.outputs.object_key }}
         run: |
           set -euo pipefail
+          test -n "$AWS_ACCESS_KEY_ID" || { echo "::error::CLOUDFLARE_R2_ACCESS_KEY_ID is required."; exit 1; }
+          test -n "$AWS_SECRET_ACCESS_KEY" || { echo "::error::CLOUDFLARE_R2_SECRET_ACCESS_KEY is required."; exit 1; }
           test -n "$OBJECT_KEY" || { echo "::error::The R2 upload did not return an object key."; exit 1; }
           VERIFY_FILE="$RUNNER_TEMP/navstar-backup-verify.sql"
-          wrangler r2 object get "navstar-erp-storage/$OBJECT_KEY" --remote --file "$VERIFY_FILE"
+          R2_ENDPOINT="https://$CLOUDFLARE_ACCOUNT_ID.r2.cloudflarestorage.com"
+          aws s3 cp "s3://navstar-erp-storage/$OBJECT_KEY" "$VERIFY_FILE" --endpoint-url "$R2_ENDPOINT" --region auto
           ACTUAL_BYTES="$(wc -c < "$VERIFY_FILE" | tr -d ' ')"
           ACTUAL_SHA256="$(sha256sum "$VERIFY_FILE" | awk '{print $1}')"
           test "$ACTUAL_BYTES" = "$EXPECTED_BYTES"
