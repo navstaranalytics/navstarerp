@@ -257,23 +257,7 @@ async function syncCompulsoryLearningAreas(db,schoolId,enrollmentId=null){
  const sql="INSERT INTO learner_learning_areas(id,school_id,enrollment_id,learner_id,learning_area_id,selection_type,status) SELECT lower(hex(randomblob(16))),e.school_id,e.id,e.learner_id,la.id,'mandatory','active' FROM learner_enrollments e JOIN learners l ON l.id=e.learner_id AND l.school_id=e.school_id JOIN grade_levels g ON g.id=e.grade_level_id AND g.school_id=e.school_id AND g.is_active=1 JOIN learning_areas la ON la.school_id=e.school_id AND la.curriculum=g.curriculum AND la.stage_code=g.stage_code AND la.is_active=1 AND la.is_mandatory=1 WHERE e.school_id=? AND e.status='active' AND (? IS NULL OR e.id=?) ON CONFLICT(enrollment_id,learning_area_id) DO UPDATE SET selection_type='mandatory',status=CASE WHEN learner_learning_areas.status='completed' THEN 'completed' ELSE 'active' END";
  await db.prepare(sql).bind(schoolId,enrollmentId,enrollmentId).run();
 }
-function gradeBelongsToSelectedLevels(grade,levels){
- if(!Array.isArray(levels)||!levels.length)return false;
- const selected=levels.map(x=>String(x||"").trim().toLowerCase().replace(/\s+school$/,""));
- const level=String(grade.school_level||"").trim().toLowerCase().replace(/\s+school$/,"");
- if(level&&selected.includes(level))return true;
- const code=String(grade.stage_code||"").toLowerCase();
- const stageName=String(grade.stage_name||"").trim().toLowerCase();
- if(stageName&&selected.includes(stageName))return true;
- if(code&&selected.includes(code))return true;
- if(/^pp[12]$/.test(code))return selected.includes("pre-primary")||selected.includes("pre primary");
- if(/^g[1-6]$/.test(code))return selected.includes("primary");
- if(/^g[7-9]$/.test(code))return selected.includes("junior")||selected.includes("junior school");
- if(/^g1[0-2]$/.test(code))return selected.includes("senior")||selected.includes("senior school");
- if(/^std[1-8]$/.test(code))return selected.some(x=>x.includes("8-4-4")&&x.includes("primary"));
- if(/^form[1-4]$/.test(code))return selected.some(x=>x.includes("8-4-4")&&(x.includes("secondary")||x.includes("form")))||selected.includes("secondary");
- return false;
-}
+import { gradeBelongsToSelectedLevels } from "../lib/curriculum-scope.js";
 async function validateConfiguredGrade(db,name,schoolId,values,current={}){
  if(name!=="grades")return null;
  const school=await db.prepare("SELECT school_levels_json FROM schools WHERE id=?").bind(schoolId).first();
@@ -497,7 +481,7 @@ export async function onRequestGet({request,env}){
     if(name==="grades"){
       const school=await env.DB.prepare("SELECT curriculum,curricula_json,school_levels_json FROM schools WHERE id=?").bind(schoolId).first();
       let levels=[],curricula=[];try{levels=JSON.parse(school?.school_levels_json||"[]")}catch{}try{curricula=JSON.parse(school?.curricula_json||"[]")}catch{}if(!Array.isArray(curricula)||!curricula.length)curricula=school?.curriculum?[school.curriculum]:[];
-      const allSchoolGrades=rows.results||[];const visibleGrades=a.user.is_super_admin||url.searchParams.has("includeInactive")?allSchoolGrades:allSchoolGrades.filter(g=>gradeBelongsToSelectedLevels(g,levels));return json({ok:true,records:visibleGrades,school:{curriculum:school?.curriculum||"Kenyan CBE",curricula,levels}});
+      const allSchoolGrades=rows.results||[];const visibleGrades=a.user.is_super_admin||url.searchParams.has("includeInactive")?allSchoolGrades:allSchoolGrades.filter(g=>gradeBelongsToSelectedLevels(g,levels,curricula));return json({ok:true,records:visibleGrades,school:{curriculum:school?.curriculum||"Kenyan CBE",curricula,levels}});
     }
     if(name==="learning-areas"&&!a.user.is_super_admin){
       return json({ok:true,records:rows.results||[]});
