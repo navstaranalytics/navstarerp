@@ -35,9 +35,27 @@ export async function onRequestGetStorageStatus({request,env}){
  if(!env.DB)return json({ok:false,error:"Database unavailable."},503);
  try{
   await ensureLogoTable(env.DB);
+  await env.DB.prepare("SELECT 1 AS ok").first();
   const row=await env.DB.prepare("SELECT storage_provider FROM platform_branding_assets WHERE asset_key=?").bind(LOGO_KEY).first();
-  return json({ok:true,storage:{database:"D1",fileStorage:env.R2?"R2":"D1",r2Available:!!env.R2,logoStoredIn:row?.storage_provider||"not uploaded",mode:env.R2?"D1 + R2 (automatic)":"D1 only",message:env.R2?"R2 binding detected. New logo uploads will use R2; D1 retains file metadata.":"R2 is optional. Uploads currently use D1; add an R2 binding later to enable automatic R2 storage."}});
- }catch{return json({ok:false,error:"Could not read storage configuration."},500)}
+  let r2Check={configured:!!env.R2,writeReadDelete:"not tested"};
+  if(env.R2){
+   const key="health-checks/storage-"+crypto.randomUUID();
+   const probe=new TextEncoder().encode("navstar-r2-health-check");
+   try{
+    await env.R2.put(key,probe,{httpMetadata:{contentType:"text/plain",cacheControl:"no-store"}});
+    const object=await env.R2.get(key);
+    if(!object)throw new Error("R2 object could not be read after upload.");
+    const received=new Uint8Array(await object.arrayBuffer());
+    if(received.length!==probe.length||received.some((value,index)=>value!==probe[index]))throw new Error("R2 read-back did not match the uploaded test object.");
+    r2Check={configured:true,writeReadDelete:"passed"};
+   }catch(error){
+    r2Check={configured:true,writeReadDelete:"failed",error:String(error?.message||error).slice(0,240)};
+   }finally{
+    try{await env.R2.delete(key)}catch(error){r2Check.cleanup="failed"}
+   }
+  }
+  return json({ok:true,storage:{database:"D1",databaseCheck:"passed",fileStorage:env.R2?"R2":"D1",r2Available:!!env.R2,r2Check,logoStoredIn:row?.storage_provider||"not uploaded",mode:env.R2?"D1 + R2 (automatic)":"D1 only",message:env.R2?(r2Check.writeReadDelete==="passed"?"D1 and R2 are connected; a temporary R2 upload, read-back and delete test passed.":"R2 is bound but its live write/read/delete test needs attention."):"R2 is not bound; file uploads are using the D1 fallback."}});
+ }catch(error){console.error("Storage status check failed",String(error?.message||error));return json({ok:false,error:"Could not complete the storage health check."},500)}
 }
 export async function onRequestGetLogo({env}){
  if(!env.DB)return new Response("Database unavailable.",{status:503});

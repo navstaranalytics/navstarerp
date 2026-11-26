@@ -61,3 +61,10 @@ const authApi=fs.readFileSync("functions/api/auth.js","utf8");
 assert.match(authApi,/\['parent','student'\]\.includes\(user\.role_key\).*parent-portal/,"Parent and learner accounts must be routed to their dedicated portal.");
 assert.match(authApi,/modules:user\.modules\|\|\[\],boardingType:user\.boardingType\|\|"day"/,"School feature configuration must be exposed to authenticated clients.");
 console.log("Parent and learner portal routing regression checks passed.");
+
+const parentPortal=fs.readFileSync("public/parent-portal.html","utf8");
+assert.match(parentPortal,/api\("\/api\/portal\/me"\)/,"Parent and learner portal must call the registered /api/portal/me route.");
+const brandingApi=fs.readFileSync("functions/api/branding.js","utf8");
+assert.match(brandingApi,/writeReadDelete:"passed"/,"Storage health check must verify an R2 upload, read-back and delete.");
+assert.match(brandingApi,/await env\.R2\.delete\(key\)/,"Temporary R2 health-check objects must be cleaned up.");
+console.log("Parent portal endpoint and live R2 storage-check regression assertions passed.");

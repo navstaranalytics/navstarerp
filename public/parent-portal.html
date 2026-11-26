@@ -67,7 +67,7 @@ async function load(){
   if(!["parent","student"].includes(me.user?.roleKey)){location.replace(me.user?.roleKey==="super_admin"?"/super-admin":"/school-portal");return}
   $("welcome").textContent="Welcome, "+(me.user.fullName||"");
   $("schoolName").textContent=me.user.schoolName||"Your school";
-  const data=await api("/api/portal");
+  const data=await api("/api/portal/me");
   learners=data.learners||[];
   if(!learners.length){showNotice("No learner is linked to this account yet. Please contact your school administrator to verify the parent or learner account link.");$("learnerPicker").innerHTML="";$("summary").innerHTML="";$("reports").innerHTML='<div class="empty">No linked learner records.</div>';$("timetable").innerHTML='<div class="empty">No timetable available.</div>';return}
   selectedId=learners[0].id;showNotice("Your linked learner information is up to date.");renderPicker();renderLearner();
