@@ -159,7 +159,6 @@ assert.match(workerSource,/onRequestGet as platformBackupsGet/,"Worker must impo
 assert.match(workerSource,/route === "\/api\/backups"/,"Worker must route the backup register and download API.");
 assert.match(backupApi,/getSuperAdminSession/,"Backup history and downloads must require Super Admin authentication.");
 assert.match(backupApi,/env\.R2\.get\(row\.object_key\)/,"Backup downloads must stream from R2.");
-assert.match(backupWorkflow,/workflow_run:[\s\S]*Navstar Cloudflare Setup and Deploy/,"A verified backup must run after successful production deployments.");
 assert.match(backupWorkflow,/wrangler d1 export navstar-erp-db --remote/,"Scheduled backup must export the remote D1 database.");
 assert.match(backupWorkflow,/wrangler r2 object put/,"Scheduled backup must upload the SQL export to R2.");
 assert.match(backupWorkflow,/wrangler r2 object get/,"Scheduled backup must read the R2 object back for verification.");

@@ -4,10 +4,6 @@ on:
   schedule:
     - cron: "0 2 * * *"
   workflow_dispatch:
-  workflow_run:
-    workflows: ["Navstar Cloudflare Setup and Deploy"]
-    types: [completed]
-    branches: [main]
 
 permissions:
   contents: read
@@ -18,7 +14,6 @@ concurrency:
 
 jobs:
   backup:
-    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     steps:
       - name: Check out Navstar
