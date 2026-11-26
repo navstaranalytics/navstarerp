@@ -49,6 +49,7 @@ const resources={
   "transport-routes":{table:"transport_routes",scope:true,fields:["route_name","vehicle_registration","driver_name","driver_phone","capacity","pickup_points_json","status"],required:["school_id","route_name"]},
   "transport-assignments":{table:"transport_assignments",scope:true,fields:["route_id","learner_id","pickup_point","effective_from","effective_to"],required:["school_id","route_id","learner_id"],refs:{route_id:"transport_routes",learner_id:"learners"}},
   "boarding-houses":{table:"boarding_houses",scope:true,fields:["name","house_type","capacity","supervisor_staff_id","status"],required:["school_id","name"],refs:{supervisor_staff_id:"staff_profiles"}},
+  "boarding-rooms":{table:"boarding_rooms",scope:true,fields:["house_id","room_number","capacity","status"],required:["school_id","house_id","room_number","capacity"],refs:{house_id:"boarding_houses"}},
   "boarding-allocations":{table:"boarding_allocations",scope:true,fields:["house_id","learner_id","room_number","bed_number","start_date","end_date","status"],required:["school_id","house_id","learner_id"],refs:{house_id:"boarding_houses",learner_id:"learners"}},
   payroll:{table:"payroll_records",scope:true,fields:["staff_id","pay_period","basic_pay","allowances","deductions","net_pay","status","paid_at"],required:["school_id","staff_id","pay_period"],refs:{staff_id:"staff_profiles"}},
   regions:{table:"platform_regions",scope:false,fields:["region_name","counties_json","is_active"],required:["region_name"]},
@@ -68,7 +69,7 @@ async function auth(request,env){
   const user=await getAuthenticatedSession(request,env);
   return user?{user}:{error:json({ok:false,error:"A valid active account session is required."},401)};
 }
-const boardingResource=name=>["boarding-houses","boarding-allocations"].includes(name);
+const boardingResource=name=>["boarding-houses","boarding-rooms","boarding-allocations"].includes(name);
 function boardingFeatureEnabled(user){
   if(user?.is_super_admin)return true;
   const modules=Array.isArray(user?.modules)?user.modules:[];
@@ -101,7 +102,7 @@ const permissionFor=(name,write=false)=>{
   if(name==="promotion-history")return "learners.view";
   if(["inventory","inventory-movements"].includes(name))return "inventory.manage";
   if(["library-books","library-loans"].includes(name))return "library.manage";
-  if(["transport-routes","transport-assignments","boarding-houses","boarding-allocations"].includes(name))return "school.settings.manage";
+  if(["transport-routes","transport-assignments","boarding-houses","boarding-rooms","boarding-allocations"].includes(name))return "school.settings.manage";
   if(name==="payroll")return write?"hr.manage":"hr.view";
   if(name==="report-cards")return write?"academics.manage":"reports.view";
   if(name==="discipline")return "discipline.manage";
@@ -710,6 +711,20 @@ export async function onRequestPost({request,env}){
     if(!String(values.name||"").trim())return json({ok:false,error:"Dormitory name is required."},400);
     if(values.supervisor_staff_id){const supervisor=await env.DB.prepare("SELECT id FROM staff_profiles WHERE id=? AND school_id=? AND employment_status='active'").bind(values.supervisor_staff_id,schoolId).first();if(!supervisor)return json({ok:false,error:"Choose an active staff supervisor from this school."},400);}
   }
+  if(name==="boarding-rooms"){
+    const house=await env.DB.prepare("SELECT id,capacity,status FROM boarding_houses WHERE id=? AND school_id=?").bind(values.house_id,schoolId).first(),capacity=Number(values.capacity),roomNumber=String(values.room_number||"").trim();
+    if(!house||String(house.status||"active")!=="active")return json({ok:false,error:"Choose an active dormitory belonging to this school."},400);
+    const room=await env.DB.prepare("SELECT id,room_number,capacity,status FROM boarding_rooms WHERE school_id=? AND house_id=? AND room_number=?").bind(schoolId,house.id,String(values.room_number||"").trim()).first();
+    const bedNumber=Number(values.bed_number);
+    if(!room||String(room.status||"active")!=="active")return json({ok:false,error:"Choose an active room configured under this dormitory."},400);
+    if(!Number.isInteger(bedNumber)||bedNumber<1||bedNumber>Number(room.capacity||0))return json({ok:false,error:"Bed number must be between 1 and the room's configured capacity."},400);
+    const roomOccupied=await env.DB.prepare("SELECT COUNT(*) AS total FROM boarding_allocations WHERE school_id=? AND house_id=? AND room_number=? AND status='active' AND (end_date IS NULL OR end_date='')").bind(schoolId,house.id,room.room_number).first();
+    if(Number(roomOccupied?.total||0)>=Number(room.capacity||0))return json({ok:false,error:"This room has reached its configured bed capacity."},409);
+
+    if(!roomNumber||!Number.isInteger(capacity)||capacity<1||capacity>1000)return json({ok:false,error:"Enter a room number and a positive whole-number bed capacity."},400);
+    const totals=await env.DB.prepare("SELECT COALESCE(SUM(capacity),0) AS total FROM boarding_rooms WHERE school_id=? AND house_id=?").bind(schoolId,house.id).first();
+    if(Number(totals?.total||0)+capacity>Number(house.capacity||0))return json({ok:false,error:"The total capacity of this dormitory's rooms cannot exceed the house capacity."},409);
+  }
   if(name==="boarding-allocations"){
     const house=await env.DB.prepare("SELECT id,capacity,status FROM boarding_houses WHERE id=? AND school_id=?").bind(values.house_id,schoolId).first();
     if(!house||String(house.status||"active")!=="active")return json({ok:false,error:"Choose an active dormitory belonging to this school."},400);
@@ -1097,6 +1112,19 @@ export async function onRequestPatch({request,env}){
       const capacity=Number(values.capacity),occupied=await env.DB.prepare("SELECT COUNT(*) AS total FROM boarding_allocations WHERE school_id=? AND house_id=? AND status='active' AND (end_date IS NULL OR end_date='')").bind(schoolId,recordId).first();
       if(!Number.isInteger(capacity)||capacity<1||capacity>10000)return json({ok:false,error:"Dormitory capacity must be a whole number between 1 and 10,000."},400);
       if(capacity<Number(occupied?.total||0))return json({ok:false,error:"Capacity cannot be lower than the number of currently occupied beds."},409);
+      const roomCapacity=await env.DB.prepare("SELECT COALESCE(SUM(capacity),0) AS total FROM boarding_rooms WHERE school_id=? AND house_id=?").bind(schoolId,recordId).first();
+      if(capacity<Number(roomCapacity?.total||0))return json({ok:false,error:"House capacity cannot be lower than the combined capacity of its rooms."},409);
+    }
+    if(name==="boarding-rooms"){
+      const houseId=String(values.house_id||current.house_id),house=await env.DB.prepare("SELECT id,capacity,status FROM boarding_houses WHERE id=? AND school_id=?").bind(houseId,schoolId).first();
+      if(!house||String(house.status||"active")!=="active")return json({ok:false,error:"Choose an active dormitory belonging to this school."},400);
+      const capacity=Number(values.capacity??current.capacity),roomNumber=String(values.room_number??current.room_number).trim();
+      if(!roomNumber||!Number.isInteger(capacity)||capacity<1||capacity>1000)return json({ok:false,error:"Enter a room number and a positive whole-number bed capacity."},400);
+      const occupied=await env.DB.prepare("SELECT COUNT(*) AS total FROM boarding_allocations WHERE school_id=? AND house_id=? AND room_number=? AND status='active' AND (end_date IS NULL OR end_date='')").bind(schoolId,current.house_id,current.room_number).first();
+      if(capacity<Number(occupied?.total||0))return json({ok:false,error:"Room capacity cannot be lower than its currently occupied beds."},409);
+      if(String(values.status??current.status)==="inactive"&&Number(occupied?.total||0)>0)return json({ok:false,error:"Vacate the room's active beds before deactivating it."},409);
+      const otherRooms=await env.DB.prepare("SELECT COALESCE(SUM(capacity),0) AS total FROM boarding_rooms WHERE school_id=? AND house_id=? AND id<>?").bind(schoolId,houseId,recordId).first();
+      if(Number(otherRooms?.total||0)+capacity>Number(house.capacity||0))return json({ok:false,error:"The combined room capacity cannot exceed the dormitory capacity."},409);
     }
     if(name==="boarding-houses"&&values.supervisor_staff_id){const supervisor=await env.DB.prepare("SELECT id FROM staff_profiles WHERE id=? AND school_id=? AND employment_status='active'").bind(values.supervisor_staff_id,schoolId).first();if(!supervisor)return json({ok:false,error:"Choose an active staff supervisor from this school."},400);}
     if(name==="boarding-allocations"){
