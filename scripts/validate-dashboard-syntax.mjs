@@ -127,7 +127,7 @@ assert.match(flatBilling,/No per-learner or storage charges/,"Subscription UI mu
 assert.doesNotMatch(flatBilling,/Maximum learners|Included storage \(GB\)|Learner count for billing/,"The effective plan and school billing forms must not expose learner or storage pricing.");
 assert.match(flatBilling,/billing_model:\["flat_school_year","flat_school_term"\]/,"Only annual and term billing models may be saved.");
 console.log("Flat annual/term school billing and no learner/storage pricing regression checks passed.");
-assert.match(schoolPortal,/id="staffWorkspace"[\s\S]*?id="staffDirectoryTable"/,"Staff workspace must contain a staff directory and data host.");
+assert.match(schoolPortal,/id="staffWorkspace"[\\s\\S]*?id="staffTable"/,"Staff workspace must contain a staff directory and data host.");
 assert.match(schoolPortal,/id="attendanceWorkspace"[\s\S]*?id="attendanceSessionForm"[\s\S]*?id="attendanceSessionsTable"/,"Attendance workspace must contain a register form and saved-register table.");
 assert.match(schoolPortal,/id="timetableWorkspace"[\s\S]*?id="timetableForm"[\s\S]*?id="timetableTable"/,"Timetable workspace must contain a lesson form and timetable host.");
 assert.match(schoolPortal,/id="financeWorkspace"[\s\S]*?id="feeStructureForm"[\s\S]*?id="learnerFeeForm"[\s\S]*?id="financeTransactionsTable"/,"Finance workspace must contain fee setup, learner fee assignment and transaction history.");
@@ -135,6 +135,7 @@ assert.match(schoolPortal,/id="assessmentsWorkspace"[\s\S]*?id="assessmentForm"[
 assert.match(schoolPortal,/id="analyticsWorkspace"[\s\S]*?id="analyticsFilters"[\s\S]*?id="analyticsResults"/,"School analytics must contain report filters and a results host.");
 assert.match(schoolPortal,/id="learningAreasWorkspace"[\s\S]*?id="learningAreasContent"/,"Learning Areas workspace must contain a live catalogue host.");
 assert.match(schoolPortal,/async function loadFinance\(\)[\s\S]*?fee-structures[\s\S]*?finance-transactions/,"Finance loader must read school fee structures and transaction records from the API.");
+assert.match(schoolPortal,/async function loadStaff\(\)[\s\S]*?staff/,"Staff workspace must load staff profiles from the API.");
 assert.match(schoolPortal,/async function loadAttendance\(\)[\s\S]*?attendance-sessions/,"Attendance loader must read saved registers from the API.");
 assert.match(schoolPortal,/async function loadTimetable\(\)[\s\S]*?timetable/,"Timetable loader must read saved timetable entries from the API.");
 assert.match(schoolPortal,/async function loadAssessments\(\)[\s\S]*?assessment-results/,"Assessments loader must read assessment results from the API.");
