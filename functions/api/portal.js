@@ -16,7 +16,7 @@ export async function onRequestGet({request,env}){
  if(!user)return json({ok:false,error:"Sign in to continue."},401);
  if(!["parent","student"].includes(user.role_key))return json({ok:false,error:"This portal endpoint is for parent and learner accounts."},403);
  try{
-  await env.DB.prepare("CREATE TABLE IF NOT EXISTS learner_user_links (id TEXT PRIMARY KEY,school_id TEXT NOT NULL REFERENCES schools(id) ON DELETE CASCADE,learner_id TEXT NOT NULL REFERENCES learners(id) ON DELETE CASCADE,user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,created_by TEXT REFERENCES users(id) ON DELETE SET NULL,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,UNIQUE(school_id,learner_id),UNIQUE(school_id,user_id))").run();
+  // learner_user_links is provisioned by migration 0004; keep portal reads read-only.
   let links;
   if(user.role_key==="parent"){
    links=await env.DB.prepare(`SELECT l.id,l.admission_number,l.first_name,l.middle_name,l.last_name,l.status,l.pathway
