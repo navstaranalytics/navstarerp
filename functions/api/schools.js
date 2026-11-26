@@ -298,6 +298,10 @@ export async function onRequestPatch({request,env}){
     const levels=JSON.stringify(selectedLevels);
     const academicConfigChanged=JSON.stringify(curricula)!==JSON.stringify(previousCurricula)||levels!==String(existing.school_levels_json||"[]");
     meta.modules=Array.isArray(body.modules)?[...new Set(body.modules.map(clean).filter(Boolean))]:modulesForLevels(selectedLevels);
+    // Boarding is a school-level feature configured by Super Admin. Keep the
+    // module flag synchronized with the explicit Day/Boarding/Both setting.
+    if(meta.boardingType!=="day")meta.modules=[...new Set([...meta.modules,"Boarding"])];
+    else meta.modules=meta.modules.filter(x=>String(x).toLowerCase()!=="boarding");
     const curriculum=curricula.length>1?"Multiple curricula":(curricula[0]||existing.curriculum);
     await env.DB.batch([
       env.DB.prepare(`UPDATE schools SET school_code=?,name=?,registration_number=?,institution_type=?,ownership=?,county=?,sub_county=?,town=?,physical_address=?,contact_person=?,contact_email=?,contact_phone=?,curriculum=?,curricula_json=?,school_levels_json=?,status=?,activated_at=CASE WHEN ?='active' THEN COALESCE(activated_at,strftime('%Y-%m-%dT%H:%M:%fZ','now')) ELSE activated_at END,updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?`)
