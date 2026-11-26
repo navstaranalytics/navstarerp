@@ -215,6 +215,8 @@ assert.ok(brandingApi.includes('writeReadDelete:"failed",cleanup:"failed"'),"R2 
 assert.ok(backupAdminSource.includes("R2 read/write/delete verified"),"Super Admin health must distinguish a successful R2 operation test from a configured binding.");
 assert.ok(backupAdminSource.includes("Checking D1 and R2 upload, read-back and cleanup"),"Super Admin settings must actively refresh live storage health.");
 assert.ok(backupAdminSource.includes("private R2 for uploaded files"),"Super Admin storage guidance must describe the deployed D1 and R2 architecture accurately.");
+assert.ok(backupAdminSource.includes("Automated backup service"),"Super Admin backup page must describe the automated D1-to-R2 workflow.");
+assert.equal(backupAdminSource.includes("No live backup service is connected"),false,"Super Admin must not claim that the deployed automated backup service is disconnected.");
 console.log("Automated D1-to-R2 backup, checksum verification and Super Admin register regression checks passed.");
 const healthApi=fs.readFileSync("functions/api/health.js","utf8");
 const deployWorkflow=fs.readFileSync(".github/workflows/cloudflare-setup-deploy.yml","utf8");
