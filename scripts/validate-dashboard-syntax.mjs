@@ -51,3 +51,8 @@ assert.match(authSource,/modules,boardingType/,"Authenticated school sessions mu
 const schoolsSource=fs.readFileSync("functions/api/schools.js","utf8");
 assert.match(schoolsSource,/meta\.modules=meta\.modules\.filter\(x=>String\(x\)\.toLowerCase\(\)!=="boarding"\)/,"Day schools must not retain an enabled Boarding module.");
 console.log("Stage III boarding configuration and workspace regression checks passed.");
+
+const dataApi=fs.readFileSync("functions/api/data.js","utf8");
+assert.equal((dataApi.match(/enforceBoardingFeature\(a\.user,name\)/g)||[]).length,4,"Boarding reads, creates, updates and deletes must all enforce the school feature gate.");
+assert.match(dataApi,/Boarding is not enabled for this school/,"Day schools must receive a clear API-level boarding feature denial.");
+console.log("Boarding API feature-gate regression checks passed.");

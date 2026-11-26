@@ -68,6 +68,17 @@ async function auth(request,env){
   const user=await getAuthenticatedSession(request,env);
   return user?{user}:{error:json({ok:false,error:"A valid active account session is required."},401)};
 }
+const boardingResource=name=>["boarding-houses","boarding-allocations"].includes(name);
+function boardingFeatureEnabled(user){
+  if(user?.is_super_admin)return true;
+  const modules=Array.isArray(user?.modules)?user.modules:[];
+  return ["boarding","both"].includes(String(user?.boardingType||"day").toLowerCase())||
+    modules.some(module=>String(module).trim().toLowerCase()==="boarding");
+}
+function enforceBoardingFeature(user,name){
+  return !boardingResource(name)||boardingFeatureEnabled(user)?null:
+    json({ok:false,error:"Boarding is not enabled for this school. Ask Navstar Super Admin to enable Boarding or Both in the school configuration."},403);
+}
 const permissionFor=(name,write=false)=>{
   if(["plans","regions","platform-users","analytics","settings","audit","ai-usage","integrations"].includes(name))return "platform.manage";
   if(name==="subscriptions")return write?"platform.manage":"school.settings.manage";
@@ -370,6 +381,7 @@ export async function onRequestGet({request,env}){
     }catch(error){console.error("NAVSTAR central learning-area catalogue read",error);return json({ok:false,error:"Could not load the central learning-area catalogue."},500)}
   }
   if(!cfg)return json({ok:false,error:"Unknown data resource."},404);
+  const boardingAccess=enforceBoardingFeature(a.user,name);if(boardingAccess)return boardingAccess;
   if(name==="departments")await ensureDepartments(env.DB);
   if(name==="learners")await ensureLearnerIdentifierColumns(env.DB);
   // Backfill every curriculum already enabled by Super Admin for existing schools.
@@ -675,6 +687,7 @@ export async function onRequestPost({request,env}){
   }
   const name=new URL(request.url).pathname.split("/").pop(),cfg=resources[name];
   if(!cfg)return json({ok:false,error:"Unknown data resource."},404);
+  const boardingAccess=enforceBoardingFeature(a.user,name);if(boardingAccess)return boardingAccess;
   if(name==="departments")await ensureDepartments(env.DB);
   if(name==="learners")await ensureLearnerIdentifierColumns(env.DB);
   if(!allowed(a.user,permissionFor(name,true)))return json({ok:false,error:"Your role does not have permission to change this resource."},403);
@@ -886,6 +899,7 @@ export async function onRequestDelete({request,env}){
   const a=await auth(request,env);if(a.error)return a.error;
   const parts=new URL(request.url).pathname.split("/"),name=parts[parts.length-2],recordId=decodeURIComponent(parts[parts.length-1]||""),cfg=resources[name];
   if(!cfg||!recordId)return json({ok:false,error:"Unknown resource or record."},404);
+  const boardingAccess=enforceBoardingFeature(a.user,name);if(boardingAccess)return boardingAccess;
   if(name==="departments")await ensureDepartments(env.DB);
   if(!["years","terms","school-events","grading-schemes","streams","departments","grades","learning-areas","learners","attendance-sessions"].includes(name))return json({ok:false,error:"Deletion is not enabled for this resource."},405);
   if(!allowed(a.user,name==="attendance-sessions"?"attendance.manage":permissionFor(name,true)))return json({ok:false,error:"Your role does not have permission to delete this record."},403);
@@ -1007,6 +1021,7 @@ export async function onRequestPatch({request,env}){
   const a=await auth(request,env);if(a.error)return a.error;
   const parts=new URL(request.url).pathname.split("/"),name=parts[parts.length-2],recordId=decodeURIComponent(parts[parts.length-1]||""),cfg=resources[name];
   if(!cfg||!recordId)return json({ok:false,error:"Unknown resource or record."},404);
+  const boardingAccess=enforceBoardingFeature(a.user,name);if(boardingAccess)return boardingAccess;
   if(name==="departments")await ensureDepartments(env.DB);
   if(name==="learners")await ensureLearnerIdentifierColumns(env.DB);
   if(!allowed(a.user,permissionFor(name,true)))return json({ok:false,error:"Your role does not have permission to change this resource."},403);
