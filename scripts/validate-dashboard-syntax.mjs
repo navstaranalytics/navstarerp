@@ -265,3 +265,22 @@ assert.match(schoolPortal,/CBE uses Grade Teacher; 8-4-4 uses Class Teacher/,"Te
 assert.match(schoolPortal,/filter\(schoolGradeEnabledForSchool\)/,"Teacher workload and class-teacher lists must respect each school's enabled curriculum and grade scope.");
 assert.match(schoolPortal,/staff-learning-areas/,"Teacher allocations must be checked against each teacher's approved subject combination.");
 console.log("Teacher subject eligibility, workload and curriculum-specific class/grade teacher regression checks passed.");
+
+const familyPortalApi=fs.readFileSync("functions/api/portal.js","utf8");
+const guardianApi=fs.readFileSync("functions/api/learner-guardians.js","utf8");
+const mpesaApi=fs.readFileSync("functions/api/mpesa-payments.js","utf8");
+const familyPortalUi=fs.readFileSync("public/parent-portal.html","utf8");
+assert.match(familyPortalApi,/\[\s*"parent","student"\s*\]\.includes\(user\.role_key\)/,"Family portal data must be restricted to parent and learner accounts.");
+assert.match(familyPortalApi,/l\.school_id=g\.school_id/,"Parent-linked learners must be constrained to the guardian's school.");
+assert.match(familyPortalApi,/x\.school_id=\?/,"Learner self-service links must be school-scoped.");
+assert.match(familyPortalApi,/status='published'/,"Family portal must expose published report cards only.");
+assert.match(familyPortalApi,/ats\.academic_year_id IS \?/,"Family attendance must be scoped to the learner's active academic year.");
+assert.match(guardianApi,/learners\.view/,"Guardian reads must require learner-view permission.");
+assert.match(guardianApi,/learners\.manage/,"Guardian changes must require learner-management permission.");
+assert.match(guardianApi,/WHERE id=\? AND school_id=\?/,"Guardian writes must remain school-scoped.");
+assert.match(mpesaApi,/searchParams\.get\("token"\)!==env\.MPESA_CALLBACK_TOKEN/,"M-Pesa callbacks must authenticate the configured callback token.");
+assert.match(mpesaApi,/requested>outstanding/,"M-Pesa invoice payments must not exceed the outstanding balance.");
+assert.match(mpesaApi,/Math\.abs\(paidAmount-Number\(payment\.amount\)\)<0\.01/,"M-Pesa callbacks must reconcile the provider-confirmed amount before confirming payment.");
+assert.match(familyPortalUi,/Published reports/,"Parent and learner portal must display published reports.");
+assert.match(familyPortalUi,/Class timetable/,"Parent and learner portal must display the learner timetable.");
+console.log("Stage IV family portal, guardian tenant isolation and M-Pesa payment verification regression checks passed.");
