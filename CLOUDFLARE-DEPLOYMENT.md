@@ -63,7 +63,7 @@ For online Navstar subscription payments, add these Worker variables/secrets in 
 - `MPESA_SHORTCODE`
 - `MPESA_PASSKEY` (secret)
 - `MPESA_CALLBACK_TOKEN` (secret; use a long random value)
-- `MPESA_ENV` (`sandbox` for testing, then `production`)
+- `MPESA_ENVIRONMENT` (`sandbox` for testing, then `production`; this is the exact Worker variable read by the Daraja integration)
 - Optional: `MPESA_TRANSACTION_TYPE`
 
 See `MPESA-INTEGRATION.md` for the Daraja callback and sandbox test procedure. Online payment confirmation is not accepted as production-ready until these values are configured, the provider status reports all required credentials present, and a sandbox STK callback has been verified end-to-end. The latest GitHub deployment did not run the manual M-Pesa secret-sync step; verify the existing Worker secrets in Cloudflare before testing.
