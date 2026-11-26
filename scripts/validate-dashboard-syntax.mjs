@@ -68,3 +68,7 @@ const brandingApi=fs.readFileSync("functions/api/branding.js","utf8");
 assert.match(brandingApi,/writeReadDelete:"passed"/,"Storage health check must verify an R2 upload, read-back and delete.");
 assert.match(brandingApi,/await env\.R2\.delete\(key\)/,"Temporary R2 health-check objects must be cleaned up.");
 console.log("Parent portal endpoint and live R2 storage-check regression assertions passed.");
+
+assert.match(parentPortal,/data\.learningAreas/,"Parent portal must render published learning-area results.");
+assert.match(parentPortal,/data\.overallScore/,"Parent portal must display the published overall result.");
+console.log("Published report detail rendering regression checks passed.");
