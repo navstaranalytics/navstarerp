@@ -44,8 +44,9 @@ A successful health response is `{"ok":true,"service":"NAVSTAR ERP API","databas
 - The School Admin workspace uses authenticated, school-scoped D1 APIs; persistent school data is not stored in browser localStorage.
 - Learner passport photos, branding assets and the School Documents & Files register use R2, with D1 metadata and upload verification.
 - Curriculum visibility preserves Super Admin-enabled CBE and 8-4-4 configurations.
-- Automated D1 backup export is implemented, but the first live test could not upload to R2 because the GitHub Cloudflare API token still needs bucket-scoped R2 read/write permissions.
-- A controlled restore drill, authenticated live R2 health check and full school-role/tenant end-to-end acceptance are still outstanding.
+- Automated D1 backup export is implemented. The latest recorded backup run successfully exported the remote D1 database but its R2 object upload failed with HTTP 403 Forbidden. The GitHub `CLOUDFLARE_API_TOKEN` therefore still needs R2 object read/write permission for `navstar-erp-storage`; rerun the backup workflow after correcting the token and require upload, read-back checksum verification and D1 backup-register confirmation before marking backups healthy.
+- The authenticated Super Admin live R2 upload/read/delete health check is implemented. It must be run and confirmed in the deployed Super Admin workspace.
+- A controlled non-production restore drill and full school-role/tenant end-to-end acceptance remain outstanding.
 
 Do not mark the platform launch-ready until the R2 backup has been verified, a restore drill has succeeded, and school-admin, teacher, learner and parent workflows have passed end-to-end tests.
 
@@ -65,7 +66,7 @@ For online Navstar subscription payments, add these Worker variables/secrets in 
 - `MPESA_ENV` (`sandbox` for testing, then `production`)
 - Optional: `MPESA_TRANSACTION_TYPE`
 
-See `MPESA-INTEGRATION.md` for the Daraja callback and sandbox test procedure. Online payment confirmation is not active until these values are configured and a test callback succeeds.
+See `MPESA-INTEGRATION.md` for the Daraja callback and sandbox test procedure. Online payment confirmation is not accepted as production-ready until these values are configured, the provider status reports all required credentials present, and a sandbox STK callback has been verified end-to-end. The latest GitHub deployment did not run the manual M-Pesa secret-sync step; verify the existing Worker secrets in Cloudflare before testing.
 
 
 ## Automated D1 backups
