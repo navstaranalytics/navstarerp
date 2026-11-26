@@ -109,6 +109,11 @@ assert.ok(feeReceiptsApi.includes("beforeAccount.balance"),"Receipts must be che
 assert.ok(feeReceiptsApi.includes("A fee receipt cannot be dated in the future."),"Future-dated fee receipts must be rejected.");
 assert.ok(feeReceiptsApi.includes("Receipt saved, audited and fee balance reconciled."),"Receipt and account changes must be verified after saving.");
 console.log("Stage VI fee receipt audit, validation and balance reconciliation checks passed.");
+const dateValidationSource=fs.readFileSync("functions/api/data.js","utf8");
+assert.ok(dateValidationSource.includes("!/^\\d{4}-\\d{2}-\\d{2}$/.test(end)"),"Academic-year and term end dates must use a working ISO date pattern.");
+assert.ok(dateValidationSource.includes("values.mark_submission_deadline&&!/^\\d{4}-\\d{2}-\\d{2}$/.test(values.mark_submission_deadline)"),"Mark submission deadlines must use a working ISO date pattern.");
+assert.equal(dateValidationSource.includes("!/^\\\\d{4}-\\\\d{2}-\\\\d{2}$/.test(end)"),false,"Academic calendar validation must not contain a double-escaped digit pattern.");
+console.log("Stage II academic calendar and Stage IV mark-deadline date validation checks passed.");
 
 
 const dataApi=fs.readFileSync("functions/api/data.js","utf8");
