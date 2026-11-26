@@ -903,69 +903,6 @@ $("view").addEventListener("click",async e=>{
 
 /* Super Admin account menu and secure account management. */
 let signedInUser=null;
-/* Stage VI: enforce flat school subscription pricing and D1-only plan management. */
-mapDatabasePlan=function(row){
- let capabilities=[],methods=[],stages=[];
- try{capabilities=JSON.parse(row.capabilities_json||"[]")}catch{}
- try{methods=JSON.parse(row.payment_methods_json||"[]")}catch{}
- try{stages=JSON.parse(row.school_levels_json||"[]")}catch{}
- return {id:row.id,planCode:row.plan_code,name:row.name,price:Number(row.rate_kes||0),rate:Number(row.rate_kes||0),ai:Number(row.ai_credits||0),setupFee:Number(row.onboarding_fee_kes||0),graceDays:Number(row.grace_period_days||0),paymentMethods:methods,stages,modules:normalizePlanModules(capabilities),billingModel:["flat_school_year","flat_school_term"].includes(row.billing_model)?row.billing_model:"flat_school_year",description:row.description||"",active:Number(row.is_active)!==0};
-};
-loadPlansFromDatabase=async function(){
- let data=await schoolApi("/api/data/plans"),rows=data.records||[];
- if(rows.length<6){
-  const settings=await schoolApi("/api/data/settings"),marker="navstar.subscription.default_plans_seeded.v1",seeded=(settings.records||[]).some(x=>x.setting_key===marker&&x.setting_value==="yes");
-  if(!seeded||rows.length<6){
-   const defaults=[
-    {name:"Trial",rate:0,ai:25,modules:["Core","Learners","Staff & HR","Academics","Attendance","Reports"]},
-    {name:"Starter",rate:12000,ai:0,modules:["Core","Learners","Staff & HR","Academics","Attendance","Examinations","Reports"]},
-    {name:"Basic",rate:24000,ai:50,modules:["Core","Learners","Staff & HR","Academics","Attendance","Examinations","Reports","Parent Portal"]},
-    {name:"Professional",rate:48000,ai:250,modules:["Core","Learners","Staff & HR","Academics","Attendance","Examinations","Reports","Parent Portal","Timetable","Finance","Admissions"]},
-    {name:"Premium",rate:85000,ai:1000,modules:["Core","Learners","Staff & HR","Academics","Attendance","Examinations","Reports","Parent Portal","Timetable","Finance","Admissions","Library","Transport","Inventory","SMS & Notifications","AI Analytics"]},
-    {name:"Enterprise",rate:150000,ai:3000,modules:["All modules","Core","Learners","Staff & HR","Academics","Attendance","Examinations","Reports","Parent Portal","Timetable","Finance","Admissions","Library","Transport","Boarding","Inventory","SMS & Notifications","AI Analytics","Priority support"]}
-   ];
-   for(const p of defaults){
-    if(rows.some(row=>String(row.name||"").toLowerCase()===p.name.toLowerCase()))continue;
-    const code=p.name.toLowerCase().replace(/[^a-z0-9]+/g,"-");
-    await schoolApi("/api/data/plans",{method:"POST",body:JSON.stringify({plan_code:code,name:p.name,description:p.modules.join(", "),billing_model:"flat_school_year",rate_kes:p.rate,max_learners:null,storage_gb:null,ai_credits:p.ai,onboarding_fee_kes:0,grace_period_days:7,learner_count_basis:"active",capabilities_json:JSON.stringify(p.modules),school_levels_json:JSON.stringify(["PP1","PP2","Grade 1–6","Grade 7–9","Grade 10–12","Forms 1–4"]),payment_methods_json:JSON.stringify(["mpesa","bank","card","manual"]),is_active:1})});
-   }
-   await schoolApi("/api/data/settings",{method:"POST",body:JSON.stringify({setting_key:marker,setting_value:"yes"})});
-   data=await schoolApi("/api/data/plans");rows=data.records||[];
-  }
- }
- const records=rows.map(mapDatabasePlan);plans.splice(0,plans.length,...records);return records;
-};
-savePlanToDatabase=async function(plan,existingId){
- const modules=normalizePlanModules(plan.modules),body={plan_code:plan.planCode||String(plan.name).toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,""),name:plan.name,description:modules.join(", "),billing_model:["flat_school_year","flat_school_term"].includes(plan.billingModel)?plan.billingModel:"flat_school_year",rate_kes:Number(plan.rate??plan.price)||0,max_learners:null,storage_gb:null,ai_credits:Number(plan.ai)||0,onboarding_fee_kes:Number(plan.setupFee)||0,grace_period_days:Number(plan.graceDays??7),learner_count_basis:"active",capabilities_json:JSON.stringify(modules),school_levels_json:JSON.stringify(plan.stages||[]),payment_methods_json:JSON.stringify(plan.paymentMethods||["mpesa","bank","card","manual"]),is_active:plan.active===false?0:1};
- let saved;if(existingId)saved=await schoolApi("/api/data/plans/"+encodeURIComponent(existingId),{method:"PATCH",body:JSON.stringify(body)});else saved=await schoolApi("/api/data/plans",{method:"POST",body:JSON.stringify(body)});
- await loadPlansFromDatabase();const savedId=saved.record?.id||existingId;if(!plans.some(x=>savedId?x.id===savedId:x.planCode===body.plan_code))throw new Error("Plan save was submitted, but D1 read-back verification failed. Refresh and check before retrying.");
-};
-schoolBilling=function(s){if(!s.billing||typeof s.billing!=="object")s.billing={billingModel:null,rate:null,discount:0,cycleStart:"",nextDue:"",paymentTerms:"Due within 14 days",status:"trial",paidModules:[],moduleAmounts:{}};return s.billing};
-estimatedSchoolCharge=function(s){
- const p=plans.find(x=>x.name===s.plan)||{},b=schoolBilling(s),mode=b.billingModel||p.billingModel||"flat_school_year",rate=Number(b.rate??p.rate??p.price??0)||0,discount=Math.max(0,Math.min(100,Number(b.discount)||0)),moduleTotal=(b.paidModules||[]).reduce((sum,name)=>sum+Math.max(0,Number((b.moduleAmounts||{})[name])||0),0),base=mode==="flat_school_term"||mode==="flat_school_year"?rate:0;
- return {mode,rate,base,discount,moduleTotal,total:Math.round((base*(1-discount/100)+moduleTotal)*100)/100,unit:mode==="flat_school_term"?"term":"academic year"};
-};
-addPlan=function(){
- openModal("Create subscription plan",'<div class="form-grid">'+field("Plan name *","name","e.g. School Growth")+selectFieldRich("Billing period","billingModel",BILLING_MODELS.map(x=>({value:x.value,label:x.label})),"flat_school_year")+field("Flat school fee (KES)","rate","0","number",0)+field("AI / automation credits per billing cycle","ai","0","number",0)+field("One-time onboarding fee (KES)","setupFee","0","number",0)+field("Grace period (days)","graceDays","7","number",7)+'<div class="form-field full"><label>Included capabilities</label><input class="field" name="modules" placeholder="Core, academics, reports…"></div><div class="form-field full"><label>Available school stages</label><div class="county-grid">'+["PP1","PP2","Grade 1–6","Grade 7–9","Grade 10–12","Forms 1–4"].map(x=>'<label class="county"><input type="checkbox" name="stages" value="'+esc(x)+'" checked> '+esc(x)+'</label>').join("")+'</div></div></div><div class="notice">This is a fixed school fee per academic year or per term. It is not multiplied by learner numbers and has no storage allowance or storage charge.</div>',async d=>{
-  const name=d.get("name")?.trim(),rate=Number(d.get("rate")),model=d.get("billingModel");if(!name||plans.some(x=>x.name.toLowerCase()===name.toLowerCase())||!Number.isFinite(rate)||rate<0){toast("Enter a unique plan name and a valid non-negative school fee.");return}
-  const plan={name,billingModel:model,rate,price:rate,ai:Math.max(0,Number(d.get("ai"))||0),setupFee:Math.max(0,Number(d.get("setupFee"))||0),graceDays:Math.max(0,Number(d.get("graceDays"))||0),modules:d.get("modules")?.trim()||"Core",stages:d.getAll("stages"),active:true};
-  try{await savePlanToDatabase(plan);closeModal();render();toast("Subscription plan saved and verified in D1.")}catch(error){toast(error.message||"Plan could not be saved to D1.")}
- });
-};
-editPlan=function(name){
- const p=plans.find(x=>x.name===name);if(!p?.id){toast("Plan record is not loaded from D1. Refresh and try again.");return}
- openModal("Configure plan · "+p.name,'<div class="form-grid">'+field("Plan name *","name","","text",p.name)+selectFieldRich("Billing period","billingModel",BILLING_MODELS.map(x=>({value:x.value,label:x.label})),p.billingModel||"flat_school_year")+field("Flat school fee (KES)","rate","0","number",p.rate??p.price??0)+field("AI / automation credits per billing cycle","ai","0","number",p.ai)+field("One-time onboarding fee (KES)","setupFee","0","number",p.setupFee||0)+field("Grace period (days)","graceDays","7","number",p.graceDays??7)+'<div class="form-field full"><label>Included capabilities</label><input class="field" name="modules" value="'+esc((p.modules||[]).join(", "))+'"></div><div class="form-field full"><label>Available school stages</label><div class="county-grid">'+["PP1","PP2","Grade 1–6","Grade 7–9","Grade 10–12","Forms 1–4"].map(x=>'<label class="county"><input type="checkbox" name="stages" value="'+esc(x)+'" '+((p.stages||[]).includes(x)?"checked":"")+'> '+esc(x)+'</label>').join("")+'</div></div><label class="county"><input type="checkbox" name="active" '+(p.active===false?"":"checked")+'> Plan available for new school subscriptions</label></div>',async d=>{
-  const nextName=d.get("name")?.trim(),rate=Number(d.get("rate"));if(!nextName||plans.some(x=>x.id!==p.id&&x.name.toLowerCase()===nextName.toLowerCase())||!Number.isFinite(rate)||rate<0){toast("Check the unique plan name and valid school fee.");return}
-  const next={...p,name:nextName,billingModel:d.get("billingModel"),rate,price:rate,ai:Math.max(0,Number(d.get("ai"))||0),setupFee:Math.max(0,Number(d.get("setupFee"))||0),graceDays:Math.max(0,Number(d.get("graceDays"))||0),modules:d.get("modules")?.split(/[,;+]/).map(x=>x.trim()).filter(Boolean)||["Core"],stages:d.getAll("stages"),active:d.has("active")};
-  try{await savePlanToDatabase(next,p.id);await loadSchoolsFromDatabase();await loadSchoolBillingFromDatabase();closeModal();render();toast("Plan changes saved and verified in D1.")}catch(error){toast(error.message||"Plan changes could not be saved.")}
- });
-};
-pages.subscriptions=function(){
- const active=plans.filter(p=>p.active!==false),modelLabel=p=>billingModel(p).label;
- const planCards=active.map(p=>'<div class="panel panel-pad"><div class="eyebrow">'+esc(p.name.toUpperCase())+' PLAN</div><h2 style="font-size:23px;margin:8px 0">'+money(p.rate||p.price||0)+' / '+esc(billingModel(p).unit)+'</h2><div class="muted small">'+esc(modelLabel(p))+'</div><div class="list" style="padding:10px 0"><div class="list-row"><b>AI / automation credits</b><span>'+esc(p.ai||0)+'</span></div><div class="list-row"><b>One-time onboarding</b><span>'+money(p.setupFee||0)+'</span></div><div class="list-row"><b>Grace period</b><span>'+esc(p.graceDays??0)+' days</span></div><div class="list-row"><b>Included capabilities</b><span>'+esc((p.modules||[]).join(", ")||"Core")+'</span></div></div><button class="btn light" data-action="edit-plan" data-plan="'+esc(p.name)+'">Configure plan</button></div>').join("");
- const contracts=schools.map(s=>{const p=plans.find(x=>x.name===s.plan)||{},b=schoolBilling(s),e=estimatedSchoolCharge(s);return '<tr><td><b>'+esc(s.name)+'</b><div class="subline">'+esc(s.county||"")+'</div></td><td>'+esc(s.plan||"—")+'</td><td>'+esc(billingModel({billingModel:b.billingModel||p.billingModel}).label)+'</td><td>'+esc((b.paidModules||[]).join(", ")||"None")+'</td><td>'+money(e.total)+' / '+esc(e.unit)+'</td><td>'+esc(b.nextDue||s.expiry||"Not set")+'</td><td>'+pill(b.status||s.status||"trial")+'</td><td><button class="tiny" data-action="school-billing" data-id="'+esc(s.id)+'">Configure</button></td></tr>'}).join("");
- return head("REVENUE & ACCESS","Subscription plans & pricing","Configure fixed school subscriptions, assign paid capabilities and set annual or term billing. No per-learner or storage charges.","<button class=\"btn\" data-action=\"add-plan\">＋ Create pricing plan</button>")+'<div class="grid2">'+(planCards||'<div class="empty">No subscription plans are configured yet.</div>')+'</div>'+panel("School billing contracts","Assign each school a plan, term/year rate, due date and separately priced optional modules.",'<div class="table-wrap"><table><thead><tr><th>School</th><th>Plan</th><th>Billing period</th><th>Paid capabilities</th><th>Estimated invoice</th><th>Next due</th><th>Status</th><th>Action</th></tr></thead><tbody>'+(contracts||'<tr><td colspan="8" class="empty">No school contracts registered.</td></tr>')+'</tbody></table></div>')+'<div class="notice">Plan and subscription records are loaded from and saved to central D1. Existing historical learner-count and storage columns are retained for compatibility only; they do not affect pricing or school access.</div>';
-};
 async function loadSignedInUser(){
   const response=await fetch('/api/auth/me',{credentials:'same-origin'});
   if(!response.ok){location.replace('/login');return}
@@ -1234,6 +1171,70 @@ $('logoutButton').addEventListener('click',async()=>{
   $('accountMenu').classList.remove('open');
   try{await fetch('/api/auth/logout',{method:'POST',credentials:'same-origin'})}finally{location.replace('/login')}
 });
+/* Stage VI: enforce flat school subscription pricing and D1-only plan management. */
+mapDatabasePlan=function(row){
+ let capabilities=[],methods=[],stages=[];
+ try{capabilities=JSON.parse(row.capabilities_json||"[]")}catch{}
+ try{methods=JSON.parse(row.payment_methods_json||"[]")}catch{}
+ try{stages=JSON.parse(row.school_levels_json||"[]")}catch{}
+ return {id:row.id,planCode:row.plan_code,name:row.name,price:Number(row.rate_kes||0),rate:Number(row.rate_kes||0),ai:Number(row.ai_credits||0),setupFee:Number(row.onboarding_fee_kes||0),graceDays:Number(row.grace_period_days||0),paymentMethods:methods,stages,modules:normalizePlanModules(capabilities),billingModel:["flat_school_year","flat_school_term"].includes(row.billing_model)?row.billing_model:"flat_school_year",description:row.description||"",active:Number(row.is_active)!==0};
+};
+loadPlansFromDatabase=async function(){
+ let data=await schoolApi("/api/data/plans"),rows=data.records||[];
+ if(rows.length<6){
+  const settings=await schoolApi("/api/data/settings"),marker="navstar.subscription.default_plans_seeded.v1",seeded=(settings.records||[]).some(x=>x.setting_key===marker&&x.setting_value==="yes");
+  if(!seeded||rows.length<6){
+   const defaults=[
+    {name:"Trial",rate:0,ai:25,modules:["Core","Learners","Staff & HR","Academics","Attendance","Reports"]},
+    {name:"Starter",rate:12000,ai:0,modules:["Core","Learners","Staff & HR","Academics","Attendance","Examinations","Reports"]},
+    {name:"Basic",rate:24000,ai:50,modules:["Core","Learners","Staff & HR","Academics","Attendance","Examinations","Reports","Parent Portal"]},
+    {name:"Professional",rate:48000,ai:250,modules:["Core","Learners","Staff & HR","Academics","Attendance","Examinations","Reports","Parent Portal","Timetable","Finance","Admissions"]},
+    {name:"Premium",rate:85000,ai:1000,modules:["Core","Learners","Staff & HR","Academics","Attendance","Examinations","Reports","Parent Portal","Timetable","Finance","Admissions","Library","Transport","Inventory","SMS & Notifications","AI Analytics"]},
+    {name:"Enterprise",rate:150000,ai:3000,modules:["All modules","Core","Learners","Staff & HR","Academics","Attendance","Examinations","Reports","Parent Portal","Timetable","Finance","Admissions","Library","Transport","Boarding","Inventory","SMS & Notifications","AI Analytics","Priority support"]}
+   ];
+   for(const p of defaults){
+    if(rows.some(row=>String(row.name||"").toLowerCase()===p.name.toLowerCase()))continue;
+    const code=p.name.toLowerCase().replace(/[^a-z0-9]+/g,"-");
+    await schoolApi("/api/data/plans",{method:"POST",body:JSON.stringify({plan_code:code,name:p.name,description:p.modules.join(", "),billing_model:"flat_school_year",rate_kes:p.rate,max_learners:null,storage_gb:null,ai_credits:p.ai,onboarding_fee_kes:0,grace_period_days:7,learner_count_basis:"active",capabilities_json:JSON.stringify(p.modules),school_levels_json:JSON.stringify(["PP1","PP2","Grade 1–6","Grade 7–9","Grade 10–12","Forms 1–4"]),payment_methods_json:JSON.stringify(["mpesa","bank","card","manual"]),is_active:1})});
+   }
+   await schoolApi("/api/data/settings",{method:"POST",body:JSON.stringify({setting_key:marker,setting_value:"yes"})});
+   data=await schoolApi("/api/data/plans");rows=data.records||[];
+  }
+ }
+ const records=rows.map(mapDatabasePlan);plans.splice(0,plans.length,...records);return records;
+};
+savePlanToDatabase=async function(plan,existingId){
+ const modules=normalizePlanModules(plan.modules),body={plan_code:plan.planCode||String(plan.name).toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,""),name:plan.name,description:modules.join(", "),billing_model:["flat_school_year","flat_school_term"].includes(plan.billingModel)?plan.billingModel:"flat_school_year",rate_kes:Number(plan.rate??plan.price)||0,max_learners:null,storage_gb:null,ai_credits:Number(plan.ai)||0,onboarding_fee_kes:Number(plan.setupFee)||0,grace_period_days:Number(plan.graceDays??7),learner_count_basis:"active",capabilities_json:JSON.stringify(modules),school_levels_json:JSON.stringify(plan.stages||[]),payment_methods_json:JSON.stringify(plan.paymentMethods||["mpesa","bank","card","manual"]),is_active:plan.active===false?0:1};
+ let saved;if(existingId)saved=await schoolApi("/api/data/plans/"+encodeURIComponent(existingId),{method:"PATCH",body:JSON.stringify(body)});else saved=await schoolApi("/api/data/plans",{method:"POST",body:JSON.stringify(body)});
+ await loadPlansFromDatabase();const savedId=saved.record?.id||existingId;if(!plans.some(x=>savedId?x.id===savedId:x.planCode===body.plan_code))throw new Error("Plan save was submitted, but D1 read-back verification failed. Refresh and check before retrying.");
+};
+schoolBilling=function(s){if(!s.billing||typeof s.billing!=="object")s.billing={billingModel:null,rate:null,discount:0,cycleStart:"",nextDue:"",paymentTerms:"Due within 14 days",status:"trial",paidModules:[],moduleAmounts:{}};return s.billing};
+estimatedSchoolCharge=function(s){
+ const p=plans.find(x=>x.name===s.plan)||{},b=schoolBilling(s),mode=b.billingModel||p.billingModel||"flat_school_year",rate=Number(b.rate??p.rate??p.price??0)||0,discount=Math.max(0,Math.min(100,Number(b.discount)||0)),moduleTotal=(b.paidModules||[]).reduce((sum,name)=>sum+Math.max(0,Number((b.moduleAmounts||{})[name])||0),0),base=mode==="flat_school_term"||mode==="flat_school_year"?rate:0;
+ return {mode,rate,base,discount,moduleTotal,total:Math.round((base*(1-discount/100)+moduleTotal)*100)/100,unit:mode==="flat_school_term"?"term":"academic year"};
+};
+addPlan=function(){
+ openModal("Create subscription plan",'<div class="form-grid">'+field("Plan name *","name","e.g. School Growth")+selectFieldRich("Billing period","billingModel",BILLING_MODELS.map(x=>({value:x.value,label:x.label})),"flat_school_year")+field("Flat school fee (KES)","rate","0","number",0)+field("AI / automation credits per billing cycle","ai","0","number",0)+field("One-time onboarding fee (KES)","setupFee","0","number",0)+field("Grace period (days)","graceDays","7","number",7)+'<div class="form-field full"><label>Included capabilities</label><input class="field" name="modules" placeholder="Core, academics, reports…"></div><div class="form-field full"><label>Available school stages</label><div class="county-grid">'+["PP1","PP2","Grade 1–6","Grade 7–9","Grade 10–12","Forms 1–4"].map(x=>'<label class="county"><input type="checkbox" name="stages" value="'+esc(x)+'" checked> '+esc(x)+'</label>').join("")+'</div></div></div><div class="notice">This is a fixed school fee per academic year or per term. It is not multiplied by learner numbers and has no storage allowance or storage charge.</div>',async d=>{
+  const name=d.get("name")?.trim(),rate=Number(d.get("rate")),model=d.get("billingModel");if(!name||plans.some(x=>x.name.toLowerCase()===name.toLowerCase())||!Number.isFinite(rate)||rate<0){toast("Enter a unique plan name and a valid non-negative school fee.");return}
+  const plan={name,billingModel:model,rate,price:rate,ai:Math.max(0,Number(d.get("ai"))||0),setupFee:Math.max(0,Number(d.get("setupFee"))||0),graceDays:Math.max(0,Number(d.get("graceDays"))||0),modules:d.get("modules")?.trim()||"Core",stages:d.getAll("stages"),active:true};
+  try{await savePlanToDatabase(plan);closeModal();render();toast("Subscription plan saved and verified in D1.")}catch(error){toast(error.message||"Plan could not be saved to D1.")}
+ });
+};
+editPlan=function(name){
+ const p=plans.find(x=>x.name===name);if(!p?.id){toast("Plan record is not loaded from D1. Refresh and try again.");return}
+ openModal("Configure plan · "+p.name,'<div class="form-grid">'+field("Plan name *","name","","text",p.name)+selectFieldRich("Billing period","billingModel",BILLING_MODELS.map(x=>({value:x.value,label:x.label})),p.billingModel||"flat_school_year")+field("Flat school fee (KES)","rate","0","number",p.rate??p.price??0)+field("AI / automation credits per billing cycle","ai","0","number",p.ai)+field("One-time onboarding fee (KES)","setupFee","0","number",p.setupFee||0)+field("Grace period (days)","graceDays","7","number",p.graceDays??7)+'<div class="form-field full"><label>Included capabilities</label><input class="field" name="modules" value="'+esc((p.modules||[]).join(", "))+'"></div><div class="form-field full"><label>Available school stages</label><div class="county-grid">'+["PP1","PP2","Grade 1–6","Grade 7–9","Grade 10–12","Forms 1–4"].map(x=>'<label class="county"><input type="checkbox" name="stages" value="'+esc(x)+'" '+((p.stages||[]).includes(x)?"checked":"")+'> '+esc(x)+'</label>').join("")+'</div></div><label class="county"><input type="checkbox" name="active" '+(p.active===false?"":"checked")+'> Plan available for new school subscriptions</label></div>',async d=>{
+  const nextName=d.get("name")?.trim(),rate=Number(d.get("rate"));if(!nextName||plans.some(x=>x.id!==p.id&&x.name.toLowerCase()===nextName.toLowerCase())||!Number.isFinite(rate)||rate<0){toast("Check the unique plan name and valid school fee.");return}
+  const next={...p,name:nextName,billingModel:d.get("billingModel"),rate,price:rate,ai:Math.max(0,Number(d.get("ai"))||0),setupFee:Math.max(0,Number(d.get("setupFee"))||0),graceDays:Math.max(0,Number(d.get("graceDays"))||0),modules:d.get("modules")?.split(/[,;+]/).map(x=>x.trim()).filter(Boolean)||["Core"],stages:d.getAll("stages"),active:d.has("active")};
+  try{await savePlanToDatabase(next,p.id);await loadSchoolsFromDatabase();await loadSchoolBillingFromDatabase();closeModal();render();toast("Plan changes saved and verified in D1.")}catch(error){toast(error.message||"Plan changes could not be saved.")}
+ });
+};
+pages.subscriptions=function(){
+ const active=plans.filter(p=>p.active!==false),modelLabel=p=>billingModel(p).label;
+ const planCards=active.map(p=>'<div class="panel panel-pad"><div class="eyebrow">'+esc(p.name.toUpperCase())+' PLAN</div><h2 style="font-size:23px;margin:8px 0">'+money(p.rate||p.price||0)+' / '+esc(billingModel(p).unit)+'</h2><div class="muted small">'+esc(modelLabel(p))+'</div><div class="list" style="padding:10px 0"><div class="list-row"><b>AI / automation credits</b><span>'+esc(p.ai||0)+'</span></div><div class="list-row"><b>One-time onboarding</b><span>'+money(p.setupFee||0)+'</span></div><div class="list-row"><b>Grace period</b><span>'+esc(p.graceDays??0)+' days</span></div><div class="list-row"><b>Included capabilities</b><span>'+esc((p.modules||[]).join(", ")||"Core")+'</span></div></div><button class="btn light" data-action="edit-plan" data-plan="'+esc(p.name)+'">Configure plan</button></div>').join("");
+ const contracts=schools.map(s=>{const p=plans.find(x=>x.name===s.plan)||{},b=schoolBilling(s),e=estimatedSchoolCharge(s);return '<tr><td><b>'+esc(s.name)+'</b><div class="subline">'+esc(s.county||"")+'</div></td><td>'+esc(s.plan||"—")+'</td><td>'+esc(billingModel({billingModel:b.billingModel||p.billingModel}).label)+'</td><td>'+esc((b.paidModules||[]).join(", ")||"None")+'</td><td>'+money(e.total)+' / '+esc(e.unit)+'</td><td>'+esc(b.nextDue||s.expiry||"Not set")+'</td><td>'+pill(b.status||s.status||"trial")+'</td><td><button class="tiny" data-action="school-billing" data-id="'+esc(s.id)+'">Configure</button></td></tr>'}).join("");
+ return head("REVENUE & ACCESS","Subscription plans & pricing","Configure fixed school subscriptions, assign paid capabilities and set annual or term billing. No per-learner or storage charges.","<button class=\"btn\" data-action=\"add-plan\">＋ Create pricing plan</button>")+'<div class="grid2">'+(planCards||'<div class="empty">No subscription plans are configured yet.</div>')+'</div>'+panel("School billing contracts","Assign each school a plan, term/year rate, due date and separately priced optional modules.",'<div class="table-wrap"><table><thead><tr><th>School</th><th>Plan</th><th>Billing period</th><th>Paid capabilities</th><th>Estimated invoice</th><th>Next due</th><th>Status</th><th>Action</th></tr></thead><tbody>'+(contracts||'<tr><td colspan="8" class="empty">No school contracts registered.</td></tr>')+'</tbody></table></div>')+'<div class="notice">Plan and subscription records are loaded from and saved to central D1. Existing historical learner-count and storage columns are retained for compatibility only; they do not affect pricing or school access.</div>';
+};
+
 loadSignedInUser();
 
 (async()=>{
