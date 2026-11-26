@@ -142,6 +142,10 @@ assert.match(parentPortal,/data\.learningAreas/,"Parent portal must render publi
 assert.match(parentPortal,/data\.overallScore/,"Parent portal must display the published overall result.");
 console.log("Published report detail rendering regression checks passed.");
 
+const workspaceSummaryApi=fs.readFileSync("functions/api/school-workspace-summary.js","utf8");
+assert.match(workspaceSummaryApi,/Date\.now\(\)\+3\*60\*60\*1000/,"School dashboard date-based totals must use the Kenya local date, not UTC.");
+console.log("School dashboard Kenya-timezone date regression check passed.");
+
 const portalApi=fs.readFileSync("functions/api/portal.js","utf8");
 assert.match(portalApi,/JOIN attendance_sessions ats ON ats\.id=ar\.session_id/,"Family attendance summaries must join the learner's attendance sessions.");
 assert.match(portalApi,/ats\.academic_year_id IS \?/,"Family attendance summaries must be scoped to the active enrolment academic year.");
