@@ -11,7 +11,7 @@ for (const file of ["public/school-portal.html","public/super-admin.html","publi
   console.log(file+": "+scripts.length+" inline script(s) passed");
 }
 
-for (const file of ["functions/api/data.js","functions/api/school-users.js","functions/api/auth.js","functions/api/schools.js","functions/api/learner-photos.js","functions/api/documents.js","functions/api/boarding-transfer.js","functions/api/backups.js","worker.js"]) {
+for (const file of ["functions/api/data.js","functions/api/school-users.js","functions/api/auth.js","functions/api/schools.js","functions/api/learner-photos.js","functions/api/documents.js","functions/api/boarding-transfer.js","functions/api/backups.js","functions/api/health.js","worker.js"]) {
   const source=fs.readFileSync(file,"utf8");
   const result=spawnSync(process.execPath,["--check","--input-type=module"],{input:source,encoding:"utf8"});
   if(result.status!==0) throw new Error(file+" syntax error:\\n"+result.stderr);
@@ -168,6 +168,14 @@ assert.match(backupMigration,/CREATE TABLE IF NOT EXISTS platform_backups/,"D1 m
 assert.match(backupAdminSource,/Automated D1 backups/,"Super Admin must have a verified backup register.");
 assert.match(backupAdminSource,/data-download-platform-backup/,"Super Admin must be able to download verified backup files.");
 console.log("Automated D1-to-R2 backup, checksum verification and Super Admin register regression checks passed.");
+const healthApi=fs.readFileSync("functions/api/health.js","utf8");
+const deployWorkflow=fs.readFileSync(".github/workflows/cloudflare-setup-deploy.yml","utf8");
+for(const table of ["school_documents","boarding_rooms","platform_backups"])assert.match(healthApi,new RegExp('"'+table+'"'),"Live health schema must require "+table+".");
+assert.match(deployWorkflow,/Verify live Worker and D1 schema/,"Production deploy must perform a live health check.");
+assert.match(deployWorkflow,/https:\/\/navstarerp\.navstaranalytics\.workers\.dev\/api\/health/,"Live health check must target the deployed Worker.");
+assert.match(deployWorkflow,/r\.database!==['"]connected['"]\|\|r\.schema!==['"]ready['"]/,"Live health check must verify connected D1 and complete schema.");
+console.log("Live Worker and D1 schema health-check regression checks passed.");
+
 
 
 
