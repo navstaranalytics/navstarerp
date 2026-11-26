@@ -309,7 +309,7 @@ export async function onRequestPostLogin({ request, env }) {
     const issued=await issueSession(env,request,user.id,body.remember===true);
     await env.DB.prepare("UPDATE users SET last_login_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?").bind(user.id).run();
     await audit(env,user.id,"auth.login","success",{role:user.role_key,schoolId:user.school_id||null});
-    const redirect=user.role_key==='super_admin'?'/super-admin':'/school-portal';
+    const redirect=user.role_key==='super_admin'?'/super-admin':(['parent','student'].includes(user.role_key)?'/parent-portal':'/school-portal');
     return json({ok:true,message:"Signed in successfully.",redirect,sessionToken:issued.token,user:{fullName:user.full_name,username,role:user.role_name,roleKey:user.role_key,schoolId:user.school_id||null,schoolName:user.school_name||null}});
   }catch(error){console.error("Navstar login failure:",String(error?.message||error));return json({ok:false,error:"Sign-in is temporarily unavailable. Please try again."},503)}
 }
@@ -318,7 +318,7 @@ export async function onRequestPostLogin({ request, env }) {
 export async function onRequestGetMe({request,env}) {
  const user=await getAuthenticatedSession(request,env);
  if(!user)return json({ok:false,authenticated:false},401);
- return json({ok:true,authenticated:true,user:{id:user.id,fullName:user.full_name,username:user.username,email:user.email,phone:user.phone,role:user.role_name,roleKey:user.role_key,roleKeys:user.role_keys||[user.role_key],roleNames:user.role_names||[user.role_name],schoolId:user.school_id||null,schoolName:user.school_name||null,permissions:user.permissions,scope:user.scope,designation:user.designation,organisationName:user.organisation_name,profilePhotoUrl:user.profile_photo_url,country:user.country,timezone:user.timezone,currency:user.currency,accessMode:user.access_mode||"full",accessNotice:user.access_notice||"",subscriptionStatus:user.subscription_status||null,sessionIdleTimeoutMinutes:user.session_idle_timeout_minutes||30}});
+ return json({ok:true,authenticated:true,user:{id:user.id,fullName:user.full_name,username:user.username,email:user.email,phone:user.phone,role:user.role_name,roleKey:user.role_key,roleKeys:user.role_keys||[user.role_key],roleNames:user.role_names||[user.role_name],schoolId:user.school_id||null,schoolName:user.school_name||null,permissions:user.permissions,scope:user.scope,designation:user.designation,organisationName:user.organisation_name,profilePhotoUrl:user.profile_photo_url,country:user.country,timezone:user.timezone,currency:user.currency,modules:user.modules||[],boardingType:user.boardingType||"day",accessMode:user.access_mode||"full",accessNotice:user.access_notice||"",subscriptionStatus:user.subscription_status||null,sessionIdleTimeoutMinutes:user.session_idle_timeout_minutes||30}});
 }
 export async function onRequestPostLogout({ request, env }) {
   const token = String(request.headers.get("X-Navstar-Session")||cookieValue(request, COOKIE)).trim();
