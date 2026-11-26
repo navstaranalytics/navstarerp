@@ -716,6 +716,7 @@ export async function onRequestPost({request,env}){
     if(!house||String(house.status||"active")!=="active")return json({ok:false,error:"Choose an active dormitory belonging to this school."},400);
 
     if(!roomNumber||!Number.isInteger(capacity)||capacity<1||capacity>1000)return json({ok:false,error:"Enter a room number and a positive whole-number bed capacity."},400);
+    values.room_number=roomNumber;
     const duplicateRoom=await env.DB.prepare("SELECT id FROM boarding_rooms WHERE school_id=? AND house_id=? AND lower(trim(room_number))=lower(trim(?)) LIMIT 1").bind(schoolId,house.id,roomNumber).first();if(duplicateRoom)return json({ok:false,error:"That room number already exists in this dormitory."},409);
     const existingBeds=await env.DB.prepare("SELECT COUNT(*) AS total FROM boarding_allocations WHERE school_id=? AND house_id=? AND lower(trim(room_number))=lower(trim(?)) AND status='active' AND (end_date IS NULL OR end_date='')").bind(schoolId,house.id,roomNumber).first();if(capacity<Number(existingBeds?.total||0))return json({ok:false,error:"Room capacity cannot be lower than its existing active placements."},409);
     const totals=await env.DB.prepare("SELECT COALESCE(SUM(capacity),0) AS total FROM boarding_rooms WHERE school_id=? AND house_id=?").bind(schoolId,house.id).first();
@@ -728,6 +729,7 @@ export async function onRequestPost({request,env}){
     const bedNumber=Number(values.bed_number);
     if(!room||String(room.status||"active")!=="active")return json({ok:false,error:"Choose an active room configured under this dormitory."},400);
     if(!Number.isInteger(bedNumber)||bedNumber<1||bedNumber>Number(room.capacity||0))return json({ok:false,error:"Bed number must be between 1 and the room's configured capacity."},400);
+    values.room_number=room.room_number;values.bed_number=String(bedNumber);
     const roomOccupied=await env.DB.prepare("SELECT COUNT(*) AS total FROM boarding_allocations WHERE school_id=? AND house_id=? AND room_number=? AND status='active' AND (end_date IS NULL OR end_date='')").bind(schoolId,house.id,room.room_number).first();
     if(Number(roomOccupied?.total||0)>=Number(room.capacity||0))return json({ok:false,error:"This room has reached its configured bed capacity."},409);
     const learner=await env.DB.prepare("SELECT id FROM learners WHERE id=? AND school_id=?").bind(values.learner_id,schoolId).first();
