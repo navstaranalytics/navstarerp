@@ -302,3 +302,8 @@ assert.match(mpesaWorkflow,/put_secret MPESA_ENVIRONMENT/,"Manual deployment sec
 assert.match(workerSource,/route === "\/api\/payments\/mpesa\/callback"/,"Worker must route Safaricom callbacks to the authenticated callback handler.");
 assert.match(workerSource,/route === "\/api\/payment-provider-status"/,"Super Admin provider status must have a live API route.");
 console.log("M-Pesa environment configuration and callback routing regression checks passed.");
+
+assert.match(backupWorkflow,/CLOUDFLARE_R2_API_TOKEN \|\| secrets\.CLOUDFLARE_API_TOKEN/,"Backup upload and read-back must support a dedicated R2 token while preserving a safe fallback.");
+assert.match(backupWorkflow,/name: Verify R2 backup checksum[\s\S]*?name: Register verified backup in D1/,"R2 read-back verification must complete before the D1 backup register is written.");
+assert.match(deploymentGuide,/CLOUDFLARE_R2_API_TOKEN/,"Deployment guide must explain the dedicated R2 backup token option.");
+console.log("Dedicated R2 backup credentials and verification-before-registration regression checks passed.");
