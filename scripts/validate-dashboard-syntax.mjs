@@ -72,3 +72,9 @@ console.log("Parent portal endpoint and live R2 storage-check regression asserti
 assert.match(parentPortal,/data\.learningAreas/,"Parent portal must render published learning-area results.");
 assert.match(parentPortal,/data\.overallScore/,"Parent portal must display the published overall result.");
 console.log("Published report detail rendering regression checks passed.");
+
+const portalApi=fs.readFileSync("functions/api/portal.js","utf8");
+assert.match(portalApi,/JOIN attendance_sessions ats ON ats\.id=ar\.session_id/,"Family attendance summaries must join the learner's attendance sessions.");
+assert.match(portalApi,/ats\.academic_year_id IS \?/,"Family attendance summaries must be scoped to the active enrolment academic year.");
+assert.match(portalApi,/attendance_status='excused'/,"Family attendance summaries must count excused sessions separately.");
+console.log("Family attendance academic-year scoping regression checks passed.");

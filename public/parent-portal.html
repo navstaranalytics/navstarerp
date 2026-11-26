@@ -51,6 +51,7 @@ function renderLearner(){
   ["Attendance",rate+"%",present+" present of "+total+" recorded sessions"],
   ["Absent",Number(a.absent||0),"Recorded absent sessions"],
   ["Late",Number(a.late||0),"Recorded late sessions"],
+  ["Excused",Number(a.excused||0),"Approved absence sessions"],
   ["Current class",l.enrollment?.grade_name||"—",l.enrollment?.academic_year||"No active enrolment"]
  ].map(x=>'<div class="card"><div class="label">'+esc(x[0])+'</div><div class="metric">'+esc(x[1])+'</div><div class="label">'+esc(x[2])+'</div></div>').join("");
  const reports=Array.isArray(l.reports)?l.reports:[];

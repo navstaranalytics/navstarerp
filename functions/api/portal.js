@@ -34,11 +34,14 @@ export async function onRequestGet({request,env}){
     FROM learner_enrollments e LEFT JOIN grade_levels g ON g.id=e.grade_level_id
     LEFT JOIN streams st ON st.id=e.stream_id LEFT JOIN academic_years y ON y.id=e.academic_year_id
     WHERE e.learner_id=? AND e.school_id=? AND e.status='active' ORDER BY e.enrolled_at DESC LIMIT 1`).bind(learner.id,user.school_id).first();
-   const attendance=await env.DB.prepare(`SELECT COUNT(*) AS total,
+   const attendance=await env.DB.prepare(`SELECT
+    SUM(CASE WHEN ar.attendance_status IN ('present','absent','late') THEN 1 ELSE 0 END) AS total,
     SUM(CASE WHEN ar.attendance_status='present' THEN 1 ELSE 0 END) AS present,
     SUM(CASE WHEN ar.attendance_status='absent' THEN 1 ELSE 0 END) AS absent,
-    SUM(CASE WHEN ar.attendance_status='late' THEN 1 ELSE 0 END) AS late
-    FROM attendance_records ar WHERE ar.learner_id=? AND ar.school_id=?`).bind(learner.id,user.school_id).first();
+    SUM(CASE WHEN ar.attendance_status='late' THEN 1 ELSE 0 END) AS late,
+    SUM(CASE WHEN ar.attendance_status='excused' THEN 1 ELSE 0 END) AS excused
+    FROM attendance_records ar JOIN attendance_sessions ats ON ats.id=ar.session_id AND ats.school_id=ar.school_id
+    WHERE ar.learner_id=? AND ar.school_id=? AND ats.academic_year_id IS ?`).bind(learner.id,user.school_id,enrollment?.academic_year_id||null).first();
    const reports=await env.DB.prepare(`SELECT id,academic_year_id,term_id,status,published_at,report_data_json FROM report_cards
     WHERE learner_id=? AND school_id=? AND status='published' ORDER BY published_at DESC LIMIT 8`).bind(learner.id,user.school_id).all();
    const timetable=enrollment?await env.DB.prepare(`SELECT t.weekday,t.start_time,t.end_time,t.room,la.name AS learning_area
