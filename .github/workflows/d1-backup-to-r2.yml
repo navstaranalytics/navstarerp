@@ -57,7 +57,7 @@ jobs:
       - name: Upload D1 export to private R2 storage
         id: upload
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_R2_API_TOKEN || secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           BACKUP_ID: ${{ steps.export.outputs.backup_id }}
           BACKUP_FILE: ${{ steps.export.outputs.backup_file }}
@@ -67,11 +67,10 @@ jobs:
           wrangler r2 object put "navstar-erp-storage/$OBJECT_KEY" --remote --file "$BACKUP_FILE" --content-type "application/sql" --cache-control "private, no-store" --force
           echo "object_key=$OBJECT_KEY" >> "$GITHUB_OUTPUT"
 
-      - name: Verify R2 backup and register it in D1
+      - name: Verify R2 backup checksum
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_R2_API_TOKEN || secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          BACKUP_ID: ${{ steps.export.outputs.backup_id }}
           BACKUP_FILE: ${{ steps.export.outputs.backup_file }}
           EXPECTED_BYTES: ${{ steps.export.outputs.byte_count }}
           EXPECTED_SHA256: ${{ steps.export.outputs.sha256 }}
@@ -85,5 +84,18 @@ jobs:
           ACTUAL_SHA256="$(sha256sum "$VERIFY_FILE" | awk '{print $1}')"
           test "$ACTUAL_BYTES" = "$EXPECTED_BYTES"
           test "$ACTUAL_SHA256" = "$EXPECTED_SHA256"
+          echo "R2 backup read-back, byte count and SHA-256 verification passed."
+
+      - name: Register verified backup in D1
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          BACKUP_ID: ${{ steps.export.outputs.backup_id }}
+          EXPECTED_BYTES: ${{ steps.export.outputs.byte_count }}
+          EXPECTED_SHA256: ${{ steps.export.outputs.sha256 }}
+          OBJECT_KEY: ${{ steps.upload.outputs.object_key }}
+        run: |
+          set -euo pipefail
+          test -n "$OBJECT_KEY" || { echo "::error::The R2 upload did not return an object key."; exit 1; }
           wrangler d1 execute navstar-erp-db --remote --command "INSERT INTO platform_backups(id,backup_type,object_key,byte_count,sha256,status,source) VALUES('$BACKUP_ID','full','$OBJECT_KEY',$EXPECTED_BYTES,'$EXPECTED_SHA256','verified','github-actions')"
           wrangler d1 execute navstar-erp-db --remote --command "SELECT id,status,byte_count,sha256,created_at FROM platform_backups WHERE id='$BACKUP_ID' AND status='verified'"
