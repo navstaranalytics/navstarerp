@@ -28,6 +28,7 @@ async function context(request,env){
  if(!schoolId)return {response:json({ok:false,error:"School context is required."},400)};
  if(!user.is_super_admin&&requested&&requested!==user.school_id)return {response:json({ok:false,error:"You cannot access documents from another school."},403)};
  if(!env.DB||!env.R2)return {response:json({ok:false,error:"D1 or R2 storage is unavailable."},503)};
+ const school=await env.DB.prepare("SELECT id FROM schools WHERE id=?").bind(schoolId).first();if(!school)return {response:json({ok:false,error:"School was not found."},404)};
  return {user,schoolId};
 }
 export async function onRequestGet({request,env}){
@@ -64,7 +65,10 @@ export async function onRequestPost({request,env}){
   const bytes=new Uint8Array(await file.arrayBuffer());
   await env.R2.put(key,bytes,{httpMetadata:{contentType:file.type,contentDisposition:"attachment; filename*=UTF-8''"+encodeURIComponent(original)}});
   const stored=await env.R2.get(key);
-  if(!stored||Number(stored.size)!==bytes.byteLength){
+  const storedBytes=stored?new Uint8Array(await stored.arrayBuffer()):new Uint8Array();
+  const hash=async value=>Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",value))).map(x=>x.toString(16).padStart(2,"0")).join("");
+  const sameBytes=!!stored&&storedBytes.byteLength===bytes.byteLength&&await hash(storedBytes)===await hash(bytes);
+  if(!sameBytes){
    try{await env.R2.delete(key)}catch{}
    return json({ok:false,error:"R2 upload verification failed. The document was not registered."},502);
   }
