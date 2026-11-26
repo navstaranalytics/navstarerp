@@ -505,7 +505,7 @@ export async function onRequestGet({request,env}){
 async function validateAcademicCalendarDates(db,name,schoolId,values,currentId=null){
  if(!["years","terms"].includes(name))return null;
  const start=String(values.start_date||""),end=String(values.end_date||"");
- if(!/^\d{4}-\d{2}-\d{2}$/.test(start)||!/^\\d{4}-\\d{2}-\\d{2}$/.test(end)||!Number.isFinite(Date.parse(start+"T00:00:00Z"))||!Number.isFinite(Date.parse(end+"T00:00:00Z")))return "Enter valid start and end dates.";
+ if(!/^\d{4}-\d{2}-\d{2}$/.test(start)||!/^\d{4}-\d{2}-\d{2}$/.test(end)||!Number.isFinite(Date.parse(start+"T00:00:00Z"))||!Number.isFinite(Date.parse(end+"T00:00:00Z")))return "Enter valid start and end dates.";
  if(start>end)return "The start date must be on or before the end date.";
  if(name==="years"){
   const overlap=await db.prepare("SELECT id,name FROM academic_years WHERE school_id=? AND id<>? AND start_date<=? AND end_date>=? LIMIT 1").bind(schoolId,currentId||"",end,start).first();
@@ -823,7 +823,7 @@ export async function onRequestPost({request,env}){
   if(name==="assessments"){
     if(values.start_time&&values.end_time&&values.end_time<=values.start_time)return json({ok:false,error:"Assessment end time must be later than its start time."},400);
     if(values.assessment_date&&values.mark_submission_deadline&&Date.parse(values.mark_submission_deadline+"T23:59:59+03:00")<Date.parse(values.assessment_date+"T00:00:00+03:00"))return json({ok:false,error:"Marks submission deadline cannot be before the assessment date."},400);
-    if(values.mark_submission_deadline&&!/^\\d{4}-\\d{2}-\\d{2}$/.test(values.mark_submission_deadline))return json({ok:false,error:"Enter a valid marks submission deadline."},400);
+    if(values.mark_submission_deadline&&!/^\d{4}-\d{2}-\d{2}$/.test(values.mark_submission_deadline))return json({ok:false,error:"Enter a valid marks submission deadline."},400);
     if(!Number.isFinite(Number(values.max_score??100))||Number(values.max_score??100)<=0)return json({ok:false,error:"Assessment maximum score must be greater than zero."},400);
     if(values.weight!==undefined&&(!Number.isFinite(Number(values.weight))||Number(values.weight)<0))return json({ok:false,error:"Assessment weight cannot be negative."},400);
     if(values.stream_id){const stream=await env.DB.prepare("SELECT grade_level_id FROM streams WHERE id=? AND school_id=?").bind(values.stream_id,schoolId).first();if(!stream||stream.grade_level_id!==values.grade_level_id)return json({ok:false,error:"The selected stream must belong to the selected grade."},400);}
