@@ -121,16 +121,24 @@ export async function getAuthenticatedSession(request, env) {
     LIMIT 1
   `).bind(tokenHash).first();
   if(!row)return null;
+  let sessionPolicy={idle_timeout_minutes:30},maintenanceMode={};
   try{
-    const maintenance=await env.DB.prepare("SELECT setting_value FROM platform_settings WHERE setting_key='maintenance_mode'").first();
-    const mode=JSON.parse(maintenance?.setting_value||"{}");
-    if(mode.enabled&&row.role_key!=="super_admin"){
+    // Fetch all global session gates in one D1 round trip instead of serial
+    // lookups on every authenticated API request.
+    const settings=await env.DB.prepare("SELECT setting_key,setting_value FROM platform_settings WHERE setting_key IN ('maintenance_mode','session_policy')").all();
+    for(const setting of settings.results||[]){
+      let value={};try{value=JSON.parse(setting.setting_value||"{}")}catch{}
+      if(setting.setting_key==="maintenance_mode")maintenanceMode=value;
+      if(setting.setting_key==="session_policy"){
+        const minutes=Number(value.idle_timeout_minutes);
+        if(Number.isInteger(minutes)&&minutes>=5&&minutes<=480)sessionPolicy={idle_timeout_minutes:minutes};
+      }
+    }
+    if(maintenanceMode.enabled&&row.role_key!=="super_admin"){
       await env.DB.prepare("UPDATE auth_sessions SET revoked_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE token_hash=? AND revoked_at IS NULL").bind(tokenHash).run();
       return null;
     }
-  }catch(error){console.error("Maintenance mode check failed:",String(error?.message||error));if(row.role_key!=="super_admin")return null;}
-  let sessionPolicy={idle_timeout_minutes:30};
-  try{const setting=await env.DB.prepare("SELECT setting_value FROM platform_settings WHERE setting_key='session_policy'").first();if(setting?.setting_value){const parsed=JSON.parse(setting.setting_value);const minutes=Number(parsed.idle_timeout_minutes);if(Number.isInteger(minutes)&&minutes>=5&&minutes<=480)sessionPolicy={idle_timeout_minutes:minutes};}}catch(error){console.error("Session policy lookup failed:",String(error?.message||error));}
+  }catch(error){console.error("Session policy lookup failed:",String(error?.message||error));if(row.role_key!=="super_admin")return null;}
   const lastActivity=Date.parse(row.last_seen_at||row.created_at||"");
   if(Number.isFinite(lastActivity)&&Date.now()-lastActivity>sessionPolicy.idle_timeout_minutes*60000){
     await env.DB.prepare("UPDATE auth_sessions SET revoked_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE token_hash=? AND revoked_at IS NULL").bind(tokenHash).run();
