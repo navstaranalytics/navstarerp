@@ -29,11 +29,14 @@ export async function onRequestPost({request,env}){
  if(!["Cash","Bank transfer","Mobile money","Cheque","Card","Other"].includes(method))return json({ok:false,error:"Select a valid payment method."},400);
  if(!/^\d{4}-\d{2}-\d{2}$/.test(receivedAt)||!Number.isFinite(Date.parse(receivedAt+"T00:00:00Z"))||new Date(Date.parse(receivedAt+"T00:00:00Z")).toISOString().slice(0,10)!==receivedAt)return json({ok:false,error:"Enter a valid receipt date."},400);
  if(receivedAt>new Date().toISOString().slice(0,10))return json({ok:false,error:"A fee receipt cannot be dated in the future."},400);
- const receiptId=uid(),receiptNumber="NVR-"+new Date().toISOString().slice(0,10).replaceAll("-","")+"-"+crypto.randomUUID().slice(0,8).toUpperCase();
+ const amountRounded=Math.round(amount*100)/100,receiptId=uid(),receiptNumber="NVR-"+new Date().toISOString().slice(0,10).replaceAll("-","")+"-"+crypto.randomUUID().slice(0,8).toUpperCase();
  try{
+  const beforeAccount=await env.DB.prepare("SELECT amount_due,amount_paid,balance FROM learner_fee_accounts WHERE id=? AND school_id=?").bind(accountId,schoolId).first();
+  if(!beforeAccount)return json({ok:false,error:"Learner fee account was not found in this school."},404);
+  if(Number(beforeAccount.balance||0)+0.001<amountRounded)return json({ok:false,error:"The receipt is greater than the outstanding balance. Refresh the account and enter an amount within the balance."},409);
   const statements=[
-   env.DB.prepare("INSERT INTO fee_receipts(id,school_id,learner_fee_account_id,receipt_number,amount,payment_method,reference,received_at,recorded_by) SELECT ?,?,?,?,?,?,?,?,? WHERE EXISTS (SELECT 1 FROM learner_fee_accounts WHERE id=? AND school_id=?)").bind(receiptId,schoolId,accountId,receiptNumber,Math.round(amount*100)/100,method,reference,receivedAt,user.id,accountId,schoolId),
-   env.DB.prepare("INSERT INTO audit_logs(id,actor_user_id,school_id,action,resource_type,resource_id,outcome,details_json) VALUES(?,?,?,?,?,?,'success',?)").bind(uid(),user.id,schoolId,"fee.receipt.recorded","fee_receipt",receiptId,JSON.stringify({learner_fee_account_id:accountId,amount:Math.round(amount*100)/100,payment_method:method,receipt_number:receiptNumber}))
+   env.DB.prepare("INSERT INTO fee_receipts(id,school_id,learner_fee_account_id,receipt_number,amount,payment_method,reference,received_at,recorded_by) SELECT ?,?,?,?,?,?,?,?,? WHERE EXISTS (SELECT 1 FROM learner_fee_accounts WHERE id=? AND school_id=?)").bind(receiptId,schoolId,accountId,receiptNumber,amountRounded,method,reference,receivedAt,user.id,accountId,schoolId),
+   env.DB.prepare("INSERT INTO audit_logs(id,actor_user_id,school_id,action,resource_type,resource_id,outcome,details_json) VALUES(?,?,?,?,?,?,'success',?)").bind(uid(),user.id,schoolId,"fee.receipt.recorded","fee_receipt",receiptId,JSON.stringify({learner_fee_account_id:accountId,amount:amountRounded,payment_method:method,receipt_number:receiptNumber}))
   ];
   const results=await env.DB.batch(statements);
   if(!results[0]?.meta?.changes)return json({ok:false,error:"Learner fee account was not found in this school."},404);
@@ -41,7 +44,7 @@ export async function onRequestPost({request,env}){
    env.DB.prepare("SELECT id,receipt_number,amount,payment_method,reference,received_at,learner_fee_account_id FROM fee_receipts WHERE id=? AND school_id=?").bind(receiptId,schoolId).first(),
    env.DB.prepare("SELECT amount_due,amount_paid,balance,status FROM learner_fee_accounts WHERE id=? AND school_id=?").bind(accountId,schoolId).first()
   ]);
-  if(!receipt||!account||Math.abs(Number(account.amount_paid||0)-Math.round(amount*100)/100>Number(account.amount_due||0)+0.01)return json({ok:false,error:"The receipt was recorded but its balance reconciliation could not be verified. Contact the school administrator before retrying."},500);
+  if(!receipt||receipt.learner_fee_account_id!==accountId||Number(receipt.amount)!==amountRounded||!account||Number(account.amount_paid||0)+0.001<Number(beforeAccount.amount_paid||0)+amountRounded||Math.abs(Number(account.balance||0)-Math.max(0,Number(account.amount_due||0)-Number(account.amount_paid||0)))>0.01)return json({ok:false,error:"The receipt was recorded but its balance reconciliation could not be verified. Contact the school administrator before retrying."},500);
   return json({ok:true,receipt,account,message:"Receipt saved, audited and fee balance reconciled."},201);
  }catch(e){
   const msg=String(e?.message||"");
