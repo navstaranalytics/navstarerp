@@ -13,7 +13,7 @@ export async function onRequestPost({request,env}){
  const today=new Date().toISOString().slice(0,10);if(start>today)return json({ok:false,error:"Future-dated transfers are not supported yet. Choose today or an earlier effective date."},400);
  if(!user.is_super_admin&&body.school_id&&body.school_id!==schoolId)return json({ok:false,error:"You cannot transfer a learner in another school."},403);
  try{
-  const current=await env.DB.prepare("SELECT id,learner_id,house_id,start_date FROM boarding_allocations WHERE id=? AND school_id=? AND status='active' AND (end_date IS NULL OR end_date='')").bind(allocationId,schoolId).first();
+  const current=await env.DB.prepare("SELECT id,learner_id,house_id,room_number,start_date FROM boarding_allocations WHERE id=? AND school_id=? AND status='active' AND (end_date IS NULL OR end_date='')").bind(allocationId,schoolId).first();
   if(!current)return json({ok:false,error:"The learner's current active boarding placement was not found."},404);
   if(current.start_date&&start<current.start_date)return json({ok:false,error:"The transfer date cannot be earlier than the current boarding placement."},400);
   const target=await env.DB.prepare("SELECT id,capacity,status FROM boarding_houses WHERE id=? AND school_id=?").bind(houseId,schoolId).first();
