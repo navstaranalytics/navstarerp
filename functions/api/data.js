@@ -1122,6 +1122,7 @@ export async function onRequestPatch({request,env}){
       if(!roomNumber||!Number.isInteger(capacity)||capacity<1||capacity>1000)return json({ok:false,error:"Enter a room number and a positive whole-number bed capacity."},400);
       const occupied=await env.DB.prepare("SELECT COUNT(*) AS total FROM boarding_allocations WHERE school_id=? AND house_id=? AND room_number=? AND status='active' AND (end_date IS NULL OR end_date='')").bind(schoolId,current.house_id,current.room_number).first();
       if(capacity<Number(occupied?.total||0))return json({ok:false,error:"Room capacity cannot be lower than its currently occupied beds."},409);
+      if(Number(occupied?.total||0)>0&&(houseId!==current.house_id||roomNumber!==current.room_number))return json({ok:false,error:"A room with active learner placements cannot be moved or renamed. Vacate its beds first."},409);
       if(String(values.status??current.status)==="inactive"&&Number(occupied?.total||0)>0)return json({ok:false,error:"Vacate the room's active beds before deactivating it."},409);
       const otherRooms=await env.DB.prepare("SELECT COALESCE(SUM(capacity),0) AS total FROM boarding_rooms WHERE school_id=? AND house_id=? AND id<>?").bind(schoolId,houseId,recordId).first();
       if(Number(otherRooms?.total||0)+capacity>Number(house.capacity||0))return json({ok:false,error:"The combined room capacity cannot exceed the dormitory capacity."},409);
