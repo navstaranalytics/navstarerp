@@ -310,6 +310,6 @@ console.log("M-Pesa environment configuration and callback routing regression ch
 
 assert.match(backupWorkflow,/CLOUDFLARE_R2_ACCESS_KEY_ID/,"Backup upload must use the dedicated R2 S3 access key.");
 assert.match(backupWorkflow,/CLOUDFLARE_R2_SECRET_ACCESS_KEY/,"Backup upload must use the dedicated R2 S3 secret key.");
-assert.match(backupWorkflow,/name: Verify R2 backup checksum[\\s\\S]*?name: Register verified backup in D1/,"R2 read-back verification must complete before the D1 backup register is written.");
+assert.match(backupWorkflow,/name: Verify R2 backup checksum[\s\S]*?name: Register verified backup in D1/,"R2 read-back verification must complete before the D1 backup register is written.");
 assert.match(backupWorkflow,/aws s3 cp/,"Backup upload and verification must use the S3-compatible R2 API.");
 console.log("Scoped R2 S3 credentials and verification-before-registration regression checks passed.");
