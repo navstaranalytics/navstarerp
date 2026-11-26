@@ -327,7 +327,7 @@ async function validateLearningAreaClassAndPathway(db,name,schoolId,values,curre
  if(!usesPathways&&selectedPath)return "Pathways apply only to CBE Senior School classes.";
  if(!allPathways&&!usesPathways)return "This pathway learning area is only available in CBE Senior School.";
  if(!allPathways&&name!=="teacher-allocations"&&name!=="assessments")return "Choose a pathway-specific learning area through its Senior School pathway workflow.";
- if(!allPathways&&(!selectedPath||!pathMatches))return "The selected learning area is not assigned to the selected pathway. Choose one of its configured pathways first.";
+ if(!allPathways&&((selectedPath&&!pathMatches)||(!selectedPath&&name!=="assessments")))return "The selected learning area is not assigned to the selected pathway. Choose one of its configured pathways first.";
  if(["teacher-allocations","timetable"].includes(name)){
   const staffId=values.staff_id??current.staff_id;if(name==="timetable"&&!staffId)return null;
   const streamId=values.stream_id??current.stream_id;if(streamId){const stream=await db.prepare("SELECT grade_level_id FROM streams WHERE id=? AND school_id=? AND status='active'").bind(streamId,schoolId).first();if(!stream||stream.grade_level_id!==gradeId)return "The selected stream does not belong to the selected class."}
@@ -560,7 +560,7 @@ export async function onRequestPost({request,env}){
       const statements=[],created=[];
       for(const grade of marks.results||[])for(const area of subjects.results||[]){
         if(area.curriculum!==grade.curriculum||area.stage_code!==grade.stage_code)continue;
-        const idValue=crypto.randomUUID(),pathway=area.pathway||null,session=clean(body.examination_session)||type;
+        const idValue=crypto.randomUUID(),areaPaths=learningAreaPathways(area.pathway),pathway=areaPaths.length>1?null:(area.pathway||null),session=clean(body.examination_session)||type;
         const issue=await validateLearningAreaClassAndPathway(env.DB,"assessments",schoolId,{grade_level_id:grade.id,learning_area_id:area.id,pathway});
         if(issue)return json({ok:false,error:issue},400);
         statements.push(env.DB.prepare("INSERT INTO assessments(id,school_id,academic_year_id,term_id,grade_level_id,learning_area_id,title,assessment_number,examination_session,assessment_type,max_score,weight,pathway,due_date,assessment_date,start_time,end_time,mark_submission_deadline,status,created_by) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)").bind(idValue,schoolId,year,term,grade.id,area.id,title+" - "+area.name,clean(body.assessment_number)||null,session,type,max,weight,pathway,deadline,date,start,end,deadline,"draft",a.user.id));
@@ -816,12 +816,13 @@ export async function onRequestPost({request,env}){
     if(/^G1[0-2]$/.test(String(enrol.stage_code||""))){
       if(!enrol.pathway)return json({ok:false,error:"Set the learner's Senior School pathway before assigning elective learning areas."},400);
       const assigned=await env.DB.prepare("SELECT la.pathway FROM learner_learning_areas lla JOIN learning_areas la ON la.id=lla.learning_area_id AND la.school_id=lla.school_id WHERE lla.school_id=? AND lla.enrollment_id=? AND lla.selection_type='elective' AND lla.status='active'").bind(schoolId,enrol.id).all();
-      const chosen=(assigned.results||[]).filter(x=>x.pathway===enrol.pathway).length;
-      const other=(assigned.results||[]).filter(x=>x.pathway&&x.pathway!==enrol.pathway).length;
+      const learnerPath=normalizePathway(enrol.pathway),chosen=(assigned.results||[]).filter(x=>{const paths=learningAreaPathways(x.pathway);return !paths.length||paths.includes(learnerPath)}).length;
+      const other=(assigned.results||[]).filter(x=>{const paths=learningAreaPathways(x.pathway);return paths.length&&!paths.includes(learnerPath)}).length;
       const total=(assigned.results||[]).length;
       if(total>=3)return json({ok:false,error:"Senior School learners may select only three elective learning areas."},400);
-      if(area.pathway!==enrol.pathway&&chosen<2)return json({ok:false,error:"Assign at least two electives from the learner's chosen pathway before selecting one from another pathway."},400);
-      if(area.pathway!==enrol.pathway&&other>=1)return json({ok:false,error:"Only one elective may be selected from outside the learner's chosen pathway."},400);
+      const areaPaths=learningAreaPathways(area.pathway),fitsLearnerPath=!areaPaths.length||areaPaths.includes(learnerPath);
+      if(!fitsLearnerPath&&chosen<2)return json({ok:false,error:"Assign at least two electives from the learner's chosen pathway before selecting one from another pathway."},400);
+      if(!fitsLearnerPath&&other>=1)return json({ok:false,error:"Only one elective may be selected from outside the learner's chosen pathway."},400);
     }
   }
   try{
