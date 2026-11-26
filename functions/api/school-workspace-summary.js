@@ -22,7 +22,8 @@ export async function onRequestGet({request,env}){
  if(!user||!user.school_id)return json({ok:false,error:"A school account is required."},401);
  const schoolId=user.school_id;
  try{
-  const now=new Date().toISOString().slice(0,10);
+  // Use the school's Kenya timezone rather than UTC so date-based dashboard totals remain correct around local midnight.
+  const now=new Date(Date.now()+3*60*60*1000).toISOString().slice(0,10);
   const monthStart=now.slice(0,7)+"-01";
   const settled=await Promise.allSettled([
     env.DB.prepare("SELECT id,name,start_date,end_date,status FROM academic_years WHERE school_id=? AND (status='active' OR (start_date<=? AND end_date>=?)) ORDER BY CASE WHEN status='active' THEN 0 ELSE 1 END,start_date DESC LIMIT 1").bind(schoolId,now,now).first(),
