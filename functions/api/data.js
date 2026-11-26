@@ -1107,7 +1107,7 @@ export async function onRequestPatch({request,env}){
     const fields=Object.keys(body).filter(key=>key!=="school_id");
     if(fields.length!==2||!fields.includes("status")||!fields.includes("end_date")||String(body.status)!=="vacated")return json({ok:false,error:"Boarding placements can only be vacated here. Use the dedicated transfer workflow to move a learner or change beds."},403);
     const endDate=String(body.end_date||"");
-    if(!/^\\d{4}-\\d{2}-\\d{2}$/.test(endDate)||!Number.isFinite(Date.parse(endDate+"T00:00:00Z"))||new Date(Date.parse(endDate+"T00:00:00Z")).toISOString().slice(0,10)!==endDate)return json({ok:false,error:"Enter a valid bed-vacating date."},400);
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(endDate)||!Number.isFinite(Date.parse(endDate+"T00:00:00Z"))||new Date(Date.parse(endDate+"T00:00:00Z")).toISOString().slice(0,10)!==endDate)return json({ok:false,error:"Enter a valid bed-vacating date."},400);
   }
   if(name==="grading-schemes"&&String(values.level_key||"").startsWith("__LEVEL__")){const level=String(values.level_key).slice(9);values.level_key=null;values.stage_code="LEVEL:"+level;}else if(name==="grading-schemes"&&values.level_key==="__ALL__"){values.level_key=null;values.stage_code="ALL";}
   if(!Object.keys(values).length)return json({ok:false,error:"No editable fields were supplied."},400);
