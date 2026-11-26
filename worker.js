@@ -12,6 +12,7 @@ import { onRequestPost as bulkEnrollmentImportPost } from "./functions/api/bulk-
 import { onRequestPost as bulkLearnerAreasPost } from "./functions/api/bulk-learner-learning-areas.js";
 import { onRequestPost as timetableGeneratePost } from "./functions/api/timetable-generate.js";
 import { onRequestPost as reportCardGeneratePost } from "./functions/api/report-card-generate.js";
+import { onRequestPost as reportCardPublishPost } from "./functions/api/report-card-publish.js";
 import { onRequestGet as schoolWorkspaceSummaryGet, onRequestPostMotto as schoolMottoPost } from "./functions/api/school-workspace-summary.js";
 import { onRequestGet as platformControlsGet, onRequestPost as platformControlsPost } from "./functions/api/platform-controls.js";
 import { onRequestGet as platformAccessGet, onRequestPatch as platformAccessPatch } from "./functions/api/platform-access.js";
@@ -175,6 +176,10 @@ export default {
     if (route === "/api/report-cards/generate") {
       if (request.method !== "POST") return new Response("Method not allowed", { status: 405, headers: { Allow: "POST" } });
       return reportCardGeneratePost({ request, env });
+    }
+    if (route === "/api/report-cards/publish") {
+      if (request.method !== "POST") return new Response("Method not allowed", { status: 405, headers: { Allow: "POST" } });
+      return reportCardPublishPost({ request, env });
     }
     if (route === "/api/timetable/generate") {
       if (request.method !== "POST") return new Response("Method not allowed", { status: 405, headers: { Allow: "POST" } });
