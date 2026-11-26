@@ -9,6 +9,7 @@ export async function onRequestPost({request,env}){
  let body;try{body=await request.json()}catch{return json({ok:false,error:"Invalid boarding transfer request."},400)}
  const schoolId=user.is_super_admin?String(body.school_id||""):user.school_id,allocationId=String(body.allocation_id||""),houseId=String(body.house_id||""),room=String(body.room_number||"").trim(),bed=String(body.bed_number||"").trim(),start=String(body.start_date||"");
  if(!schoolId||!allocationId||!houseId||!room||!bed||!/^\d{4}-\d{2}-\d{2}$/.test(start))return json({ok:false,error:"Select the existing placement, destination dormitory, room, bed and a valid transfer date."},400);
+ const today=new Date().toISOString().slice(0,10);if(start>today)return json({ok:false,error:"Future-dated transfers are not supported yet. Choose today or an earlier effective date."},400);
  if(!user.is_super_admin&&body.school_id&&body.school_id!==schoolId)return json({ok:false,error:"You cannot transfer a learner in another school."},403);
  try{
   const current=await env.DB.prepare("SELECT id,learner_id,house_id FROM boarding_allocations WHERE id=? AND school_id=? AND status='active' AND (end_date IS NULL OR end_date='')").bind(allocationId,schoolId).first();
@@ -25,7 +26,7 @@ export async function onRequestPost({request,env}){
   const newId=crypto.randomUUID(),endDate=start;
   await env.DB.batch([
    env.DB.prepare("UPDATE boarding_allocations SET status='transferred',end_date=? WHERE id=? AND school_id=? AND status='active' AND (end_date IS NULL OR end_date='')").bind(endDate,current.id,schoolId),
-   env.DB.prepare("INSERT INTO boarding_allocations(id,school_id,house_id,learner_id,room_number,bed_number,start_date,status) VALUES(?,?,?,?,?,?,?,'active')").bind(newId,schoolId,target.id,current.learner_id,room,bed,start)
+   env.DB.prepare("INSERT INTO boarding_allocations(id,school_id,house_id,learner_id,room_number,bed_number,start_date,status) SELECT ?,?,?,?,?,?,?,'active' WHERE EXISTS (SELECT 1 FROM boarding_allocations WHERE id=? AND school_id=? AND status='transferred' AND end_date=?)").bind(newId,schoolId,target.id,current.learner_id,room,bed,start,current.id,schoolId,endDate)
   ]);
   const [oldRow,newRow]=await Promise.all([
    env.DB.prepare("SELECT id,status,end_date FROM boarding_allocations WHERE id=? AND school_id=?").bind(current.id,schoolId).first(),
