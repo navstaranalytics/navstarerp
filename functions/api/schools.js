@@ -11,7 +11,7 @@ function modulesForLevels(levels){
   const modules=new Set(["Core","Learners","Staff & HR","Academics","Examinations","Reports","Parent Portal"]);
   if(selected.some(x=>/^Grade (7|8|9)$/.test(String(x))||/^Junior School$/i.test(String(x))))["Junior School","Pathway Planning"].forEach(x=>modules.add(x));
   if(selected.some(x=>/^Grade (10|11|12)$/.test(String(x))||/^Senior School$/i.test(String(x))))["Senior School","Pathway Planning","AI Analytics"].forEach(x=>modules.add(x));
-  if(selected.some(x=>/^Form /.test(String(x))))modules.add("Secondary School");
+  if(selected.some(x=>/^Form /.test(String(x))||/^Secondary$/i.test(String(x))||/^8-4-4 Secondary$/i.test(String(x))))modules.add("Secondary School");
   if(selected.length)modules.add("Attendance");
   return [...modules];
 }
@@ -23,7 +23,7 @@ async function seedSchoolSampleData(db,schoolId,curriculum,levels){
  if(selected.some(x=>/^Junior School$/i.test(x))||selected.some(x=>/^Grade (7|8|9)$/.test(x)))gradeSpecs.push(...[7,8,9].map(n=>["G"+n,"Grade "+n,n+1]));
  if(selected.some(x=>/^Senior School$/i.test(x))||selected.some(x=>/^Grade (10|11|12)$/.test(x)))gradeSpecs.push(...[10,11,12].map(n=>["G"+n,"Grade "+n,n+1]));
  if(selected.some(x=>/^8-4-4 Primary$/i.test(x)))gradeSpecs.push(...Array.from({length:8},(_,i)=>["STD"+(i+1),"Standard "+(i+1),i+1]));
- if(selected.some(x=>/^8-4-4 Secondary$/i.test(x))||selected.some(x=>/^Form [1-4]$/.test(x)))gradeSpecs.push(...[1,2,3,4].map(n=>["FORM"+n,"Form "+n,20+n]));
+ if(selected.some(x=>/^8-4-4 Secondary$/i.test(x)||/^Secondary$/i.test(x)&&/8-4-4/i.test(curriculum))||selected.some(x=>/^Form [1-4]$/.test(x)))gradeSpecs.push(...[1,2,3,4].map(n=>["FORM"+n,"Form "+n,20+n]));
  for(const x of selected){const m=x.match(/^(Grade (?:[1-9]|1[0-2])|Form [1-4]|PP[12])$/i);if(m&&!gradeSpecs.some(g=>g[1].toLowerCase()===m[1].toLowerCase()))gradeSpecs.push([m[1].replace(/\s/g,"").toUpperCase(),m[1],gradeSpecs.length+1]);}
  if(!gradeSpecs.length)gradeSpecs.push(["G7","Grade 7",7]);
  const gradeRows=gradeSpecs.map(([code,name,order])=>({id:makeId(),code,name,order}));
@@ -76,8 +76,8 @@ function normalizeCurricula(body, fallback) {
 }
 function validateCurricula(curricula,levels) {
  if(!curricula.length)return "Select at least one curriculum framework.";
- if(levels.some(x=>/^8-4-4/i.test(x)||/^Form [1-4]$/i.test(x))&&!curricula.includes("Kenyan 8-4-4"))return "Select Kenyan 8-4-4 to offer Standards 1–8 or Forms 1–4.";
- if(levels.some(x=>/^(Pre-Primary|Primary|Junior School|Senior School|Grade (?:[1-9]|1[0-2])|PP[12])$/i.test(x))&&!curricula.includes("Kenyan CBE"))return "Select Kenyan CBE to offer CBE school classes.";
+ if(levels.some(x=>/^8-4-4/i.test(x)||/^Form [1-4]$/i.test(x))&&!curricula.includes("Kenyan 8-4-4")||levels.some(x=>/^Secondary$/i.test(x))&&(curricula.includes("Kenyan CBE")||curricula.includes("Kenyan 8-4-4"))&&!curricula.includes("Kenyan 8-4-4"))return "Select Kenyan 8-4-4 to offer Standards 1–8 or Forms 1–4.";
+ if(levels.some(x=>/^(Pre-Primary|Junior School|Senior School|Grade (?:[1-9]|1[0-2])|PP[12])$/i.test(x))&&!curricula.includes("Kenyan CBE")||levels.some(x=>/^Primary$/i.test(x))&&!curricula.includes("Kenyan CBE")&&!curricula.includes("Kenyan 8-4-4"))return "Select Kenyan CBE to offer CBE school classes.";
  return null;
 }
 export async function syncSchoolCurricula(db,schoolId,curricula,levels) {
@@ -88,14 +88,14 @@ export async function syncSchoolCurricula(db,schoolId,curricula,levels) {
    // existing school classes or learning areas. Keep all records untouched.
    continue;
   }
-  const scoped=curriculum==="Kenyan 8-4-4"?levels.filter(x=>/^8-4-4/i.test(x)||/^Form [1-4]$/i.test(x)):levels.filter(x=>/^(Pre-Primary|Primary|Junior School|Senior School)$/i.test(x)||/^(Grade (?:[1-9]|1[0-2])|PP[12])$/i.test(x));
+  const scoped=curriculum==="Kenyan 8-4-4"?levels.filter(x=>/^8-4-4/i.test(x)||/^Form [1-4]$/i.test(x)||/^Secondary$/i.test(x)||/^Primary$/i.test(x)).map(x=>/^Primary$/i.test(x)?"8-4-4 Primary":x):levels.filter(x=>/^(Pre-Primary|Primary|Junior School|Senior School)$/i.test(x)||/^(Grade (?:[1-9]|1[0-2])|PP[12])$/i.test(x));
   await syncSchoolGradeLevels(db,schoolId,curriculum,scoped);
   await syncSchoolLearningAreas(db,schoolId,curriculum,scoped);
  }
 }
 function curriculumSelectionError(curriculum,levels){
  const is844=/8-4-4/i.test(String(curriculum||"")),isCbe=/cbe|cbc|competenc/i.test(String(curriculum||""));
- const legacy=(levels||[]).some(x=>/^8-4-4/i.test(String(x))||/^Form [1-4]$/i.test(String(x)));
+ const legacy=(levels||[]).some(x=>/^8-4-4/i.test(String(x))||/^Form [1-4]$/i.test(String(x))||/^Secondary$/i.test(String(x)));
  const modern=(levels||[]).some(x=>/^(Pre-Primary|Primary|Junior School|Senior School|Grade (?:[1-9]|1[0-2])|PP[12])$/i.test(String(x)));
  if(is844&&modern)return "For Kenyan 8-4-4, select 8-4-4 Primary and/or 8-4-4 Secondary divisions only.";
  if(isCbe&&legacy)return "For Kenyan CBE, select Pre-Primary, Primary, Junior School and/or Senior School divisions only.";
@@ -166,7 +166,7 @@ export async function syncSchoolLearningAreas(db,schoolId,curriculum,levels){
   const found=byKey.get(x.stage+"|"+x.code)||byKey.get(nameKey);
   if(found){
    matched.add(found.id);
-   statements.push(db.prepare("UPDATE learning_areas SET catalogue_code=COALESCE(catalogue_code,?),name=CASE WHEN school_customized=1 THEN name ELSE ? END,code=CASE WHEN school_customized=1 THEN code ELSE ? END,pathway=?,subject_type=?,is_mandatory=?,source_template=?,is_active=CASE WHEN ?=1 THEN 1 ELSE is_active END WHERE id=? AND school_id=?").bind(x.code,x.name,x.code,x.pathway,x.type,x.mandatory,template,x.mandatory,found.id,schoolId));
+   statements.push(db.prepare("UPDATE learning_areas SET catalogue_code=COALESCE(catalogue_code,?),name=CASE WHEN school_customized=1 THEN name ELSE ? END,code=CASE WHEN school_customized=1 THEN code ELSE ? END,pathway=CASE WHEN school_customized=1 THEN pathway ELSE ? END,subject_type=CASE WHEN school_customized=1 THEN subject_type ELSE ? END,is_mandatory=CASE WHEN school_customized=1 THEN is_mandatory ELSE ? END,source_template=CASE WHEN school_customized=1 THEN source_template ELSE ? END,is_active=CASE WHEN ?=1 THEN 1 ELSE is_active END WHERE id=? AND school_id=?").bind(x.code,x.name,x.code,x.pathway,x.type,x.mandatory,template,x.mandatory,found.id,schoolId));
   }else{
    statements.push(db.prepare("INSERT INTO learning_areas(id,school_id,curriculum,code,catalogue_code,name,stage_code,pathway,is_active,subject_type,is_mandatory,source_template,school_customized) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,0)").bind(makeId(),schoolId,curriculum,x.code,x.code,x.name,x.stage,x.pathway,x.mandatory,x.type,x.mandatory,template));
   }
@@ -306,8 +306,8 @@ export async function onRequestPatch({request,env}){
         .bind(id,JSON.stringify({...current,navstar_school_meta:meta}))
     ]);
     let syncWarning=null;
-    if(academicConfigChanged){try{await syncSchoolCurricula(env.DB,id,curricula,selectedLevels)}
-    catch(error){syncWarning="School profile was saved, but academic setup synchronization needs attention: "+String(error?.message||"Please retry academic setup.");console.error("Navstar school profile academic sync failed:",error)}}
+    try{await syncSchoolCurricula(env.DB,id,curricula,selectedLevels)}
+    catch(error){syncWarning="School profile was saved, but academic setup synchronization needs attention: "+String(error?.message||"Please retry academic setup.");console.error("Navstar school profile academic sync failed:",error)}
     const row=await env.DB.prepare(`SELECT s.*,ss.settings_json,
       (SELECT u.id FROM school_memberships m JOIN users u ON u.id=m.user_id JOIN user_role_assignments a ON a.user_id=u.id AND a.school_id=s.id JOIN roles r ON r.id=a.role_id AND r.role_key='school_admin' WHERE m.school_id=s.id AND m.membership_status IN ('active','invited') ORDER BY m.created_at LIMIT 1) AS admin_user_id,
       (SELECT u.full_name FROM school_memberships m JOIN users u ON u.id=m.user_id JOIN user_role_assignments a ON a.user_id=u.id AND a.school_id=s.id JOIN roles r ON r.id=a.role_id AND r.role_key='school_admin' WHERE m.school_id=s.id AND m.membership_status IN ('active','invited') ORDER BY m.created_at LIMIT 1) AS admin_full_name,
