@@ -990,11 +990,17 @@ async function loadAttendanceRegister(sessionId){
  const host=$("attendanceRegister");if(!sessionId){host.innerHTML='<div class="empty">Select a register to begin.</div>';return}
  host.innerHTML='<div class="empty">Loading learner register…</div>';
  try{
-  const [enrollments,learners,records]=await Promise.all(["enrollments","learners","attendance-records"].map(x=>api("/api/data/"+x+"?schoolId="+encodeURIComponent(schoolId))));
   const session=attendanceSessions.find(x=>x.id===sessionId);if(!session)throw new Error("Attendance register not found.");
-  const enrolled=(enrollments.records||[]).filter(x=>x.academic_year_id===session.academic_year_id&&x.grade_level_id===session.grade_level_id&&(!session.stream_id||x.stream_id===session.stream_id)&&x.status==="active");
+  const params="schoolId="+encodeURIComponent(schoolId);
+  const [enrollments,records]=await Promise.all([
+   api("/api/data/enrollments?"+params+"&academicYearId="+encodeURIComponent(session.academic_year_id)+"&gradeLevelId="+encodeURIComponent(session.grade_level_id)+"&streamId="+encodeURIComponent(session.stream_id||"")),
+   api("/api/data/attendance-records?"+params+"&sessionId="+encodeURIComponent(sessionId))
+  ]);
+  const enrolled=enrollments.records||[];
+  const learnerIds=enrolled.map(x=>x.learner_id);
+  const learners=learnerIds.length?await api("/api/data/learners?"+params+"&summary=1"): {records:[]};
   const learnersById=new Map((learners.records||[]).map(x=>[x.id,x]));
-  const existing=new Map((records.records||[]).filter(x=>x.session_id===sessionId).map(x=>[x.learner_id,x]));
+  const existing=new Map((records.records||[]).map(x=>[x.learner_id,x]));
   const rows=enrolled.map(x=>({enrollment:x,learner:learnersById.get(x.learner_id)})).filter(x=>x.learner);
   host.innerHTML=rows.length?'<table><thead><tr><th>Admission no.</th><th>Learner</th><th>Attendance</th><th>Notes</th><th></th></tr></thead><tbody>'+rows.map(({learner})=>{const r=existing.get(learner.id)||{};return '<tr data-attendance-learner="'+esc(learner.id)+'"><td>'+esc(learner.admission_number)+'</td><td>'+esc([learner.first_name,learner.middle_name,learner.last_name].filter(Boolean).join(" "))+'</td><td><select data-attendance-status><option value="present" '+(r.attendance_status==="present"?"selected":"")+'>Present</option><option value="absent" '+(r.attendance_status==="absent"?"selected":"")+'>Absent</option><option value="late" '+(r.attendance_status==="late"?"selected":"")+'>Late</option><option value="excused" '+(r.attendance_status==="excused"?"selected":"")+'>Excused</option></select></td><td><input data-attendance-notes value="'+esc(r.notes||"")+'" placeholder="Optional note"></td><td><button class="btn" type="button" data-save-attendance '+(!has("attendance.manage")?"disabled":"")+'>Save</button></td></tr>'}).join("")+'</tbody></table><button class="btn" type="button" data-download-attendance-pdf>Download PDF register</button>':'<div class="empty">No active learners are enrolled in this class for the selected academic year.</div>';window.navstarAttendanceContext={session,rows,existing:[...existing.entries()]};
  }catch(e){host.innerHTML='<div class="empty">'+esc(e.message)+'</div>'}
