@@ -76,7 +76,7 @@ function normalizeCurricula(body, fallback) {
 }
 function validateCurricula(curricula,levels) {
  if(!curricula.length)return "Select at least one curriculum framework.";
- if(levels.some(x=>/^8-4-4/i.test(x)||/^Form [1-4]$/i.test(x)||/^Secondary$/i.test(x))&&!curricula.includes("Kenyan 8-4-4"))return "Select Kenyan 8-4-4 to offer Standards 1–8 or Forms 1–4.";
+ if(levels.some(x=>/^8-4-4/i.test(x)||/^Form [1-4]$/i.test(x))&&!curricula.includes("Kenyan 8-4-4")||levels.some(x=>/^Secondary$/i.test(x))&&(curricula.includes("Kenyan CBE")||curricula.includes("Kenyan 8-4-4"))&&!curricula.includes("Kenyan 8-4-4"))return "Select Kenyan 8-4-4 to offer Standards 1–8 or Forms 1–4.";
  if(levels.some(x=>/^(Pre-Primary|Primary|Junior School|Senior School|Grade (?:[1-9]|1[0-2])|PP[12])$/i.test(x))&&!curricula.includes("Kenyan CBE"))return "Select Kenyan CBE to offer CBE school classes.";
  return null;
 }
@@ -88,7 +88,7 @@ export async function syncSchoolCurricula(db,schoolId,curricula,levels) {
    // existing school classes or learning areas. Keep all records untouched.
    continue;
   }
-  const scoped=curriculum==="Kenyan 8-4-4"?levels.filter(x=>/^8-4-4/i.test(x)||/^Form [1-4]$/i.test(x)||/^Secondary$/i.test(x)):levels.filter(x=>/^(Pre-Primary|Primary|Junior School|Senior School)$/i.test(x)||/^(Grade (?:[1-9]|1[0-2])|PP[12])$/i.test(x));
+  const scoped=curriculum==="Kenyan 8-4-4"?levels.filter(x=>/^8-4-4/i.test(x)||/^Form [1-4]$/i.test(x)||/^Secondary$/i.test(x)||(curricula.includes("Kenyan CBE")&&/^Primary$/i.test(x))).map(x=>/^Primary$/i.test(x)?"8-4-4 Primary":x):levels.filter(x=>/^(Pre-Primary|Primary|Junior School|Senior School)$/i.test(x)||/^(Grade (?:[1-9]|1[0-2])|PP[12])$/i.test(x));
   await syncSchoolGradeLevels(db,schoolId,curriculum,scoped);
   await syncSchoolLearningAreas(db,schoolId,curriculum,scoped);
  }
@@ -306,8 +306,8 @@ export async function onRequestPatch({request,env}){
         .bind(id,JSON.stringify({...current,navstar_school_meta:meta}))
     ]);
     let syncWarning=null;
-    if(academicConfigChanged){try{await syncSchoolCurricula(env.DB,id,curricula,selectedLevels)}
-    catch(error){syncWarning="School profile was saved, but academic setup synchronization needs attention: "+String(error?.message||"Please retry academic setup.");console.error("Navstar school profile academic sync failed:",error)}}
+    try{await syncSchoolCurricula(env.DB,id,curricula,selectedLevels)}
+    catch(error){syncWarning="School profile was saved, but academic setup synchronization needs attention: "+String(error?.message||"Please retry academic setup.");console.error("Navstar school profile academic sync failed:",error)}
     const row=await env.DB.prepare(`SELECT s.*,ss.settings_json,
       (SELECT u.id FROM school_memberships m JOIN users u ON u.id=m.user_id JOIN user_role_assignments a ON a.user_id=u.id AND a.school_id=s.id JOIN roles r ON r.id=a.role_id AND r.role_key='school_admin' WHERE m.school_id=s.id AND m.membership_status IN ('active','invited') ORDER BY m.created_at LIMIT 1) AS admin_user_id,
       (SELECT u.full_name FROM school_memberships m JOIN users u ON u.id=m.user_id JOIN user_role_assignments a ON a.user_id=u.id AND a.school_id=s.id JOIN roles r ON r.id=a.role_id AND r.role_key='school_admin' WHERE m.school_id=s.id AND m.membership_status IN ('active','invited') ORDER BY m.created_at LIMIT 1) AS admin_full_name,
