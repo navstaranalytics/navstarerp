@@ -479,28 +479,45 @@ $("documentsTable").addEventListener("click",async e=>{
  }
 });
 $("refreshDocuments").addEventListener("click",loadDocuments);
-let boardingCache={houses:[],allocations:[],learners:[],staff:[]};
+let boardingCache={houses:[],rooms:[],allocations:[],learners:[],staff:[]};
 function boardingEscape(value){return esc(value==null?"":String(value))}
 function boardingNotice(msg,error=false){message("boardingNotice",msg,error)}
+function populateBoardingRoomOptions(selectId,houseId,selected=""){
+ const select=$(selectId);if(!select)return;
+ const rooms=boardingCache.rooms.filter(r=>r.house_id===houseId&&String(r.status||"active")==="active");
+ select.innerHTML='<option value="">Select room</option>'+rooms.map(r=>'<option value="'+boardingEscape(r.room_number)+'">'+boardingEscape(r.room_number)+' · '+boardingEscape(r.capacity)+' beds</option>').join("");
+ if(selected&&rooms.some(r=>r.room_number===selected))select.value=selected;
+}
+function setBoardingBedLimit(inputId,houseId,roomNumber,selected=""){
+ const input=$(inputId),room=boardingCache.rooms.find(r=>r.house_id===houseId&&r.room_number===roomNumber&&String(r.status||"active")==="active");
+ if(!input)return;
+ input.max=room?String(room.capacity):"";
+ input.disabled=!room;
+ input.placeholder=room?"Enter bed number 1–"+room.capacity:"Select room first";
+ if(selected&&room&&Number(selected)<=Number(room.capacity))input.value=selected;else if(!room||Number(input.value)>Number(room?.capacity||0))input.value="";
+}
 function clearBoardingHouseForm(){const f=$("boardingHouseForm");f.reset();f.elements.id.value="";$("saveBoardingHouse").textContent="Save dormitory"}
 async function loadBoardingWorkspace(){
- const housesHost=$("boardingHousesTable"),allocHost=$("boardingAllocationsTable");
- housesHost.innerHTML='<div class="empty">Loading dormitories…</div>';allocHost.innerHTML='<div class="empty">Loading allocations…</div>';
+ const housesHost=$("boardingHousesTable"),roomsHost=$("boardingRoomsTable"),allocHost=$("boardingAllocationsTable");
+ housesHost.innerHTML='<div class="empty">Loading dormitories…</div>';roomsHost.innerHTML='<div class="empty">Loading rooms…</div>';allocHost.innerHTML='<div class="empty">Loading allocations…</div>';
  try{
-  const [houses,allocations,learners,staff]=await Promise.all(["boarding-houses","boarding-allocations","learners","staff"].map(x=>api("/api/data/"+x+"?schoolId="+encodeURIComponent(schoolId))));
-  boardingCache={houses:houses.records||[],allocations:allocations.records||[],learners:learners.records||[],staff:staff.records||[]};
+  const [houses,rooms,allocations,learners,staff]=await Promise.all(["boarding-houses","boarding-rooms","boarding-allocations","learners","staff"].map(x=>api("/api/data/"+x+"?schoolId="+encodeURIComponent(schoolId))));
+  boardingCache={houses:houses.records||[],rooms:rooms.records||[],allocations:allocations.records||[],learners:learners.records||[],staff:staff.records||[]};
   const supervisor=$("boardingSupervisor"),prior=supervisor.value;
   supervisor.innerHTML='<option value="">No supervisor assigned</option>'+boardingCache.staff.map(x=>'<option value="'+boardingEscape(x.id)+'">'+boardingEscape([x.first_name,x.middle_name,x.last_name].filter(Boolean).join(" ")||x.full_name||x.staff_number||"Staff member")+'</option>').join("");supervisor.value=prior;
   const learner=$("boardingLearner"),learnerPrior=learner.value;
   learner.innerHTML='<option value="">Select learner</option>'+boardingCache.learners.map(x=>'<option value="'+boardingEscape(x.id)+'">'+boardingEscape([x.first_name,x.middle_name,x.last_name].filter(Boolean).join(" ")+" · "+(x.admission_number||"No admission number"))+'</option>').join("");learner.value=learnerPrior;
-  const houseSelect=$("boardingHouseSelect"),housePrior=houseSelect.value;
-  houseSelect.innerHTML='<option value="">Select dormitory</option>'+boardingCache.houses.filter(x=>String(x.status||"active")==="active").map(x=>'<option value="'+boardingEscape(x.id)+'">'+boardingEscape(x.name)+' · capacity '+boardingEscape(x.capacity)+'</option>').join("");houseSelect.value=housePrior;
-  const transferHouse=$("boardingTransferHouse"),transferPrior=transferHouse.value;transferHouse.innerHTML=houseSelect.innerHTML;transferHouse.value=transferPrior;
-  housesHost.innerHTML=boardingCache.houses.length?'<table><thead><tr><th>Dormitory</th><th>Type</th><th>Capacity</th><th>Active beds</th><th>Available</th><th>Supervisor</th><th>Status</th><th>Action</th></tr></thead><tbody>'+boardingCache.houses.map(h=>{const active=boardingCache.allocations.filter(a=>a.house_id===h.id&&String(a.status||"active")==="active"&&!a.end_date).length;const sup=boardingCache.staff.find(x=>x.id===h.supervisor_staff_id);return '<tr><td>'+boardingEscape(h.name)+'</td><td>'+boardingEscape(h.house_type)+'</td><td>'+boardingEscape(h.capacity)+'</td><td>'+active+'</td><td>'+Math.max(0,Number(h.capacity||0)-active)+'</td><td>'+boardingEscape(sup?[sup.first_name,sup.last_name].filter(Boolean).join(" "):"—")+'</td><td>'+boardingEscape(h.status||"active")+'</td><td><button class="btn" type="button" data-edit-boarding-house="'+boardingEscape(h.id)+'">Edit</button></td></tr>'}).join("")+'</tbody></table>':'<div class="empty">No dormitories have been created yet. Add the first house above.</div>';
-  housesHost.querySelectorAll("table").forEach(t=>t.style.minWidth="900px");
+  const houseOptions='<option value="">Select dormitory</option>'+boardingCache.houses.filter(x=>String(x.status||"active")==="active").map(x=>'<option value="'+boardingEscape(x.id)+'">'+boardingEscape(x.name)+' · capacity '+boardingEscape(x.capacity)+'</option>').join("");
+  for(const id of ["boardingHouseSelect","boardingTransferHouse","boardingRoomHouse"]){const select=$(id),prior=select.value;select.innerHTML=houseOptions;select.value=prior}
   const activeAllocations=boardingCache.allocations.filter(a=>String(a.status||"active")==="active"&&!a.end_date);
+  housesHost.innerHTML=boardingCache.houses.length?'<table><thead><tr><th>Dormitory</th><th>Type</th><th>Capacity</th><th>Room capacity</th><th>Occupied beds</th><th>Available beds</th><th>Supervisor</th><th>Status</th><th>Action</th></tr></thead><tbody>'+boardingCache.houses.map(h=>{const active=activeAllocations.filter(a=>a.house_id===h.id).length,roomCapacity=boardingCache.rooms.filter(r=>r.house_id===h.id).reduce((n,r)=>n+Number(r.capacity||0),0),sup=boardingCache.staff.find(x=>x.id===h.supervisor_staff_id);return '<tr><td>'+boardingEscape(h.name)+'</td><td>'+boardingEscape(h.house_type)+'</td><td>'+boardingEscape(h.capacity)+'</td><td>'+roomCapacity+'</td><td>'+active+'</td><td>'+Math.max(0,Number(h.capacity||0)-active)+'</td><td>'+boardingEscape(sup?[sup.first_name,sup.last_name].filter(Boolean).join(" "):"—")+'</td><td>'+boardingEscape(h.status||"active")+'</td><td><button class="btn" type="button" data-edit-boarding-house="'+boardingEscape(h.id)+'">Edit</button></td></tr>'}).join("")+'</tbody></table>':'<div class="empty">No dormitories have been created yet. Add the first house above.</div>';
+  roomsHost.innerHTML=boardingCache.rooms.length?'<table><thead><tr><th>Dormitory</th><th>Room</th><th>Capacity</th><th>Occupied</th><th>Available</th><th>Status</th><th>Action</th></tr></thead><tbody>'+boardingCache.rooms.map(r=>{const h=boardingCache.houses.find(x=>x.id===r.house_id),occupied=activeAllocations.filter(a=>a.house_id===r.house_id&&String(a.room_number)===String(r.room_number)).length;return '<tr><td>'+boardingEscape(h?.name||"—")+'</td><td>'+boardingEscape(r.room_number)+'</td><td>'+Number(r.capacity||0)+'</td><td>'+occupied+'</td><td>'+Math.max(0,Number(r.capacity||0)-occupied)+'</td><td>'+boardingEscape(r.status||"active")+'</td><td><button class="btn" type="button" data-edit-boarding-room="'+boardingEscape(r.id)+'">Edit</button></td></tr>'}).join("")+'</tbody></table>':'<div class="empty">No rooms configured yet. Add rooms and bed capacities before assigning learners.</div>';
   allocHost.innerHTML=boardingCache.allocations.length?'<table><thead><tr><th>Learner</th><th>Admission no.</th><th>Dormitory</th><th>Room</th><th>Bed</th><th>Start</th><th>Status</th><th>Action</th></tr></thead><tbody>'+boardingCache.allocations.map(a=>{const l=boardingCache.learners.find(x=>x.id===a.learner_id),h=boardingCache.houses.find(x=>x.id===a.house_id),active=activeAllocations.includes(a);return '<tr><td>'+boardingEscape(l?[l.first_name,l.middle_name,l.last_name].filter(Boolean).join(" "):"Learner record unavailable")+'</td><td>'+boardingEscape(l?.admission_number||"—")+'</td><td>'+boardingEscape(h?.name||"—")+'</td><td>'+boardingEscape(a.room_number)+'</td><td>'+boardingEscape(a.bed_number)+'</td><td>'+boardingEscape(a.start_date)+'</td><td>'+boardingEscape(a.end_date?"Vacated":a.status||"active")+'</td><td>'+(active?'<button class="btn" type="button" data-vacate-boarding="'+boardingEscape(a.id)+'">Vacate bed</button> <button class="btn" type="button" data-transfer-boarding="'+boardingEscape(a.id)+'">Transfer</button>':"—")+'</td></tr>'}).join("")+'</tbody></table>':'<div class="empty">No boarding allocations recorded yet.</div>';
- }catch(error){housesHost.innerHTML='<div class="empty">'+boardingEscape(error.message)+'</div>';allocHost.innerHTML='<div class="empty">Could not load allocations.</div>';boardingNotice(error.message,true)}
+  populateBoardingRoomOptions("boardingRoomSelect",$("boardingHouseSelect").value);
+  populateBoardingRoomOptions("boardingTransferRoom",$("boardingTransferHouse").value);
+  setBoardingBedLimit("boardingBedNumber",$("boardingHouseSelect").value,$("boardingRoomSelect").value);
+  setBoardingBedLimit("boardingTransferBedNumber",$("boardingTransferHouse").value,$("boardingTransferRoom").value);
+ }catch(error){housesHost.innerHTML='<div class="empty">'+boardingEscape(error.message)+'</div>';roomsHost.innerHTML='<div class="empty">Could not load rooms.</div>';allocHost.innerHTML='<div class="empty">Could not load allocations.</div>';boardingNotice(error.message,true)}
 }
 $("boardingHouseForm").addEventListener("submit",async e=>{
  e.preventDefault();const f=e.currentTarget,id=f.elements.id.value,button=$("saveBoardingHouse"),body=Object.fromEntries(new FormData(f).entries());delete body.id;body.school_id=schoolId;body.capacity=Number(body.capacity);body.supervisor_staff_id=body.supervisor_staff_id||null;
