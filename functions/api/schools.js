@@ -23,7 +23,7 @@ async function seedSchoolSampleData(db,schoolId,curriculum,levels){
  if(selected.some(x=>/^Junior School$/i.test(x))||selected.some(x=>/^Grade (7|8|9)$/.test(x)))gradeSpecs.push(...[7,8,9].map(n=>["G"+n,"Grade "+n,n+1]));
  if(selected.some(x=>/^Senior School$/i.test(x))||selected.some(x=>/^Grade (10|11|12)$/.test(x)))gradeSpecs.push(...[10,11,12].map(n=>["G"+n,"Grade "+n,n+1]));
  if(selected.some(x=>/^8-4-4 Primary$/i.test(x)))gradeSpecs.push(...Array.from({length:8},(_,i)=>["STD"+(i+1),"Standard "+(i+1),i+1]));
- if(selected.some(x=>/^8-4-4 Secondary$/i.test(x))||selected.some(x=>/^Form [1-4]$/.test(x)))gradeSpecs.push(...[1,2,3,4].map(n=>["FORM"+n,"Form "+n,20+n]));
+ if(selected.some(x=>/^8-4-4 Secondary$/i.test(x)||/^Secondary$/i.test(x)&&/8-4-4/i.test(curriculum))||selected.some(x=>/^Form [1-4]$/.test(x)))gradeSpecs.push(...[1,2,3,4].map(n=>["FORM"+n,"Form "+n,20+n]));
  for(const x of selected){const m=x.match(/^(Grade (?:[1-9]|1[0-2])|Form [1-4]|PP[12])$/i);if(m&&!gradeSpecs.some(g=>g[1].toLowerCase()===m[1].toLowerCase()))gradeSpecs.push([m[1].replace(/\s/g,"").toUpperCase(),m[1],gradeSpecs.length+1]);}
  if(!gradeSpecs.length)gradeSpecs.push(["G7","Grade 7",7]);
  const gradeRows=gradeSpecs.map(([code,name,order])=>({id:makeId(),code,name,order}));
@@ -76,7 +76,7 @@ function normalizeCurricula(body, fallback) {
 }
 function validateCurricula(curricula,levels) {
  if(!curricula.length)return "Select at least one curriculum framework.";
- if(levels.some(x=>/^8-4-4/i.test(x)||/^Form [1-4]$/i.test(x))&&!curricula.includes("Kenyan 8-4-4"))return "Select Kenyan 8-4-4 to offer Standards 1–8 or Forms 1–4.";
+ if(levels.some(x=>/^8-4-4/i.test(x)||/^Form [1-4]$/i.test(x)||/^Secondary$/i.test(x))&&!curricula.includes("Kenyan 8-4-4"))return "Select Kenyan 8-4-4 to offer Standards 1–8 or Forms 1–4.";
  if(levels.some(x=>/^(Pre-Primary|Primary|Junior School|Senior School|Grade (?:[1-9]|1[0-2])|PP[12])$/i.test(x))&&!curricula.includes("Kenyan CBE"))return "Select Kenyan CBE to offer CBE school classes.";
  return null;
 }
@@ -88,14 +88,14 @@ export async function syncSchoolCurricula(db,schoolId,curricula,levels) {
    // existing school classes or learning areas. Keep all records untouched.
    continue;
   }
-  const scoped=curriculum==="Kenyan 8-4-4"?levels.filter(x=>/^8-4-4/i.test(x)||/^Form [1-4]$/i.test(x)):levels.filter(x=>/^(Pre-Primary|Primary|Junior School|Senior School)$/i.test(x)||/^(Grade (?:[1-9]|1[0-2])|PP[12])$/i.test(x));
+  const scoped=curriculum==="Kenyan 8-4-4"?levels.filter(x=>/^8-4-4/i.test(x)||/^Form [1-4]$/i.test(x)||/^Secondary$/i.test(x)):levels.filter(x=>/^(Pre-Primary|Primary|Junior School|Senior School)$/i.test(x)||/^(Grade (?:[1-9]|1[0-2])|PP[12])$/i.test(x));
   await syncSchoolGradeLevels(db,schoolId,curriculum,scoped);
   await syncSchoolLearningAreas(db,schoolId,curriculum,scoped);
  }
 }
 function curriculumSelectionError(curriculum,levels){
  const is844=/8-4-4/i.test(String(curriculum||"")),isCbe=/cbe|cbc|competenc/i.test(String(curriculum||""));
- const legacy=(levels||[]).some(x=>/^8-4-4/i.test(String(x))||/^Form [1-4]$/i.test(String(x)));
+ const legacy=(levels||[]).some(x=>/^8-4-4/i.test(String(x))||/^Form [1-4]$/i.test(String(x))||/^Secondary$/i.test(String(x)));
  const modern=(levels||[]).some(x=>/^(Pre-Primary|Primary|Junior School|Senior School|Grade (?:[1-9]|1[0-2])|PP[12])$/i.test(String(x)));
  if(is844&&modern)return "For Kenyan 8-4-4, select 8-4-4 Primary and/or 8-4-4 Secondary divisions only.";
  if(isCbe&&legacy)return "For Kenyan CBE, select Pre-Primary, Primary, Junior School and/or Senior School divisions only.";
