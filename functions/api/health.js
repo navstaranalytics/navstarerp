@@ -7,7 +7,7 @@ const REQUIRED_TABLES=[
   "audit_logs","platform_settings","announcements","learner_user_links","school_documents","platform_backups",
   "assessments","assessment_results","grading_schemes","grade_boundaries","report_cards",
   "attendance_sessions","attendance_records","timetable_entries",
-  "fee_structures","learner_fee_accounts","finance_transactions",
+  "fee_structures","learner_fee_accounts","fee_receipts","finance_transactions",
   "inventory_items","inventory_movements","library_books","library_loans",
   "transport_routes","transport_assignments","boarding_houses","boarding_rooms","boarding_allocations",
   "payroll_records","platform_regions","ai_usage_ledger","integration_connections","learner_discipline_records"

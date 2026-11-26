@@ -218,7 +218,7 @@ assert.ok(backupAdminSource.includes("private R2 for uploaded files"),"Super Adm
 console.log("Automated D1-to-R2 backup, checksum verification and Super Admin register regression checks passed.");
 const healthApi=fs.readFileSync("functions/api/health.js","utf8");
 const deployWorkflow=fs.readFileSync(".github/workflows/cloudflare-setup-deploy.yml","utf8");
-for(const table of ["school_documents","boarding_rooms","platform_backups"])assert.match(healthApi,new RegExp('"'+table+'"'),"Live health schema must require "+table+".");
+for(const table of ["school_documents","boarding_rooms","platform_backups","fee_receipts"])assert.match(healthApi,new RegExp('"'+table+'"'),"Live health schema must require "+table+".");
 assert.match(deployWorkflow,/Verify live Worker and D1 schema/,"Production deploy must perform a live health check.");
 assert.match(deployWorkflow,/https:\/\/navstarerp\.navstaranalytics\.workers\.dev\/api\/health/,"Live health check must target the deployed Worker.");
 assert.match(deployWorkflow,/r\.database!==['"]connected['"]\|\|r\.schema!==['"]ready['"]/,"Live health check must verify connected D1 and complete schema.");
