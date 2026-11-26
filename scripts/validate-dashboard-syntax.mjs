@@ -95,6 +95,13 @@ assert.ok(reportPortal.includes("data-publish-report"),"School administrators mu
 assert.ok(reportPortal.includes("/api/report-cards/publish"),"The publish action must call the dedicated publication API.");
 assert.ok(fs.readFileSync("worker.js","utf8").includes("reportCardPublishPost"),"The worker must route report-card publication requests.");
 console.log("Stage IV report-card publication and published-record protection checks passed.");
+const feeReceiptsApi=fs.readFileSync("functions/api/fee-receipts.js","utf8");
+assert.ok(feeReceiptsApi.includes("fee.receipt.recorded"),"Successful fee receipts must create an audit record.");
+assert.ok(feeReceiptsApi.includes("await env.DB.batch(statements)"),"Receipt creation and its audit record must be committed atomically.");
+assert.ok(feeReceiptsApi.includes("beforeAccount.balance"),"Receipts must be checked against the current outstanding balance.");
+assert.ok(feeReceiptsApi.includes("A fee receipt cannot be dated in the future."),"Future-dated fee receipts must be rejected.");
+assert.ok(feeReceiptsApi.includes("Receipt saved, audited and fee balance reconciled."),"Receipt and account changes must be verified after saving.");
+console.log("Stage VI fee receipt audit, validation and balance reconciliation checks passed.");
 
 
 const dataApi=fs.readFileSync("functions/api/data.js","utf8");
