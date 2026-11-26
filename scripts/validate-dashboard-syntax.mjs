@@ -47,7 +47,7 @@ const schoolPortal=fs.readFileSync("public/school-portal.html","utf8");
 assert.match(schoolPortal,/boarding-houses","boarding-allocations/,"Boarding navigation resources must be available.");
 assert.match(schoolPortal,/boarding-houses","boarding-allocations"\]\.includes\(v\)/,"Boarding pages must render the shared records workspace.");
 const authSource=fs.readFileSync("functions/api/auth.js","utf8");
-assert.match(authSource,/boardingType,modules/,"Authenticated school sessions must expose configured modules and boarding mode.");
+assert.match(authSource,/modules,boardingType/,"Authenticated school sessions must expose configured modules and boarding mode.");
 const schoolsSource=fs.readFileSync("functions/api/schools.js","utf8");
 assert.match(schoolsSource,/meta\.modules=meta\.modules\.filter\(x=>String\(x\)\.toLowerCase\(\)!=="boarding"\)/,"Day schools must not retain an enabled Boarding module.");
 console.log("Stage III boarding configuration and workspace regression checks passed.");
